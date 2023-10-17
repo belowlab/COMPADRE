@@ -14,10 +14,12 @@ use strict;
 
 my @commandline_options = @ARGV;
 
+
 #use lib '../lib/perl_modules';
 use Getopt::Long 2.13;
 use PRIMUS::IMUS qw(run_IMUS);
 use PRIMUS::reconstruct_pedigree_v7;
+use PRIMUS::predict_relationships_2D;
 use PRIMUS::prePRIMUS_pipeline_v7;
 use PRIMUS::PRIMUS_plus_ERSA;
 use File::Path qw(make_path);
@@ -49,6 +51,7 @@ my $dataset_name;
 my $verbose = 1; 
 my $study_name = "";
 my $output_dir = "";
+my $ersa_data = "";
 my $log_file;
 my $LOG;
 
@@ -383,6 +386,12 @@ sub print_files_and_settings
 	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){print $LOG "Sex file: $sexes{'FILE'} does not exists\n"; $pod2usage->(2)}
 	else{print $LOG "Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n";}
 
+	print "\nERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
+	print $LOG "ERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
+
+	our $ersa_data_glob = $ersa_data;
+
+
 	if(!exists $affections{'FILE'}){print "Affection file: none\n";}
 	elsif(!-e $affections{'FILE'}){print "Affection file: $affections{'FILE'} does not exists\n"; $pod2usage->(2)}
 	else{print "Affection file: $affections{'FILE'} (FID=$affections{'FID'}; IID=$affections{'IID'}; AFFECTION=$affections{'AFFECTION'}; AFFECTION_VALUE=$affections{'AFFECTION_VALUE'})\n";}
@@ -562,6 +571,7 @@ sub apply_options
 		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
 		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
 		"output_dir|o=s" => \$output_dir,
+		"ersa_data=s" => \$ersa_data,
 		"ages=s{1,4}" => sub
 		{ 
 			my @possible_keys = qw(FILE FID IID AGE);
@@ -686,12 +696,12 @@ sub apply_options
 		"mean_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
 		"tails_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
 		"plink_ibd|PLINK|p=s" => sub{$ibd_estimates{'FILE'} = $_[1]},
-    "likelihood_vectors=s" => sub{$ibd_estimates{'FILE'} = $_[1]; $ibd_estimates{'likelihood_vectors'}=1},
+    	"likelihood_vectors=s" => sub{$ibd_estimates{'FILE'} = $_[1]; $ibd_estimates{'likelihood_vectors'}=1},
 		"sex_file=s" => sub{$sexes{'FILE'} = $_[1]},
 		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
 		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
 		"output_dir|o=s" => \$output_dir,
-		"ersa_data=s" => sub{$ersa_data{'FILE'} = $_[1]},
+		#"ersa_data=s" => \$ersa_data,
 		)
 		or $pod2usage->(2);
     	}

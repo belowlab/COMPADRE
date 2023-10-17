@@ -37,8 +37,9 @@ def calculate_ersa_props(model_file):
 ersa = '/data100t1/home/grahame/projects/compadre/ersa/ersa2_py3/ersa.py'
 
 
-vector_file = sys.argv[1]
-ersa_input_file = sys.argv[2] # .match simulated file 
+vector_file = sys.argv[1].strip()
+ersa_input_file = sys.argv[2].strip() # .match simulated file 
+
 
 ersa_dir = ersa_input_file.split('/')[:-1]
 ersa_dir = '/'.join(ersa_dir)
@@ -90,8 +91,9 @@ for x in range(len(subset)):
             ersa_props = calculate_ersa_props(output_model_file)
 
             # multiply the ERSA proportions by p0-2 to re-fit them back into the PRIMUS probability space
-            prop02 = subset.loc[x, 'p0-1']
-            ersa_props_updated = tuple(x * prop02 for x in ersa_props) # 2,3,4,UN
+            prop01 = subset.loc[x, 'p0-1']
+            prop2plus = 1-prop01 
+            ersa_props_updated = tuple(x * prop2plus for x in ersa_props) # 2,3,4,UN
 
             # now we can update the subset values and ultimately LIKELIHOOD_VECTOR
             p0_old = subset.loc[x, 'p0']
