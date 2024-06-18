@@ -3,7 +3,7 @@ use strict;
 use Data::Dumper;
 
 my $KDE_density_resolution = 1000; 
-my $MIN_LIKELIHOOD = 0.3;
+my $MIN_LIKELIHOOD = 0.1;
 my @likelihood_names = qw(PC FS HAG CGH DIS UN MZ);
 my $HAG = "";
 my $PC;
@@ -19,11 +19,11 @@ my $curr_kde_type;
 # THIS IS WHAT WE ARE INTERESTED IN REPLACING
 sub get_relationship_likelihood_vectors {
 	
-	print "\nGETTING RELATIONSHIP LIKELIHOOD VECTOR\n";
-
 	my $IBD_file_ref = shift;
 	my $IBD_file = $$IBD_file_ref{'FILE'};
 	# read in from the reference previously in the program
+
+	print "\nGETTING RELATIONSHIP LIKELIHOOD VECTOR\n\n.genome file: $IBD_file\n";
 
 	$MIN_LIKELIHOOD = shift;
 	$verbose = shift;
@@ -32,7 +32,7 @@ sub get_relationship_likelihood_vectors {
 
 	# adding in ersa match file here --ersa_data
 	my $match_data = $main::ersa_data_glob;
-	print ("\n\nERSA file: $match_data\n\n");
+	print ("ERSA file: $match_data\n\n");
 
 	my $bw = shift;
 	my $kde_type = shift;
@@ -46,7 +46,7 @@ sub get_relationship_likelihood_vectors {
 	#my $outfile = "$IBD_file\_KDE_likelihood_vectors_prop$MIN_LIKELIHOOD\_bw$bw\_$kde_type.txt\n";
 	my $outfile = "$IBD_file\_KDE_likelihood_vectors\n";
 	#print "[NEW LOG] OUTFILE : $outfile\n";
-	#print "[NEW LOG] IBDFILE : $IBD_file\n";
+	print "[NEW LOG] IBDFILE : $IBD_file\n";
 	#my $outfile = "$output_dir/KDE_likelihood_vectors.txt";
 	my %possibility_counts;
 
@@ -61,7 +61,7 @@ sub get_relationship_likelihood_vectors {
 
   	##################### If likelihood vectors were read in as an input file, then bypass looking [at] reference data to save on runtime
   	if (exists $$IBD_file_ref{'likelihood_vectors'} && $$IBD_file_ref{'likelihood_vectors'} == 1) {
-		print "file: $$IBD_file_ref{'FILE'}\n";
+		print "LOAD file: $$IBD_file_ref{'FILE'}\n";
 		$total_possibilities = load_likelihood_vectors_from_file($$IBD_file_ref{'FILE'},\%raw_relationship_densities,\%relationships);
 		close(PROB_OUT);
 		close(MZ_OUT);
@@ -91,7 +91,7 @@ sub get_relationship_likelihood_vectors {
 	my $FS_KDE_file = "$lib_dir/KDE_data/FS_KDE_bw2_$kde_type";
 	my $HAG_KDE_file = "$lib_dir/KDE_data/2nd_KDE_bw6\_$kde_type";
 	my $CGH_KDE_file = "$lib_dir/KDE_data/3rd_KDE_bw4\_$kde_type";
-	my $DR_KDE_file = "$lib_dir/KDE_data/UN_KDE_bw6\_$kde_type"; ## This performs better than the 4th degree because the 4th degre has too much overlap with 3rd degree. It would be better to train DR class with a uniform distribution of samples between 4th and 12 degree relatives. Until then, this is the next best thing.
+	my $DR_KDE_file = "$lib_dir/KDE_data/UN_KDE_bw6\_$kde_type"; ## This performs better than the 4th degree because the 4th degree has too much overlap with 3rd degree. It would be better to train DR class with a uniform distribution of samples between 4th and 12 degree relatives. Until then, this is the next best thing.
 	my $UN_KDE_file = "$lib_dir/KDE_data/UN_KDE_bw1\_$kde_type";
 	
 	#my $PC_KDE_file = "/nfs/home/grapas2/projects/2011/reconstruct_pedigrees/data/simulations/training_data/PO_KDE_bw17\_$kde_type";
@@ -108,6 +108,8 @@ sub get_relationship_likelihood_vectors {
 	if ($MIN_LIKELIHOOD == "") {
 		$MIN_LIKELIHOOD = 0.3
 	}
+
+	### Load in .genome file 
 
 	open(IN,$IBD_file) or die "Can't open $IBD_file; $!";
 	my $header = <IN>;
@@ -224,31 +226,45 @@ sub get_relationship_likelihood_vectors {
 		}
 		
 		my $original_sum = sum(@density_vector);
-		#print ("\nOriginal vector sum: $original_sum\n");
-		my @vector = normalize(@density_vector);
+		my $original_str = join(',',@density_vector);
+		#print ("\nOriginal vector: $original_str\n");
+		my @vector = normalize(@density_vector); # divides by sum
 
-
+		# make a copy for later 
+		my @vector_copy = @vector;
+		
 		###################################
 		# density vector updates are done now
 		# at this point we can pass the vector AND the set of IDs into the python script that will use ERSA to update it
 		## re-update a new density_vector after the ERSA processing has been done 
 
-		#density_vector, name1, name2
+		
+		#print "\nOld vector string ( $name1 $name2 ) : $vector_str\n";
 
-		my $vector_str = join(',',@vector);
+		# Check vector to see if we even need to run ersa
+		my $sum01 = $vector[0] + $vector[1];
+		print "\n0 1 sum : $sum01\n";
 
-		print ("Old vector string $name1 $name2 : $vector_str\n");
+		if ($sum01 < 0.4) {
+			
+			my $vector_str = join(',',@vector);
+			my $python_utility_path = "/data100t1/home/grahame/projects/compadre/primus-ersa-v2/helper3.py";
 
-		my $python_utility_path = "/data100t1/home/grahame/projects/compadre/primus-ersa-v2/helper2.py";
-		#print ("\nRunning Python utility to augment existing vector file with ERSA data ...\n");
+			#print "\nPython arguments: $name1 | $name2 | $vector_str | $match_data\n";
 
-		my $new_vector = `python3 \"$python_utility_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
+			my $new_vector = `python3 \"$python_utility_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
+			chomp($new_vector);
 
-		# re-assign vector to use the new version from the python utility
-		my @vector = split(',', $new_vector);
+			# re-assign vector to use the new version from the python utility
+			@vector = split(',', $new_vector);
 
-		print ("New vector string $name1 $name2 : $new_vector\n");
+			print ("\nNew vector string ( $name1 $name2 ) : $new_vector\n");
+		
+		}
 
+		else { print ("\nDidn't need to run ERSA\n"); }
+		
+		###################################
 
 
 		## If the intial_likelihood_cutoff is dropped low enough, the FS will overlap with HAG (2nd degree), 
@@ -274,21 +290,45 @@ sub get_relationship_likelihood_vectors {
 		# This is the last point at which the vector hashes are updated before being returned.
 		# I think that the additional processing starting at line 193 is important and could be affecting why the outside-manufactured estimates aren't computing correctly when it comes to reconstruction
 
+		### Vector added to total relationships data structure
+
 		$relationships{$name1}{$name2} = \@vector;
 
-		# fix density vector with the multiplier 
-		@density_vector = map { $_ * $original_sum } @vector;
+		# fix density vector with the multiplier from before
+		my @density_vector_new = map { $_ * $original_sum } @vector;
+		my $new_sum = sum(@density_vector_new);
 
-		$raw_relationship_densities{$name1}{$name2} = \@density_vector;
+		my $new_str_normalized = join(',',@vector);
+		my $new_str = join(',',@density_vector_new);
+		#print ("\nNew vector: $new_str\n");
+		#print ("\nNew vector (normalized): $new_str_normalized\n");
+
+
+		$raw_relationship_densities{$name1}{$name2} = \@density_vector_new;
 
 		##################################
+
+		###########
+		# Update 2/25/24
+		# Theoretically, the relationship prediction is made AFTER my new vector has been generated  -- it's done in the few lines below, given the vector 
 
 		##Testing stuff
 		my @possibilities = predict_relationship(@vector);
 		my $rel = get_maximum_relationship(@vector);
+
+		my @possibilities_old = predict_relationship(@vector_copy);
+		my $rel_old = get_maximum_relationship(@vector_copy);
+
+		if ($rel ne $rel_old) {
+			print "\nNEW relationship prediction ( $name1 $name2 ) : $rel (previously $rel_old)\n";
+		}
+
 		my $ibd0 = $k0/$KDE_density_resolution;
 		my $ibd1 = $k1/$KDE_density_resolution;
 		my $ibd2 = $k2/$KDE_density_resolution;
+
+		### 2/22/24
+		### This is where the entire likelihood vector line gets put together and written to outfile 
 
 		print PROB_OUT "$FID1\t$IID1\t$FID2\t$IID2\t$rel\t".join(',',@vector)."\t$ibd0\t$ibd1\t$ibd2\t$PI_HAT\t-1\t".join(',',@possibilities)."\t$MIN_LIKELIHOOD\n";
 		
@@ -324,65 +364,13 @@ sub get_relationship_likelihood_vectors {
 	close(IN);
 	close(MZ_OUT);
 
-	#print ("OLD Relationships:\n");
-	#print Dumper(\%relationships);
-
-	#print ("\nOLD Densities:\n");
-	#print Dumper(\%raw_relationship_densities);
-
 	##################################################
 
-	## At this point, we know the outfile is populated, so we can modify it with the Python helper 
+	# print "\nPrinting data that's sent to reconstruct_pedigree ...\n\n";
+	# print "Relationships : \%relationships\n";
+	# print "Relationship densities : \%raw_relationship_densities\n";
+	# print "Total possibilities : \%total_possibilities\n\n";
 
-	# chomp($outfile); # remove the newline so the concatenation works
-    # my $updated_file = $outfile . ".updated"; # python output
-
-    # my $python_utility_path = "/data100t1/home/grahame/projects/compadre/primus-ersa-v2/helper.py";
-
-	# print ("\nRunning Python utility to augment existing vector file with ERSA data ...\n");
-
-	# system("python3 \"$python_utility_path\" \"$outfile\" \"$match_data\"");
-
-
-	# ## zero out the hashes and counters that were populated with the original vector file
-	# %relationships = ();            
-	# %raw_relationship_densities = ();  
-	# $total_possibilities = 0;       
-
-	# open my $MOD_IN, '<', $updated_file or die "Can't open modified file ($updated_file): $!\n";
-	# my $header = <$MOD_IN>;
-	# while (my $line = <$MOD_IN>) {
-	# 	chomp $line;
-	# 	my @columns = split(/\t/, $line);
-	# 	my ($FID1, $IID1, $FID2, $IID2, $vector_column) = @columns[0..3,5];
-	# 	my $name1 = $IID1;
-	# 	my $name2 = $IID2;
-	# 	my @vector = split(',', $vector_column); 
-
-	# 	# Populate the hashes
-	# 	$relationships{$name1}{$name2} = \@vector;
-	# 	my @denormalized_vector;
-	# 	foreach (\@vector) {
-	# 		push(@denormalized_vector, $_ * $original_sum);
-	# 	}
-	# 	$raw_relationship_densities{$name1}{$name2} = \@denormalized_vector; 
-
-	# 	my @possibilities = predict_relationship(@vector);
-	# 	my $num_possibilities = @possibilities;
-	# 	$total_possibilities += $num_possibilities;
-	# }
-
-	# close $MOD_IN;
-
-	##################################################
-
-	## at this point we have new data from the modified vector
-
-	#print ("NEW Relationships:\n");
-	#print Dumper(\%relationships);
-
-	# print ("\nNEW Densities:\n");
-	# print Dumper(\%raw_relationship_densities);
 
 	return (\%relationships,\%raw_relationship_densities, $total_possibilities, @fails);
 

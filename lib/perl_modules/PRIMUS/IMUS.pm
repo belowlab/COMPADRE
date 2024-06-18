@@ -69,6 +69,8 @@ my %child_parents;
 
 sub run_IMUS
 {
+
+	print "\nRunning IMUS ...\n\n";
 	#parseCommandLine(@_);
 	reset_values();
 	set_values2(@_);

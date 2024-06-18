@@ -30,7 +30,7 @@ my $MAX_RUNTIME = 12960; # 43200 = 12 hours; 129,600 = 36 hours
 my $MAX_NETWORKS_TO_RESOLVE = 3000;
 my $MAX_GENERATIONS = 5;
 my $affected_status_value = 2;
-my $MIN_LIKELIHOOD = .1; ## should be .1, adjusted in OG primus paper to 0.375 
+my $MIN_LIKELIHOOD = 0.1; ## should be .1, adjusted in OG primus paper to 0.375 
 my $NO_MITO = 0;
 my $NO_Y = 0;
 my $USE_NO_MATCH_MITO = 0; ## Will be updated to 1 if there is a mito file passed in
@@ -181,13 +181,18 @@ sub reconstruct_pedigree
 	my ($relationships_ref,$raw_relationship_densities_ref,$total_possibilities, @fails);
 	eval
 	{
-		print "min_likelihood: $MIN_LIKELIHOOD\n" if $verbose > 1;
+		print "\nmin_likelihood: $MIN_LIKELIHOOD\n\n";
 		print $LOG "min_likelihood: $MIN_LIKELIHOOD\n" if $verbose > 1;
 
 		###################################
 		# This is where the relationship vector data gets read in from predict_relationships_2D.pm
+
+		print "\nIBD file: $MIN_LIKELIHOOD\n\n";
+		print $LOG "min_likelihood: $MIN_LIKELIHOOD\n" if $verbose > 1;
 		
 		($relationships_ref,$raw_relationship_densities_ref,$total_possibilities, @fails) = PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors($IBD_file_ref,$MIN_LIKELIHOOD,$verbose,$lib_dir,$output_directory);
+
+		# can we just run the LOAD function here instead? why do we need to do this twice 
 	
 		###################################
 	};
@@ -3705,7 +3710,7 @@ sub check_network
 		my @parents = $$network_ref{$node_name}->parents();
 		if(@parents[0] ne "" && @parents[0] eq @parents[1])
 		{
-			#print "[check_network] [ERROR] Parents are the same\n";
+			print "[check_network] [ERROR] Parents are the same\n";
 			return 100;
 		}
 		my $node = $$network_ref{$node_name};
@@ -3715,15 +3720,15 @@ sub check_network
 		
 		my $fail = $$network_ref{$node_name}->are_relationships_missing_in_pedigree($network_ref,$phase-1);
 		if($fail >= 1){
-			#print "[check_network] [ERROR] relationships missing in pedigree (?)\n";
+			print "[check_network] [ERROR] relationships missing in pedigree (?)\n";
 			return 99;
 		}
 	}	
 	my $num_generations = get_num_generations($network_ref);
 	if($num_generations > $MAX_GENERATIONS)
 	{
-		#print "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n";
-		#print $LOG "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n";
+		print "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n";
+		print $LOG "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n";
 		return 101;
 	}
 	
@@ -3731,7 +3736,7 @@ sub check_network
 	if($sibling_mating eq 1)
 	{
 		## Full-sib mating; that is illegal
-		#print "[check_network] [ERROR] Illegal full-sib mating\n";
+		print "[check_network] [ERROR] Illegal full-sib mating\n";
 		return 102;
 	}
 	
@@ -3747,7 +3752,7 @@ sub check_network
             foreach my $id2 (keys %{ $$age_flags_ref{$network_ref}{$id1} })
             {
                 #print "##################  AGE INCOMPATIBLE!!!!!!!!!!!!!!!!!!!!!!!!\n";
-				#print "[check_network] [ERROR] Age incompatible\n";
+				print "[check_network] [ERROR] Age incompatible\n";
                 return 105;
             }
         }
@@ -3798,7 +3803,7 @@ sub resolve_sex_with_known_parents
 		}
 		elsif($p2_sex == $p1_sex)
 		{
-			#warn "WARNING: $node_name\'s parents $parents[0] ($p1_sex) and $parents[1] ($p2_sex) have same sex\n";
+			warn "WARNING: $node_name\'s parents $parents[0] ($p1_sex) and $parents[1] ($p2_sex) have same sex\n";
 		}
 	}
 	

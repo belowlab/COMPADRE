@@ -11,6 +11,8 @@
 
 ################ Common stuff ################
 use strict;
+use File::Find;
+use warnings;
 
 my @commandline_options = @ARGV;
 
@@ -63,7 +65,7 @@ my %traits;
 my @trait_order;
 my $relatedness_threshold = .09375; ## Values is halfway between the expected mean pi_hat for 3rd degree and 4th degree
 my $degree_rel_cutoff = 3;
-my $initial_likelihood_cutoff = .3; ## Arbitrary cutoff for the relationship likelihood vectors
+my $initial_likelihood_cutoff = 0.3; ## Arbitrary cutoff for the relationship likelihood vectors
 my $max_generations = "none"; ## The maximum number of generations in a pedigree allowed during reconstruction
 my $max_generation_gap = 0; ## What is maximum different in generations that 2 people can mate
 my $missing_data_value = 0;
@@ -354,10 +356,40 @@ sub run_PR
 
 	print "done.\n" if $verbose > 0;
 	print $LOG "done.\n" if $verbose > 0;
+
+	# convert ps to pdf files 
+	find(\&process_file, $output_dir);
+
+	print "converted .ps to .pdf.\n" if $verbose > 0;
+	print $LOG "converted .ps to .pdf.\n" if $verbose > 0;
+
 	## Write out pairwise Summary file based on the results in the Summary file and possible pedigrees
 	#my $rels_ref = PRIMUS::get_pairwise_summary::get_possible_relationships($output_dir,"$output_dir/Summary_$dataset_name.txt");
 	#PRIMUS::get_pairwise_summary::write_table("$output_dir/Summary_$dataset_name\_pairwise_table.txt",$rels_ref);
 }
+
+sub process_file 
+{
+    if (/\.(ps)$/i) {
+        my $file = $File::Find::name;
+        (my $output_file = $file) =~ s/\.ps$/.pdf/i;
+        my $command = "ps2pdf -dFirstPage=2 $file $output_file";
+        system($command) == 0 or warn "Failed to execute: $command\n";
+    }
+}
+
+# sub run_system
+# {
+# 	my $command_to_run = shift;
+# 	if ($ECHO_SYSTEM) {
+# 		print("$command_to_run\n");
+# 	}
+# 	system($command_to_run);
+# 	if ($? != 0) {
+# 		my $exit_code = $? >> 8;
+# 		confess "Exit code was $exit_code Failed to run $command_to_run";
+# 	}
+# }
 
 
 sub print_files_and_settings
