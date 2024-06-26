@@ -1,6 +1,9 @@
 package PRIMUS::predict_relationships_2D;
 use strict;
 use Data::Dumper;
+use warnings;
+use File::Basename;
+use File::Spec;
 
 my $KDE_density_resolution = 1000; 
 my $MIN_LIKELIHOOD = 0.1;
@@ -29,10 +32,6 @@ sub get_relationship_likelihood_vectors {
 	$verbose = shift;
 	my $lib_dir = shift;
 	my $output_dir = shift;
-
-	# adding in ersa match file here --ersa_data
-	my $match_data = $main::ersa_data_glob;
-	print ("ERSA file: $match_data\n\n");
 
 	my $bw = shift;
 	my $kde_type = shift;
@@ -238,29 +237,33 @@ sub get_relationship_likelihood_vectors {
 		# at this point we can pass the vector AND the set of IDs into the python script that will use ERSA to update it
 		## re-update a new density_vector after the ERSA processing has been done 
 
-		
-		#print "\nOld vector string ( $name1 $name2 ) : $vector_str\n";
+		# adding in ersa match file here --ersa_data
+		my $match_data = $main::ersa_data_glob;
+		print ("ERSA file: $match_data\n\n");
+
+		my $libpath = $lib_dir; 
+		$libpath =~ s{/$}{};
+		my $parent_dir = File::Spec->catdir(dirname($libpath));
+		my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper.py');
 
 		# Check vector to see if we even need to run ersa
 		my $sum01 = $vector[0] + $vector[1];
-		print "\n0 1 sum : $sum01\n";
+		#print "\n0 1 sum : $sum01\n";
 
 		if ($sum01 < 0.4) {
 			
 			my $vector_str = join(',',@vector);
-			my $python_utility_path = "/data100t1/home/grahame/projects/compadre/primus-ersa-v2/helper3.py";
-
-			my $new_vector = `python3 \"$python_utility_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
+			my $new_vector = `python3 \"$helper_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
 			chomp($new_vector);
 
 			# re-assign vector to use the new version from the python utility
 			@vector = split(',', $new_vector);
 
-			print ("\nNew vector string ( $name1 $name2 ) : $new_vector\n");
+			#print ("\nNew vector string ( $name1 $name2 ) : $new_vector\n");
 		
 		}
 
-		else { print ("\nDidn't need to run ERSA\n"); }
+		#else { print ("\nDidn't need to run ERSA\n"); }
 		
 		###################################
 
