@@ -1,55 +1,11 @@
 #!/usr/bin/env/python
 import sys, os, math, optparse, glob, operator, random
-from logger import logger
-log = logger().log
+from optparse import Values
+import pandas as pd
 
-# run-time parameters ###################################################################################################
-parser=optparse.OptionParser(usage="""usage: %prog [options]
-example:    python %prog chr*.txt
-This executes the program with the default options for all files with the name chr*.txt""")
+options = None
+model_df = None
 
-parser.add_option('--return_output', action="store_true", help="Returns [single pair] output in tuple format for use with PRIMUS.")      
-parser.add_option("--segment_files",type="string",default="*.match",help="Germline or Beagle fibd output file(s), [default: %default]")
-parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
-parser.add_option("--max_cm",type="float",default=10.0,
-    help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
-parser.add_option("--max_meioses",type="float",default=40,help="maximum number of meioses to consider [default: %default]")
-parser.add_option("--rec_per_meioses",type="float",default=35.2548101,help="expected number of recombination events per meioses [default: %default] from McVean et al., 2005")
-parser.add_option("--ascertained_chromosome",type="string",default="no_ascertainment",help="chromosome of ascertained disease locus")
-parser.add_option("--ascertained_position",type="int",default=-1,help="chromosomal position of ascertained disease locus")
-parser.add_option("--control_files",type="string",help="Germline or Beagle fibd output file(s) for population controls")
-parser.add_option("--control_sample_size",type="float",default=None,help="Sample size of control population.    Used only when the control_files parameter is specified, default assumes all individuals are included in the files.")
-parser.add_option("--exp_mean",type="float",default=3.197036753,help="Mean of the exponential distribution of shared segment size in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
-parser.add_option("--pois_mean",type="float",default=13.73,help="Mean of the Poisson distribution of the number of segments shared between a pair of individuals in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
-
-######################
-# OLD 
-parser.add_option("--pair_file",type="string",help="Restrict pairwise comparisons to the pairs specified in this file")
-# NEW
-parser.add_option("--single_pair",type="string",help="Restrict pairwise comparisons to the pairs specified in this flag")
-######################
-
-parser.add_option("--number_of_ancestors",type="int",help="Restrict relationships to [1] one parent (half-sibs/cousins), [2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild).    Default considers all possibilities") 
-parser.add_option("--number_of_chromosomes",type="int",default=22,help="Number of chromosomes [default: %default]")
-parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
-parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
-parser.add_option("--use_ibd2_siblings",type="string",default="false",help="If IBD2 data is present in the segment_file, this option will use IBD2 to detect sibling relationships.    [default: %default]")
-parser.add_option("--parent_offspring_option",type="string",default="true",help="Option to evaluate potential parent-offspring and sibling relationships based on total proportion of the genome that is shared ibd1 [default: %default]")
-parser.add_option("--parent_offspring_zscore",type="float",default=2.33,help="Zscore for rejecting a sibling relationship in favor of a parent-offspring relationship [default: %default, alpha=0.01]    Used only in combination with parent_offspring_option")
-parser.add_option("--adjust_pop_dist",type="string",default="false",help="Option to adjust the population distribution of shared segments downward for segments that could not be detected due to recent ancestry [default: %default]")
-parser.add_option("--confidence_level",type="float",default=0.95,help="Confidence level for confidence interval around the estimated degree of relationship.    If the confidence interval includes no relationship, then no_sig_rel will be reported for the estimated_degree_of_relationship [default: %default]")
-parser.add_option("--output_file",type="string",default="output/ersa.out",help="ERSA output file [default: %default]")
-parser.add_option("--mask_common_shared_regions",type="string",default="false",help="excludes chromosomal regions that are commonly shared from evaluation.    Used only when the control_files or mask_region_file parameter is specified [default: %default].")
-parser.add_option("--mask_region_cross_length",type="int",default=1000000,help="length in base pairs that a shared segment must extend past a masked segment in order to avoid truncation.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
-parser.add_option("--mask_region_file",type="string",help="file containing chromosomal regions to exclude from from evaluation.    Used only when mask_common_shared_regions parameter is specified.")
-parser.add_option("--mask_region_threshold",type="float",default=4.0,help="Threshold for the ratio of observed vs. expected segment sharing in controls before a region will be masked.    Used only in conjunction with control_files and mask_common_shared_regions parameters when mask_region_file is not specified [default: %default].")
-parser.add_option("--mask_region_simulation_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim.    The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
-parser.add_option("--recombination_files",type="string",help="file containing genetic distances for all chromosomes.    This parameter must be specified with Beagle fibd input files")
-parser.add_option("--beagle_markers_files",type="string",help="Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker).    Each filename must begin with the chromosome name followed by a period.    This parameter must be specified with Beagle fibd input files")
-parser.add_option("--model_output_file",type="string",default=None,help="Specifies an output file to report likelihoods for all models [default: %default].")
-parser.add_option('--verbose', action="store_true", default=None, help="Determines whether or not you want to log console output print statements.")      
-
-(options,sys.args)=parser.parse_args()
 #########################################################################################################################
 
 class rec_entry:
@@ -102,6 +58,7 @@ def get_overlap(first_segment,second_segment):
     return v_return
 
 def get_total_overlap(i,segments,expected_length=-1):
+    global options
     first_segment=segments[i]
     observed_length=0.0
     j=0
@@ -114,9 +71,10 @@ def get_total_overlap(i,segments,expected_length=-1):
     return observed_length
 
 def simulate_segments(segments):
+    global options
     iterations=options.max_region_simulation_count
     for iter in range(iterations):
-        if verbose:
+        if options.verbose:
             print ("...iteration "+str(iter)+" of "+str(iterations))
         for i in range(len(segments)):
             segment=segments[i]
@@ -232,6 +190,7 @@ def set_confidence(conf_level):
     return [cstat,conf_level]
 
 def background_ll(segment_list,emp_segment_lambda,emp_lambda,ascertained_segments=[],related_segments=[],related_asc_segments=[]):
+    global options
     bn=0
     for segment in segment_list:
         if segment>0:
@@ -255,6 +214,7 @@ def background_ll(segment_list,emp_segment_lambda,emp_lambda,ascertained_segment
     return b_ll
 
 def related_0p_ll(segment_list,n,ascertained_segments=[]):
+    global options
     rn=0
     for segment in segment_list:
         rn+=1
@@ -277,6 +237,7 @@ def related_0p_ll(segment_list,n,ascertained_segments=[]):
     return r_ll
 
 def related_1p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
+    global options
     rn=0
     for segment in segment_list:
         rn+=1
@@ -299,6 +260,7 @@ def related_1p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
         return min_ll_constant
 
 def related_2p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
+    global options
     rn=0
     for segment in segment_list:
         rn+=1
@@ -346,6 +308,7 @@ def related_2p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
         return r_ll
 
 def ibd2_sib_ll(segment_list):
+    global options
     rn=0
     k_count=0
     for segment in segment_list:
@@ -361,6 +324,7 @@ def ibd2_sib_ll(segment_list):
     return r_ll
 
 def add_segment(ind_sharing,ind_id,cm,controls="no"):
+    global options
     if abs(cm)>=options.min_cm:
         if controls=="no" or cm<=options.max_cm:
             if ind_id in ind_sharing: 
@@ -369,6 +333,7 @@ def add_segment(ind_sharing,ind_id,cm,controls="no"):
                 ind_sharing[ind_id]=[cm]
 
 def get_masked_coordinates(chromosome,begin_position,end_position,masked_segments_dict):
+    global options
     new_begin=begin_position
     new_end=end_position
     if chromosome in masked_segments_dict:
@@ -381,6 +346,7 @@ def get_masked_coordinates(chromosome,begin_position,end_position,masked_segment
     return [new_begin,new_end]
 
 def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm,controls,begin_position,end_position,recombination_rates,IBD2,control_segments,masked_segments_dict,masked_sum):
+    global options
     if ind_id not in masked_sum:
         masked_sum[ind_id]=0.0
     if chromosome==options.ascertained_chromosome and options.ascertained_position>=begin_position and options.ascertained_position<=end_position and controls=="no" and IBD2=="no":
@@ -408,6 +374,7 @@ def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm
             # Note: this was the point at which they were being removed from unrelated founders -- default 2.5 cM 
 
 def get_cm(begin_position,end_position,segment_begin_position,segment_end_position,cm,recombination_rates):
+    global options
     if options.recombination_files is None or options.ascertained_chromosome=="no_ascertainment":
         return cm*float(end_position-begin_position)/(segment_end_position-segment_begin_position)
     else:
@@ -428,6 +395,8 @@ def get_cm(begin_position,end_position,segment_begin_position,segment_end_positi
         return cm_return
 
 def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,model_output_file):
+    global options
+    global model_df
     n_0p=[]
     n_1p=[]
     n_2p=[]
@@ -435,20 +404,37 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
         n_2p.append(2)
     for model in models:
         if not options.model_output_file is None:
+            
+
             if model.ancestors==2:
                 dor=model.meioses-1
             else:
                 dor=model.meioses
             ind_ids=model.pair_id.split(':')
 
-            # check here if the individual ids match the pair 
-            if not options.single_pair is None and ind_ids[0] == options.single_pair.split(':')[0] and ind_ids[1] == options.single_pair.split(':')[1]:
+            df_info = {'individual_1': ind_ids[0], 'individual_2': ind_ids[1], 'number_of_shared_ancestors': int(model.ancestors), 'degree_of_relatedness': int(dor), 'maxlnl':model.ml} 
+            
+            if not options.single_pair is None: # this level if-else can probably be removed now that i trim the .match file ahead of time for single_pair runs 
                 
-                model_output_file.write(ind_ids[0]+'\t'+ind_ids[1]+'\t'+str(model.ancestors)+'\t'+str(dor)+'\t'+str(model.ml)+'\n')
+                if ind_ids[0] == options.single_pair.split(':')[0] and ind_ids[1] == options.single_pair.split(':')[1]:
+                    
+                    if options.write_output == True:
+                        model_output_file.write(ind_ids[0]+'\t'+ind_ids[1]+'\t'+str(model.ancestors)+'\t'+str(dor)+'\t'+str(model.ml)+'\n')
+                        #print (f'wrote {ind_ids[0]}-{ind_ids[1]}-{model.ancestors}-{dor} to file')
 
-            # else:
-            #     if verbose:
-            #         print (options.single_pair.split(':')[0], options.single_pair.split(':')[1])
+                    if options.return_output == True:
+                        row_df = pd.DataFrame([df_info])
+                        model_df = pd.concat([model_df, row_df], ignore_index=True)
+                        #print (f'concatenated {ind_ids[0]}-{ind_ids[1]}-{model.ancestors}-{dor}')
+
+            else:
+                if options.write_output == True:
+                    model_output_file.write(ind_ids[0]+'\t'+ind_ids[1]+'\t'+str(model.ancestors)+'\t'+str(dor)+'\t'+str(model.ml)+'\n')
+                if options.return_output == True:
+                    row_df = pd.DataFrame([df_info])
+                    model_df = pd.concat([model_df, row_df], ignore_index=True)
+
+            
         
         if model.ml+confidence_statistic>=max_model_ll:
             if model.ancestors==0:
@@ -482,7 +468,7 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
     return [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]
 
 def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,filename,recombination_rates,pairs,masked_segments_dict,ascertained_dict={},ibd2_dict={},control_ind=None,control_segments=None,masked_sum={}):
-     
+     global options
      '''
      reading in segment_files arg -- this is where we can find out what the .match columns are supposed to be
      '''
@@ -639,6 +625,7 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,f
                      sharing_dict[ind_id]=[]
 
 def shorten_match_file(pair, matchfile):
+    global options
 
     newmatchfile = matchfile.split('.match')[0] + '_' + pair.replace(':', '-') + '.match'
 
@@ -650,7 +637,7 @@ def shorten_match_file(pair, matchfile):
             if f'{id1}\t' in line and f'{id2}\t' in line:
                 outp.write(line)
                 counter += 1
-    if verbose:
+    if options.verbose:
         print ('Length of new match file: %s lines' % str(counter))
     return newmatchfile
 
@@ -660,9 +647,6 @@ Function that writes out a variable matrix per pair of individuals (from the pai
 Matrix includes the pair of individuals and the sizes of each IBD segment shared by the pair 
 '''
 
-def write_matrix(pair):
-
-    return
 
 def return_to_primus(id1, id2, dor):
 
@@ -676,278 +660,228 @@ def return_to_primus(id1, id2, dor):
 ####################################################################################################################
 ####################################################################################################################
 
-global min_ll_constant
-min_ll_constant=-9999999999
-output_file=open(options.output_file,'w')
+# Wrap everything below in a function 
 
-verbose = True if not options.verbose is None else False
+# we'll need to update how they call global options EVERYWHERE 
 
-if not options.model_output_file is None:
-    model_output_file=open(options.model_output_file,'w') 
-else:
-    model_output_file=None
+# figure out how to pull in optparse arguments from a provided dictionary 
 
-output_file.write('# ersa version 2.1\n')
+def runner(options_arg, additional_args=None):
 
-for arg in sys.argv[1:]:
-    output_file.write('# ' + arg + '\n')
+    global options
+    argstrings = []
 
-[confidence_statistic,confidence_level]=set_confidence(options.confidence_level)
-recombination_rates=[]
-rec_dict={}
+    if not isinstance(options_arg, Values):
 
-if not options.recombination_files is None:
-    for recomb_filename in glob.glob(options.recombination_files):
-        last=1
-        if verbose:
-            print ("Processing recombination rate file "+recomb_filename)
-        g=open(recomb_filename,'r')
-        line=g.readline()
-        line=g.readline()
-        while line:
-            try:
-                line_list=line.split()
-                if line_list[0] not in rec_dict:
-                    rec_dict[line_list[0]]=[]
-                rec_dict[line_list[0]].append((float(line_list[1]),float(line_list[2]),float(line_list[3])))
-                if line_list[0]==options.ascertained_chromosome:
-                    recombination_rates.append(rec_entry(line_list[0],last,line_list[1],line_list[2],line_list[3]))
-                last=float(line_list[1])+1
-            except:
-                msg = "%prog: Incorrect file format for recombination_file "+recomb_filename
-                g.close()
-                raise RuntimeError(msg)
-            line=g.readline()
-        if verbose:
-            print ("...done")
-        g.close()
+        if type(options_arg) == dict:
 
-beagle_marker_dict={}
-if not options.beagle_markers_files is None:
-    if options.recombination_files is None:
-        msg = "%prog: beagle_marker_files parameter specified but no recombination_files provided"
-        raise RuntimeError(msg)
+            # instantiate default options
+            parser = optparse.OptionParser()
+            parser.add_option('--return_output', action="store_true",default=False, help="Returns [single pair] output in tuple format for use with PRIMUS.")      
+            parser.add_option('--write_output', action="store_true",default=True, help="Writes output to .out (and/or .model) file(s).")      
+            parser.add_option("--segment_files",type="string",default="*.match",help="Germline or Beagle fibd output file(s), [default: %default]")
+            parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
+            parser.add_option("--max_cm",type="float",default=10.0,help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
+            parser.add_option("--max_meioses",type="float",default=40,help="maximum number of meioses to consider [default: %default]")
+            parser.add_option("--rec_per_meioses",type="float",default=35.2548101,help="expected number of recombination events per meioses [default: %default] from McVean et al., 2005")
+            parser.add_option("--ascertained_chromosome",type="string",default="no_ascertainment",help="chromosome of ascertained disease locus")
+            parser.add_option("--ascertained_position",type="int",default=-1,help="chromosomal position of ascertained disease locus")
+            parser.add_option("--control_files",type="string",help="Germline or Beagle fibd output file(s) for population controls")
+            parser.add_option("--control_sample_size",type="float",default=None,help="Sample size of control population.    Used only when the control_files parameter is specified, default assumes all individuals are included in the files.")
+            parser.add_option("--exp_mean",type="float",default=3.197036753,help="Mean of the exponential distribution of shared segment size in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
+            parser.add_option("--pois_mean",type="float",default=13.73,help="Mean of the Poisson distribution of the number of segments shared between a pair of individuals in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
+
+            ######################
+            # OLD 
+            parser.add_option("--pair_file",type="string",help="Restrict pairwise comparisons to the pairs specified in this file")
+            # NEW
+            parser.add_option("--single_pair",type="string",help="Restrict pairwise comparisons to the pairs specified in this flag")
+            ######################
+
+            parser.add_option("--number_of_ancestors",type="int",help="Restrict relationships to [1] one parent (half-sibs/cousins), [2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild).    Default considers all possibilities") 
+            parser.add_option("--number_of_chromosomes",type="int",default=22,help="Number of chromosomes [default: %default]")
+            parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
+            parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
+            parser.add_option("--use_ibd2_siblings",type="string",default="false",help="If IBD2 data is present in the segment_file, this option will use IBD2 to detect sibling relationships.    [default: %default]")
+            parser.add_option("--parent_offspring_option",type="string",default="true",help="Option to evaluate potential parent-offspring and sibling relationships based on total proportion of the genome that is shared ibd1 [default: %default]")
+            parser.add_option("--parent_offspring_zscore",type="float",default=2.33,help="Zscore for rejecting a sibling relationship in favor of a parent-offspring relationship [default: %default, alpha=0.01]    Used only in combination with parent_offspring_option")
+            parser.add_option("--adjust_pop_dist",type="string",default="false",help="Option to adjust the population distribution of shared segments downward for segments that could not be detected due to recent ancestry [default: %default]")
+            parser.add_option("--confidence_level",type="float",default=0.95,help="Confidence level for confidence interval around the estimated degree of relationship.    If the confidence interval includes no relationship, then no_sig_rel will be reported for the estimated_degree_of_relationship [default: %default]")
+            parser.add_option("--output_file",type="string",default="output/ersa.out",help="ERSA output file [default: %default]")
+            parser.add_option("--mask_common_shared_regions",type="string",default="false",help="excludes chromosomal regions that are commonly shared from evaluation.    Used only when the control_files or mask_region_file parameter is specified [default: %default].")
+            parser.add_option("--mask_region_cross_length",type="int",default=1000000,help="length in base pairs that a shared segment must extend past a masked segment in order to avoid truncation.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
+            parser.add_option("--mask_region_file",type="string",help="file containing chromosomal regions to exclude from from evaluation.    Used only when mask_common_shared_regions parameter is specified.")
+            parser.add_option("--mask_region_threshold",type="float",default=4.0,help="Threshold for the ratio of observed vs. expected segment sharing in controls before a region will be masked.    Used only in conjunction with control_files and mask_common_shared_regions parameters when mask_region_file is not specified [default: %default].")
+            parser.add_option("--mask_region_simulation_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim.    The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
+            parser.add_option("--recombination_files",type="string",help="file containing genetic distances for all chromosomes.    This parameter must be specified with Beagle fibd input files")
+            parser.add_option("--beagle_markers_files",type="string",help="Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker).    Each filename must begin with the chromosome name followed by a period.    This parameter must be specified with Beagle fibd input files")
+            parser.add_option("--model_output_file",type="string",default=None,help="Specifies an output file to report likelihoods for all models [default: %default].")
+            parser.add_option('--verbose', action="store_true", default=None, help="Determines whether or not you want to log console output print statements.")      
+
+            options, args = parser.parse_args()
+
+            # add dict args in here
+            for key, value in options_arg.items():
+                print (f'New option value read in from dict: {key}:{value}')
+                argstrings.append(f'--{key}={value}')
+                setattr(options, key, value)
+
+            # print all of them
+            # for option, value in vars(options).items():
+            #     print(f"{option}: {value}")
+
+        else:
+            raise TypeError("Options must be in dictionary format if not provided as options via script mode. Please try again")
+            sys.exit
+
+
+    ################################
+
+    global min_ll_constant
+    min_ll_constant=-9999999999
+
+    output_file=open(options.output_file,'w')
+
+    #verbose = True if not options.verbose is None else False
+
+    if not options.model_output_file is None:
+        model_output_file=open(options.model_output_file,'w') 
     else:
-        for bm_filename in glob.glob(options.beagle_markers_files):
-            chrom_tmp=bm_filename.split(".")
-            chromosome=chrom_tmp[0]
-            beagle_marker_dict[chromosome]={}
-            if verbose:
-                print ("Reading beagle marker file " + bm_filename + " for chromosome " + chromosome)
-            g=open(bm_filename,'r')
-            marker_index=0
-            last_position=0
-            for line in g.readlines():
+        model_output_file=None
+
+    output_file.write('# ersa version 2.2\n')
+
+    if additional_args is not None:
+        for arg in additional_args:
+            output_file.write('# ' + arg + '\n')
+    else:
+        for arg in argstrings:
+            output_file.write('# ' + arg + '\n')
+
+    [confidence_statistic,confidence_level]=set_confidence(options.confidence_level)
+    recombination_rates=[]
+    rec_dict={}
+
+    if not options.recombination_files is None:
+        for recomb_filename in glob.glob(options.recombination_files):
+            last=1
+            if options.verbose:
+                print ("Processing recombination rate file "+recomb_filename)
+            g=open(recomb_filename,'r')
+            line=g.readline()
+            line=g.readline()
+            while line:
                 try:
                     line_list=line.split()
-                    beagle_marker_dict[chromosome][marker_index]=int(line_list[1])
-                    last_position=int(line_list[1])
-                    marker_index+=1
+                    if line_list[0] not in rec_dict:
+                        rec_dict[line_list[0]]=[]
+                    rec_dict[line_list[0]].append((float(line_list[1]),float(line_list[2]),float(line_list[3])))
+                    if line_list[0]==options.ascertained_chromosome:
+                        recombination_rates.append(rec_entry(line_list[0],last,line_list[1],line_list[2],line_list[3]))
+                    last=float(line_list[1])+1
                 except:
-                    msg="%prog: Invalid file format for beagle marker file "
+                    msg = "%prog: Incorrect file format for recombination_file "+recomb_filename
+                    g.close()
                     raise RuntimeError(msg)
-            beagle_marker_dict[chromosome][marker_index]=last_position+1
-            if verbose:
+                line=g.readline()
+            if options.verbose:
                 print ("...done")
-
-
-########################################
-# this is what we want to leverage in the library (most likely)
-
-if not options.pair_file is None:
-    if verbose:
-        print ("Processing pair file")
-    pairs={}
-    g=open(options.pair_file,'r')
-    for line in g.readlines():
-        try:
-            line_list=line.split()
-            pair_string=min(line_list[0],line_list[1])+":"+max(line_list[0],line_list[1])
-            pairs[pair_string]=1
-        except:
-            msg = "%prog: Incorrect file format for pair_file"
             g.close()
+
+    beagle_marker_dict={}
+    if not options.beagle_markers_files is None:
+        if options.recombination_files is None:
+            msg = "%prog: beagle_marker_files parameter specified but no recombination_files provided"
             raise RuntimeError(msg)
-    if verbose:
-        print ("...done")
-        print (pairs)
+        else:
+            for bm_filename in glob.glob(options.beagle_markers_files):
+                chrom_tmp=bm_filename.split(".")
+                chromosome=chrom_tmp[0]
+                beagle_marker_dict[chromosome]={}
+                if options.verbose:
+                    print ("Reading beagle marker file " + bm_filename + " for chromosome " + chromosome)
+                g=open(bm_filename,'r')
+                marker_index=0
+                last_position=0
+                for line in g.readlines():
+                    try:
+                        line_list=line.split()
+                        beagle_marker_dict[chromosome][marker_index]=int(line_list[1])
+                        last_position=int(line_list[1])
+                        marker_index+=1
+                    except:
+                        msg="%prog: Invalid file format for beagle marker file "
+                        raise RuntimeError(msg)
+                beagle_marker_dict[chromosome][marker_index]=last_position+1
+                if options.verbose:
+                    print ("...done")
 
 
-# Single pair id1:id2 proccessing here
-else:
-    if not options.single_pair is None:
-        # split data
-        person1 = options.single_pair.split(':')[0]
-        person2 = options.single_pair.split(':')[1]
-        pairstr = "%s:%s" % (person1, person2)
-        pairs = {pairstr : 1}
-        if verbose:
-            print (person1, person2)
-    else: # old else case
-        pairs={"cases":2}
+    ########################################
+    # this is what we want to leverage in the library (most likely)
 
-################
-# at this point we have a dictionary of pairs 
-
-ind_sharing={}
-ibd2_sharing={}
-ascertained_sharing={}
-chromosome_positions={}
-control_segments={}
-masked_segments_dict={}
-total_masked_length=0
-
-if options.control_files is None:
-    emp_lambda=1/(options.exp_mean-options.min_cm) 
-    emp_segment_lambda=options.pois_mean
-    if options.mask_common_shared_regions!='false' and options.mask_region_file is None:
-            msg="mask_common_shared_regions parameter must be specified with either control_files or mask_region_file parameter"
-            raise RuntimeError(msg)
-else:
-    cont_sharing={}
-    cont_ind=set([])
-    if len(glob.glob(options.control_files))==0: 
-        msg="Control file " + options.control_files + " does not exist"
-        raise RuntimeError(msg)
-    for ctrl_filename in glob.glob(options.control_files):
-
-        if verbose:
-            print ("Processing control file " + ctrl_filename)
-
-        add_segments(beagle_marker_dict,rec_dict,chromosome_positions,cont_sharing,ctrl_filename,recombination_rates,{"controls":2},masked_segments_dict,{},{},cont_ind,control_segments)
-        if verbose:
-            print ("...done")
-    if options.control_sample_size is None:
-        control_count=len(cont_ind)
-    else:
-        control_count=options.control_sample_size
-    segment_counts={}
-    total_segment_count=0
-    total_segment_length=0.0
-    emp_shared_segment_sum=0.0
-    tmp_pair_count=0
-    for pair_id,segments in cont_sharing.items():
-        segment_count=len(segments)
-        tmp_pair_count+=1
-        emp_shared_segment_sum+=segment_count
-        for segment in segments:
-            total_segment_count+=1
-            total_segment_length+=segment
-    emp_segment_lambda=emp_shared_segment_sum/float(tmp_pair_count)
-    output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s): " + str(emp_segment_lambda) + '\n')
-    exp_mean=total_segment_length/total_segment_count
-    output_file.write("#Mean shared segment size in the control file(s): " + str(exp_mean) + '\n')
-    emp_lambda=1/(exp_mean-options.min_cm)
-    if options.mask_common_shared_regions!='false' and (options.mask_region_file is None or options.mask_region_simulation_count>0):
-        if verbose:
-            print ("Identifying common shared regions to mask")
-        mask_region_segments={}
-        for chromosome,segment_entries in control_segments.items():
-            segment_entries.sort(key=operator.itemgetter(0))
-            for i in range(len(segment_entries)):
-                expected_length=segment_entries[i][2]*(total_segment_length/(options.rec_per_meioses*100))
-                observed_length=get_total_overlap(i,segment_entries,expected_length)
-                if observed_length/expected_length>options.mask_region_threshold:
-                    if chromosome not in mask_region_segments:
-                        mask_region_segments[chromosome]=[]
-                    mask_region_segments[chromosome].append(segment_entries[i])
-        if verbose:
-            print ("...Merging overlapping segments")
-        for chromosome,masked_segments in mask_region_segments.items():
-            masked_segments.sort(key=operator.itemgetter(0))
-            i=0
-            while i<len(masked_segments):
-                first_segment=masked_segments[i]
-                j=i+1
-                while j<len(masked_segments) and masked_segments[j][0]<=first_segment[1]:
-                    first_segment[1]=max(first_segment[1],masked_segments[j][1])
-                    j+=1
-                for k in range(i+1,j):
-                    del masked_segments[i+1]
-                i+=1
-        mask_file=open(options.output_file+'.msk','w')
-        mask_file.write('chromosome\tbegin_position\tend_position\n')
-        for chromosome,masked_segments in mask_region_segments.items():
-            for segment in masked_segments:
-                mask_file.write(chromosome+'\t'+str(segment[0])+'\t'+str(segment[1])+'\n')
-        mask_file.close()
-
-        if verbose:
-            print ("Masked regions written to "+options.output_file+'.msk')
-
-        if options.mask_region_simulation_count>0:
-            if verbose:
-                print ("Simulating null distribution of overlapping segments")
-            
-            segment_list=[]
-            for i in range(len(segment_entries)):
-                segment_list.append([0.0,segment_entries[i][2],segment_entries[i][2],observed_length,0,chromosome,segment_entries[i][0],segment_entries[i][1],0.0])
-            simulate_segments(segment_list)
-            sim_file=open(options.output_file+'.sim','w')
-            segment_list.sort(key=operator.itemgetter(0,6))
-            sim_file.write('chromosome\tbegin_position\tend_position\tsegment_size\ttotal_observed_length_of_segment_sharing\ttotal_expected_length_of_segment_sharing\tratio_of_observed_to_expected\tnumber_of_simulations_exceeding_observed_to_expected_ratio\n')
-            for segment in segment_list: 
-                expected_length=segment[2]*(total_segment_length/(options.rec_per_meioses*100))
-                sim_file.write(segment[5]+'\t'+str(segment[6])+'\t'+str(segment[7])+'\t'+str(segment[2])+'\t'+str(segment[3])+'\t'+str(expected_length)+'\t'+str(segment[3]/expected_length)+'\t'+str(segment[4])+'\n')
-            sim_file.close()
-            if verbose:
-                print ("Simulations complete.    Results written to "+options.output_file+'.sim')
-
-
-if options.mask_common_shared_regions!='false':
-
-    if verbose:
-        print ("Reading masked region file "+options.output_file+'.msk')
-
-    if not options.mask_region_file is None:
-        mask_file=options.mask_region_file
-    else:
-        mask_file=options.output_file+'.msk'
-    m=open(mask_file,'r')
-    masked_segments_dict={}
-    line=m.readline()
-    line=m.readline()
-    last_segment=['chr0',0,0]
-    while line and line[0]!='#':
-        line_list=line.split()
-        total_masked_length+=int(line_list[2])-int(line_list[1])
-        if line_list[0] not in masked_segments_dict:
-            masked_segments_dict[line_list[0]]=[[int(line_list[1]),int(line_list[2])]]
-        elif line_list[0]==last_segment[0]:
-            if int(line_list[1])<last_segment[2]:
-                msg="Mask file "+options.output_file+'.msk is not sorted or contains overlapping segments'
+    if not options.pair_file is None:
+        if options.verbose:
+            print ("Processing pair file")
+        pairs={}
+        g=open(options.pair_file,'r')
+        for line in g.readlines():
+            try:
+                line_list=line.split()
+                pair_string=min(line_list[0],line_list[1])+":"+max(line_list[0],line_list[1])
+                pairs[pair_string]=1
+            except:
+                msg = "%prog: Incorrect file format for pair_file"
+                g.close()
                 raise RuntimeError(msg)
-            elif int(line_list[1])-options.mask_region_cross_length<last_segment[2]:
-                masked_segments_dict[line_list[0]][len(masked_segments_dict[line_list[0]])-1][1]=int(line_list[2])
-            else:
-                masked_segments_dict[line_list[0]].append([int(line_list[1]),int(line_list[2])])
-        last_segment=[line_list[0],int(line_list[1]),int(line_list[2])]
-        line=m.readline()
+        if options.verbose:
+            print ("...done")
+            print (pairs)
 
-    if verbose:
-        print ("...done")
+
+    # Single pair id1:id2 proccessing here
+    else:
+        if not options.single_pair is None:
+            # split data
+            person1 = options.single_pair.split(':')[0]
+            person2 = options.single_pair.split(':')[1]
+            pairstr = "%s:%s" % (person1, person2)
+            pairs = {pairstr : 1}
+            if options.verbose:
+                print (person1, person2)
+        else: # old else case
+            pairs={"cases":2}
+
+    ################
+    # at this point we have a dictionary of pairs 
+
+    ind_sharing={}
+    ibd2_sharing={}
+    ascertained_sharing={}
+    chromosome_positions={}
+    control_segments={}
+    masked_segments_dict={}
+    total_masked_length=0
 
     if options.control_files is None:
-        while line:
-            line_list=line.split()
-            if line_list[1]=='exp_mean':
-                if verbose:
-                    print ("Setting exp_mean and emp_lambda paramters to value contained in    masked region file "+options.output_file+'.msk')
-                emp_lambda=1/(float(line_list[2])-options.min_cm)
-            elif line_list[1]=='pois_mean':
-                emp_segment_lambda=float(line_list[2])
-            line=m.readline()
-        m.close()
+        emp_lambda=1/(options.exp_mean-options.min_cm) 
+        emp_segment_lambda=options.pois_mean
+        if options.mask_common_shared_regions!='false' and options.mask_region_file is None:
+                msg="mask_common_shared_regions parameter must be specified with either control_files or mask_region_file parameter"
+                raise RuntimeError(msg)
     else:
-        m.close()
-        control_segments={}
         cont_sharing={}
         cont_ind=set([])
+        if len(glob.glob(options.control_files))==0: 
+            msg="Control file " + options.control_files + " does not exist"
+            raise RuntimeError(msg)
         for ctrl_filename in glob.glob(options.control_files):
-            if verbose:
-                print ("Masking segments in control file " + ctrl_filename)
+
+            if options.verbose:
+                print ("Processing control file " + ctrl_filename)
+
             add_segments(beagle_marker_dict,rec_dict,chromosome_positions,cont_sharing,ctrl_filename,recombination_rates,{"controls":2},masked_segments_dict,{},{},cont_ind,control_segments)
-            if verbose:
+            if options.verbose:
                 print ("...done")
         if options.control_sample_size is None:
             control_count=len(cont_ind)
@@ -965,247 +899,429 @@ if options.mask_common_shared_regions!='false':
             for segment in segments:
                 total_segment_count+=1
                 total_segment_length+=segment
-        mask_file=open(options.output_file+'.msk','a')
         emp_segment_lambda=emp_shared_segment_sum/float(tmp_pair_count)
-        output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s) after masking: " + str(emp_segment_lambda) + '\n')
-        mask_file.write('# pois_mean '+str(emp_segment_lambda)+'\n')
+        output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s): " + str(emp_segment_lambda) + '\n')
         exp_mean=total_segment_length/total_segment_count
-        mask_file.write('# exp_mean '+str(exp_mean)+'\n')
-        mask_file.close()
-        output_file.write("#Mean shared segment size in the control file(s) after masking: " + str(exp_mean) + '\n')
+        output_file.write("#Mean shared segment size in the control file(s): " + str(exp_mean) + '\n')
         emp_lambda=1/(exp_mean-options.min_cm)
+        if options.mask_common_shared_regions!='false' and (options.mask_region_file is None or options.mask_region_simulation_count>0):
+            if options.verbose:
+                print ("Identifying common shared regions to mask")
+            mask_region_segments={}
+            for chromosome,segment_entries in control_segments.items():
+                segment_entries.sort(key=operator.itemgetter(0))
+                for i in range(len(segment_entries)):
+                    expected_length=segment_entries[i][2]*(total_segment_length/(options.rec_per_meioses*100))
+                    observed_length=get_total_overlap(i,segment_entries,expected_length)
+                    if observed_length/expected_length>options.mask_region_threshold:
+                        if chromosome not in mask_region_segments:
+                            mask_region_segments[chromosome]=[]
+                        mask_region_segments[chromosome].append(segment_entries[i])
+            if options.verbose:
+                print ("...Merging overlapping segments")
+            for chromosome,masked_segments in mask_region_segments.items():
+                masked_segments.sort(key=operator.itemgetter(0))
+                i=0
+                while i<len(masked_segments):
+                    first_segment=masked_segments[i]
+                    j=i+1
+                    while j<len(masked_segments) and masked_segments[j][0]<=first_segment[1]:
+                        first_segment[1]=max(first_segment[1],masked_segments[j][1])
+                        j+=1
+                    for k in range(i+1,j):
+                        del masked_segments[i+1]
+                    i+=1
+            mask_file=open(options.output_file+'.msk','w')
+            mask_file.write('chromosome\tbegin_position\tend_position\n')
+            for chromosome,masked_segments in mask_region_segments.items():
+                for segment in masked_segments:
+                    mask_file.write(chromosome+'\t'+str(segment[0])+'\t'+str(segment[1])+'\n')
+            mask_file.close()
 
-masked_sum={}
-if len(glob.glob(options.segment_files))==0: 
-    msg="Segment file " + options.segment_files + " does not exist"
-    raise RuntimeError(msg)
+            if options.verbose:
+                print ("Masked regions written to "+options.output_file+'.msk')
 
-for segment_filename in glob.glob(options.segment_files):
-    if verbose:
-        print ("Reading segment file " + segment_filename)
+            if options.mask_region_simulation_count>0:
+                if options.verbose:
+                    print ("Simulating null distribution of overlapping segments")
+                
+                segment_list=[]
+                for i in range(len(segment_entries)):
+                    segment_list.append([0.0,segment_entries[i][2],segment_entries[i][2],observed_length,0,chromosome,segment_entries[i][0],segment_entries[i][1],0.0])
+                simulate_segments(segment_list)
+                sim_file=open(options.output_file+'.sim','w')
+                segment_list.sort(key=operator.itemgetter(0,6))
+                sim_file.write('chromosome\tbegin_position\tend_position\tsegment_size\ttotal_observed_length_of_segment_sharing\ttotal_expected_length_of_segment_sharing\tratio_of_observed_to_expected\tnumber_of_simulations_exceeding_observed_to_expected_ratio\n')
+                for segment in segment_list: 
+                    expected_length=segment[2]*(total_segment_length/(options.rec_per_meioses*100))
+                    sim_file.write(segment[5]+'\t'+str(segment[6])+'\t'+str(segment[7])+'\t'+str(segment[2])+'\t'+str(segment[3])+'\t'+str(expected_length)+'\t'+str(segment[3]/expected_length)+'\t'+str(segment[4])+'\n')
+                sim_file.close()
+                if options.verbose:
+                    print ("Simulations complete.    Results written to "+options.output_file+'.sim')
 
-    # Restricts .match file down to only the pair we're interested in (if that flag is enabled) 
-    if not options.single_pair is None:
-        segment_filename = shorten_match_file(options.single_pair, segment_filename)
 
-    add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_filename,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
-    
-    if verbose:
-        print ("...done")
+    if options.mask_common_shared_regions!='false':
 
-if verbose:
-    print("Estimating recent ancestry")
+        if options.verbose:
+            print ("Reading masked region file "+options.output_file+'.msk')
 
-########## Come back here after going through add_segments() function
+        if not options.mask_region_file is None:
+            mask_file=options.mask_region_file
+        else:
+            mask_file=options.output_file+'.msk'
+        m=open(mask_file,'r')
+        masked_segments_dict={}
+        line=m.readline()
+        line=m.readline()
+        last_segment=['chr0',0,0]
+        while line and line[0]!='#':
+            line_list=line.split()
+            total_masked_length+=int(line_list[2])-int(line_list[1])
+            if line_list[0] not in masked_segments_dict:
+                masked_segments_dict[line_list[0]]=[[int(line_list[1]),int(line_list[2])]]
+            elif line_list[0]==last_segment[0]:
+                if int(line_list[1])<last_segment[2]:
+                    msg="Mask file "+options.output_file+'.msk is not sorted or contains overlapping segments'
+                    raise RuntimeError(msg)
+                elif int(line_list[1])-options.mask_region_cross_length<last_segment[2]:
+                    masked_segments_dict[line_list[0]][len(masked_segments_dict[line_list[0]])-1][1]=int(line_list[2])
+                else:
+                    masked_segments_dict[line_list[0]].append([int(line_list[1]),int(line_list[2])])
+            last_segment=[line_list[0],int(line_list[1]),int(line_list[2])]
+            line=m.readline()
 
-global genetic_map
-genetic_map=options.rec_per_meioses*100.0-(total_masked_length/1e6)*1.3
-output_file.write("individual_1\tindividual_2\test_number_of_shared_ancestors\test_degree_of_relatedness\t"+str(confidence_level)+" CI_2p_lower\t2p_upper\t1p_lower\t1p_upper\t0p_lower\t0p_upper\tmaxlnl_relatedness\tmaxlnl_unrelatedness"+'\n')
+        if options.verbose:
+            print ("...done")
 
-# header
-if not options.model_output_file is None:
-    model_output_file.write("individual_1\tindividual_2\tnumber_of_shared_ancestors\tdegree_of_relatedness\tmaxlnl\n")
-
-for ind_id,ind_item in ind_sharing.items():
-    ind_item.sort(key=abs,reverse=True)
-    n=1
-    s=len(ind_item)
-    models=[]
-    while n<options.max_meioses+1:
-        max_ll_0p=min_ll_constant
-        max_ll_1p=min_ll_constant
-        max_ll_2p=min_ll_constant
-        for i in range(s+1):
-            values_related=ind_item[:i]
-            values_background=ind_item[i:]
-            if ind_id in ascertained_sharing:
-                ascertained_values=ascertained_sharing[ind_id]
+        if options.control_files is None:
+            while line:
+                line_list=line.split()
+                if line_list[1]=='exp_mean':
+                    if options.verbose:
+                        print ("Setting exp_mean and emp_lambda paramters to value contained in    masked region file "+options.output_file+'.msk')
+                    emp_lambda=1/(float(line_list[2])-options.min_cm)
+                elif line_list[1]=='pois_mean':
+                    emp_segment_lambda=float(line_list[2])
+                line=m.readline()
+            m.close()
+        else:
+            m.close()
+            control_segments={}
+            cont_sharing={}
+            cont_ind=set([])
+            for ctrl_filename in glob.glob(options.control_files):
+                if options.verbose:
+                    print ("Masking segments in control file " + ctrl_filename)
+                add_segments(beagle_marker_dict,rec_dict,chromosome_positions,cont_sharing,ctrl_filename,recombination_rates,{"controls":2},masked_segments_dict,{},{},cont_ind,control_segments)
+                if options.verbose:
+                    print ("...done")
+            if options.control_sample_size is None:
+                control_count=len(cont_ind)
             else:
-                ascertained_values=[]
-            ll=background_ll(values_background,emp_segment_lambda,emp_lambda,ascertained_values,values_related) 
-            ll_0p=related_0p_ll(values_related,n)
-            ll_1p=related_1p_ll(values_related,n)
-            ll_2p=related_2p_ll(values_related,n)
-            if len(ascertained_values)>0:
-                ll_2=background_ll(values_background,emp_segment_lambda,emp_lambda,[],values_related,ascertained_values) 
-                ll_0p_2=related_0p_ll(values_related,n,ascertained_values)
-                ll_1p_2=related_1p_ll(values_related,n,ascertained_values)
-                ll_2p_2=related_2p_ll(values_related,n,ascertained_values)
-            else:
-                ll_2=min_ll_constant
-                ll_0p_2=min_ll_constant
-                ll_1p_2=min_ll_constant
-                ll_2p_2=min_ll_constant
-            ll_total_0p=max(ll+ll_0p,ll_2+ll_0p_2)
-            ll_total_1p=max(ll+ll_1p,ll_2+ll_1p_2)
-            ll_total_2p=max(ll+ll_2p,ll_2+ll_2p_2)
-            if ll_total_0p>max_ll_0p:
-                max_ll_0p=ll_total_0p
-                max_background_0p=i
-            if ll_total_1p>max_ll_1p:
-                max_ll_1p=ll_total_1p
-                max_background_1p=i
-            if ll_total_2p>max_ll_2p:
-                max_ll_2p=ll_total_2p
-                max_background_2p=i
-        models.append(model_class(0,max_ll_0p,n,max_background_0p,s,ind_item,ind_id))
-        if n!=1:
-            models.append(model_class(2,max_ll_2p,n,max_background_2p,s,ind_item,ind_id))
-            models.append(model_class(1,max_ll_1p,n,max_background_1p,s,ind_item,ind_id))
-        n+=1
-    ibd2_models=[]
-    sibs_override=False
-    second_relationship=False
-    if options.use_ibd2_siblings=="true" and ind_id in ibd2_sharing:
-        ibd1_total=0.0
-        for segment in ind_item:
-            ibd1_total+=segment
-        ind_item_ibd2=ibd2_sharing[ind_id]
-        ind_item_ibd2.sort(key=abs,reverse=True)
+                control_count=options.control_sample_size
+            segment_counts={}
+            total_segment_count=0
+            total_segment_length=0.0
+            emp_shared_segment_sum=0.0
+            tmp_pair_count=0
+            for pair_id,segments in cont_sharing.items():
+                segment_count=len(segments)
+                tmp_pair_count+=1
+                emp_shared_segment_sum+=segment_count
+                for segment in segments:
+                    total_segment_count+=1
+                    total_segment_length+=segment
+            mask_file=open(options.output_file+'.msk','a')
+            emp_segment_lambda=emp_shared_segment_sum/float(tmp_pair_count)
+            output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s) after masking: " + str(emp_segment_lambda) + '\n')
+            mask_file.write('# pois_mean '+str(emp_segment_lambda)+'\n')
+            exp_mean=total_segment_length/total_segment_count
+            mask_file.write('# exp_mean '+str(exp_mean)+'\n')
+            mask_file.close()
+            output_file.write("#Mean shared segment size in the control file(s) after masking: " + str(exp_mean) + '\n')
+            emp_lambda=1/(exp_mean-options.min_cm)
+
+    masked_sum={}
+    if len(glob.glob(options.segment_files))==0: 
+        msg="Segment file " + options.segment_files + " does not exist"
+        raise RuntimeError(msg)
+
+    for segment_filename in glob.glob(options.segment_files):
+        if options.verbose:
+            print ("Reading segment file " + segment_filename)
+
+        # Restricts .match file down to only the pair we're interested in (if that flag is enabled) 
+        if not options.single_pair is None:
+            segment_filename = shorten_match_file(options.single_pair, segment_filename)
+
+        add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_filename,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
+        
+        if options.verbose:
+            print ("...done")
+
+    if options.verbose:
+        print("Estimating recent ancestry")
+
+    ########## Come back here after going through add_segments() function
+
+    global genetic_map
+    genetic_map=options.rec_per_meioses*100.0-(total_masked_length/1e6)*1.3
+
+    # header
+
+    output_file.write("individual_1\tindividual_2\test_number_of_shared_ancestors\test_degree_of_relatedness\t"+str(confidence_level)+" CI_2p_lower\t2p_upper\t1p_lower\t1p_upper\t0p_lower\t0p_upper\tmaxlnl_relatedness\tmaxlnl_unrelatedness"+'\n')
+
+    if not options.model_output_file is None:
+
+        if options.return_output == True:
+            global model_df
+            model_df = pd.DataFrame(columns=['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl'])
+
+        # instantiate df here 
+        column_names = ['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl']
+        columnstr = ('\t'.join(column_names) + '\n')
+        model_output_file.write(columnstr)
+
+    for ind_id,ind_item in ind_sharing.items():
+        print (ind_id)
+        ind_item.sort(key=abs,reverse=True)
         n=1
+        s=len(ind_item)
+        models=[]
         while n<options.max_meioses+1:
+            max_ll_0p=min_ll_constant
             max_ll_1p=min_ll_constant
             max_ll_2p=min_ll_constant
-            if n==2:
-                s=len(ind_item_ibd2)
-            else:
-                s=0
-            unrelated_ll=background_ll(ind_item_ibd2,emp_segment_lambda*ibd1_total/genetic_map,emp_lambda)
             for i in range(s+1):
-                values_related=ind_item_ibd2[:i]
-                values_background=ind_item_ibd2[i:]
-                background_ll_ibd2=background_ll(values_background,emp_segment_lambda*ibd1_total/genetic_map,emp_lambda,[],values_related) 
-                if n==2:
-                    ll_ibd2_1p=0.0
-                    ll_ibd2_2p=ibd2_sib_ll(values_related)
-                elif n>=6:
-                    ll_ibd2_1p=related_1p_ll(values_related,n,[],ibd1_total/genetic_map)
-                    ll_ibd2_2p=0.0
+                values_related=ind_item[:i]
+                values_background=ind_item[i:]
+                if ind_id in ascertained_sharing:
+                    ascertained_values=ascertained_sharing[ind_id]
                 else:
-                    ll_ibd2_1p=0.0
-                    ll_ibd2_2p=0.0
-                ll_total_1p=background_ll_ibd2+ll_ibd2_1p
-                ll_total_2p=background_ll_ibd2+ll_ibd2_2p
-                if ll_total_1p>max_ll_1p and i==0:
+                    ascertained_values=[]
+                ll=background_ll(values_background,emp_segment_lambda,emp_lambda,ascertained_values,values_related) 
+                ll_0p=related_0p_ll(values_related,n)
+                ll_1p=related_1p_ll(values_related,n)
+                ll_2p=related_2p_ll(values_related,n)
+                if len(ascertained_values)>0:
+                    ll_2=background_ll(values_background,emp_segment_lambda,emp_lambda,[],values_related,ascertained_values) 
+                    ll_0p_2=related_0p_ll(values_related,n,ascertained_values)
+                    ll_1p_2=related_1p_ll(values_related,n,ascertained_values)
+                    ll_2p_2=related_2p_ll(values_related,n,ascertained_values)
+                else:
+                    ll_2=min_ll_constant
+                    ll_0p_2=min_ll_constant
+                    ll_1p_2=min_ll_constant
+                    ll_2p_2=min_ll_constant
+                ll_total_0p=max(ll+ll_0p,ll_2+ll_0p_2)
+                ll_total_1p=max(ll+ll_1p,ll_2+ll_1p_2)
+                ll_total_2p=max(ll+ll_2p,ll_2+ll_2p_2)
+                if ll_total_0p>max_ll_0p:
+                    max_ll_0p=ll_total_0p
+                    max_background_0p=i
+                if ll_total_1p>max_ll_1p:
                     max_ll_1p=ll_total_1p
                     max_background_1p=i
                 if ll_total_2p>max_ll_2p:
                     max_ll_2p=ll_total_2p
                     max_background_2p=i
-            ibd2_models.append(model_class(0,max_ll_1p,n,max_background_1p,s,ind_item_ibd2,ind_id))
-            ibd2_models.append(model_class(1,max_ll_1p,n,max_background_1p,s,ind_item_ibd2,ind_id))
-            ibd2_models.append(model_class(2,max_ll_2p,n,max_background_2p,s,ind_item_ibd2,ind_id))
+            models.append(model_class(0,max_ll_0p,n,max_background_0p,s,ind_item,ind_id))
+            if n!=1:
+                models.append(model_class(2,max_ll_2p,n,max_background_2p,s,ind_item,ind_id))
+                models.append(model_class(1,max_ll_1p,n,max_background_1p,s,ind_item,ind_id))
             n+=1
-        max_model_ll=min_ll_constant
-        for model_id in range(len(ibd2_models)):
-            current_model=ibd2_models[model_id]
-            if options.number_of_ancestors is None or (options.number_of_ancestors==1 and current_model.ancestors==1) or (options.number_of_ancestors==2 and current_model.ancestors==2) or (options.number_of_ancestors==0 and current_model.ancestors==0):
-                if current_model.ml>max_model_ll:
-                    max_model_ll=current_model.ml
-                    max_model_id=model_id
-                    max_model=current_model
-        if max_model_ll!=min_ll_constant and max_model_ll>unrelated_ll+confidence_statistic:
-            if max_model.ancestors==2 and max_model.meioses==2: 
-                sibs_override=True
-            else:
-                second_relationship=max_model.meioses
-    if not sibs_override:
-        max_model_ll=min_ll_constant
-        for model_id in range(len(models)):
-            current_model=models[model_id]
-            if options.number_of_ancestors is None or (options.number_of_ancestors==1 and current_model.ancestors==1) or (options.number_of_ancestors==2 and current_model.ancestors==2) or (options.number_of_ancestors==0 and current_model.ancestors==0):
-                if current_model.ml>max_model_ll and (options.use_ibd2_siblings=="false" or not (current_model.ancestors==2 and current_model.meioses==2)):
-                    max_model_ll=current_model.ml
-                    max_model_id=model_id
-                    max_model=current_model
-        if options.parent_offspring_option=="true": 
-            mean=options.rec_per_meioses*100*3/4
-            sd=math.sqrt((mean/100.0)*4*25**2)
-            total_segment_length=0.0
+        ibd2_models=[]
+        sibs_override=False
+        second_relationship=False
+        if options.use_ibd2_siblings=="true" and ind_id in ibd2_sharing:
+            ibd1_total=0.0
             for segment in ind_item:
-                total_segment_length+=segment
-            if ind_id in masked_sum:
-                total_segment_length+=masked_sum[ind_id]
-            if total_segment_length>mean+options.parent_offspring_zscore*sd and (options.number_of_ancestors==0 or options.number_of_ancestors is None):
-                for model_id in range(len(models)):
-                    if models[model_id].ancestors==0 and models[model_id].meioses==1:
+                ibd1_total+=segment
+            ind_item_ibd2=ibd2_sharing[ind_id]
+            ind_item_ibd2.sort(key=abs,reverse=True)
+            n=1
+            while n<options.max_meioses+1:
+                max_ll_1p=min_ll_constant
+                max_ll_2p=min_ll_constant
+                if n==2:
+                    s=len(ind_item_ibd2)
+                else:
+                    s=0
+                unrelated_ll=background_ll(ind_item_ibd2,emp_segment_lambda*ibd1_total/genetic_map,emp_lambda)
+                for i in range(s+1):
+                    values_related=ind_item_ibd2[:i]
+                    values_background=ind_item_ibd2[i:]
+                    background_ll_ibd2=background_ll(values_background,emp_segment_lambda*ibd1_total/genetic_map,emp_lambda,[],values_related) 
+                    if n==2:
+                        ll_ibd2_1p=0.0
+                        ll_ibd2_2p=ibd2_sib_ll(values_related)
+                    elif n>=6:
+                        ll_ibd2_1p=related_1p_ll(values_related,n,[],ibd1_total/genetic_map)
+                        ll_ibd2_2p=0.0
+                    else:
+                        ll_ibd2_1p=0.0
+                        ll_ibd2_2p=0.0
+                    ll_total_1p=background_ll_ibd2+ll_ibd2_1p
+                    ll_total_2p=background_ll_ibd2+ll_ibd2_2p
+                    if ll_total_1p>max_ll_1p and i==0:
+                        max_ll_1p=ll_total_1p
+                        max_background_1p=i
+                    if ll_total_2p>max_ll_2p:
+                        max_ll_2p=ll_total_2p
+                        max_background_2p=i
+                ibd2_models.append(model_class(0,max_ll_1p,n,max_background_1p,s,ind_item_ibd2,ind_id))
+                ibd2_models.append(model_class(1,max_ll_1p,n,max_background_1p,s,ind_item_ibd2,ind_id))
+                ibd2_models.append(model_class(2,max_ll_2p,n,max_background_2p,s,ind_item_ibd2,ind_id))
+                n+=1
+            max_model_ll=min_ll_constant
+            for model_id in range(len(ibd2_models)):
+                current_model=ibd2_models[model_id]
+                if options.number_of_ancestors is None or (options.number_of_ancestors==1 and current_model.ancestors==1) or (options.number_of_ancestors==2 and current_model.ancestors==2) or (options.number_of_ancestors==0 and current_model.ancestors==0):
+                    if current_model.ml>max_model_ll:
+                        max_model_ll=current_model.ml
                         max_model_id=model_id
-                        max_model_ll=models[model_id].ml
-                        max_model=models[model_id]
-            elif options.use_ibd2_siblings=="false" and total_segment_length/(options.rec_per_meioses*100)>0.625 and (options.number_of_ancestors==2 or options.number_of_ancestors is None):
-                for model_id in range(len(models)):
-                    if models[model_id].ancestors==2 and models[model_id].meioses==2:
+                        max_model=current_model
+            if max_model_ll!=min_ll_constant and max_model_ll>unrelated_ll+confidence_statistic:
+                if max_model.ancestors==2 and max_model.meioses==2: 
+                    sibs_override=True
+                else:
+                    second_relationship=max_model.meioses
+        if not sibs_override:
+            max_model_ll=min_ll_constant
+            for model_id in range(len(models)):
+                current_model=models[model_id]
+                if options.number_of_ancestors is None or (options.number_of_ancestors==1 and current_model.ancestors==1) or (options.number_of_ancestors==2 and current_model.ancestors==2) or (options.number_of_ancestors==0 and current_model.ancestors==0):
+                    if current_model.ml>max_model_ll and (options.use_ibd2_siblings=="false" or not (current_model.ancestors==2 and current_model.meioses==2)):
+                        max_model_ll=current_model.ml
                         max_model_id=model_id
-                        max_model_ll=models[model_id].ml
-                        max_model=models[model_id]
-    if sibs_override: 
-        [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]=get_confidence_levels(ibd2_models,max_model_id,max_model_ll,confidence_statistic,model_output_file)
-        total_expected_ibd1=min((emp_segment_lambda*emp_lambda)/(genetic_map),1.0)
-        ll=background_ll(values_background,emp_segment_lambda*total_expected_ibd1,emp_lambda)
-    else: 
-        [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]=get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,model_output_file)
-        ll=background_ll(ind_item,emp_segment_lambda,emp_lambda,ascertained_values)
-    [ind1,ind2]=ind_id.split(":")
+                        max_model=current_model
+            if options.parent_offspring_option=="true": 
+                mean=options.rec_per_meioses*100*3/4
+                sd=math.sqrt((mean/100.0)*4*25**2)
+                total_segment_length=0.0
+                for segment in ind_item:
+                    total_segment_length+=segment
+                if ind_id in masked_sum:
+                    total_segment_length+=masked_sum[ind_id]
+                if total_segment_length>mean+options.parent_offspring_zscore*sd and (options.number_of_ancestors==0 or options.number_of_ancestors is None):
+                    for model_id in range(len(models)):
+                        if models[model_id].ancestors==0 and models[model_id].meioses==1:
+                            max_model_id=model_id
+                            max_model_ll=models[model_id].ml
+                            max_model=models[model_id]
+                elif options.use_ibd2_siblings=="false" and total_segment_length/(options.rec_per_meioses*100)>0.625 and (options.number_of_ancestors==2 or options.number_of_ancestors is None):
+                    for model_id in range(len(models)):
+                        if models[model_id].ancestors==2 and models[model_id].meioses==2:
+                            max_model_id=model_id
+                            max_model_ll=models[model_id].ml
+                            max_model=models[model_id]
+        if sibs_override: 
+            [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]=get_confidence_levels(ibd2_models,max_model_id,max_model_ll,confidence_statistic,model_output_file)
+            total_expected_ibd1=min((emp_segment_lambda*emp_lambda)/(genetic_map),1.0)
+            ll=background_ll(values_background,emp_segment_lambda*total_expected_ibd1,emp_lambda)
+        else: 
+            [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]=get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,model_output_file)
+            ll=background_ll(ind_item,emp_segment_lambda,emp_lambda,ascertained_values)
+        [ind1,ind2]=ind_id.split(":")
+        
+
+        # right here we should be able to check ind1 and ind2 if they match the one in pairs dict 
+        
+        if not options.single_pair is None:
+            if ind1 == person1 and ind2 == person2: # finding the correct pair to write out
+
+                # no significant relatedness
+                if ll+confidence_statistic>=max_model_ll:
+                    dor = 'no_sig_rel'
+                    output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+                
+                # there is some relatedness
+                else:
+                    if max_model.ancestors==2:
+                        dor=str(max_model.meioses-1) # dor = degree of relatedness
+                    else:
+                        dor=str(max_model.meioses)
+                    if second_relationship:
+                        dor+="("+second_relationship+")"
+                    output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
 
 
-    # right here we should be able to check ind1 and ind2 if they match the one in pairs dict 
-    
-    if not options.single_pair is None:
-        if ind1 == person1 and ind2 == person2: # finding the correct pair to write out
+        
+        else: # Writing every pair, not a single one 
 
-            # no significant relatedness
             if ll+confidence_statistic>=max_model_ll:
-                dor = 'no_sig_rel'
                 output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
-            
-            # there is some relatedness
             else:
                 if max_model.ancestors==2:
-                    dor=str(max_model.meioses-1) # dor = degree of relatedness
+                    dor=str(max_model.meioses-1)
                 else:
                     dor=str(max_model.meioses)
                 if second_relationship:
                     dor+="("+second_relationship+")"
                 output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
 
-            #return (ind1, ind2, str(int(max_model.ancestors)), dor, str(n_2p_min),str(n_2p_max), str(n_1p_min), str(n_1p_max), str(n_0p_min), str(n_0p_max), str(max_model_ll), str(ll))
+    '''Add in support for building a dataframe instead of file writing if the argument is passed'''
 
-            if options.return_output:
-                if verbose:
-                    print('IDs and degree of relatedness returned')
-                return_to_primus(ind1, ind2, dor)
 
-                '''Currently, I'm just going to sum the .model output and invert it from natural log, but it might be easier to pass the summed probabilities here directly'''
+    if options.verbose:
+        print ("ERSA completed successfully\n")
 
-    # everything inside this else block is what used to be in the old ersa 
-    # WRITING EVERY LINE OF OUTPUT - NOT JUST A SINGLE PAIR ANALYSIS
-    else:
-        if ll+confidence_statistic>=max_model_ll:
-            output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
-        else:
-            if max_model.ancestors==2:
-                dor=str(max_model.meioses-1)
-            else:
-                dor=str(max_model.meioses)
-            if second_relationship:
-                dor+="("+second_relationship+")"
-            output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+    # running ersa pairwise generates a filtered .match file for the pair, which is unnecessary, so i'm auto-deleting them after running
+    if not options.single_pair is None:
+        os.system(f'rm {segment_filename}')
 
-if verbose:
-    print ("ERSA completed successfully\n")
+    if options.return_output == True:
+        return model_df
 
-# running ersa pairwise generates a filtered .match file for the pair, which is unnecessary, so i'm auto-deleting them after running
-if not options.single_pair is None:
-    os.system(f'rm {segment_filename}')
 
-'''python
-# Current execution: 
+if __name__ == "__main__":
 
-python3 ersa.py \
-    --single_pair=F000681:F036306 \
-    --segment_files=data/family.match \
-    --output_file=output/test5.out \
-    --model_output_file=output/test5model.out \
-    --return_output True
-'''
+    # run-time parameters ###################################################################################################
+    parser=optparse.OptionParser()
 
+    parser.add_option('--return_output', action="store_true",default=False, help="Returns [single pair] output in tuple format for use with PRIMUS.")      
+    parser.add_option('--write_output', action="store_true",default=True, help="Writes output to .out (and/or .model) file(s).")      
+    parser.add_option("--segment_files",type="string",default="*.match",help="Germline or Beagle fibd output file(s), [default: %default]")
+    parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
+    parser.add_option("--max_cm",type="float",default=10.0,help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
+    parser.add_option("--max_meioses",type="float",default=40,help="maximum number of meioses to consider [default: %default]")
+    parser.add_option("--rec_per_meioses",type="float",default=35.2548101,help="expected number of recombination events per meioses [default: %default] from McVean et al., 2005")
+    parser.add_option("--ascertained_chromosome",type="string",default="no_ascertainment",help="chromosome of ascertained disease locus")
+    parser.add_option("--ascertained_position",type="int",default=-1,help="chromosomal position of ascertained disease locus")
+    parser.add_option("--control_files",type="string",help="Germline or Beagle fibd output file(s) for population controls")
+    parser.add_option("--control_sample_size",type="float",default=None,help="Sample size of control population.    Used only when the control_files parameter is specified, default assumes all individuals are included in the files.")
+    parser.add_option("--exp_mean",type="float",default=3.197036753,help="Mean of the exponential distribution of shared segment size in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
+    parser.add_option("--pois_mean",type="float",default=13.73,help="Mean of the Poisson distribution of the number of segments shared between a pair of individuals in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
+
+    ######################
+    # OLD 
+    parser.add_option("--pair_file",type="string",help="Restrict pairwise comparisons to the pairs specified in this file")
+    # NEW
+    parser.add_option("--single_pair",type="string",help="Restrict pairwise comparisons to the pairs specified in this flag")
+    ######################
+
+    parser.add_option("--number_of_ancestors",type="int",help="Restrict relationships to [1] one parent (half-sibs/cousins), [2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild).    Default considers all possibilities") 
+    parser.add_option("--number_of_chromosomes",type="int",default=22,help="Number of chromosomes [default: %default]")
+    parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
+    parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
+    parser.add_option("--use_ibd2_siblings",type="string",default="false",help="If IBD2 data is present in the segment_file, this option will use IBD2 to detect sibling relationships.    [default: %default]")
+    parser.add_option("--parent_offspring_option",type="string",default="true",help="Option to evaluate potential parent-offspring and sibling relationships based on total proportion of the genome that is shared ibd1 [default: %default]")
+    parser.add_option("--parent_offspring_zscore",type="float",default=2.33,help="Zscore for rejecting a sibling relationship in favor of a parent-offspring relationship [default: %default, alpha=0.01]    Used only in combination with parent_offspring_option")
+    parser.add_option("--adjust_pop_dist",type="string",default="false",help="Option to adjust the population distribution of shared segments downward for segments that could not be detected due to recent ancestry [default: %default]")
+    parser.add_option("--confidence_level",type="float",default=0.95,help="Confidence level for confidence interval around the estimated degree of relationship.    If the confidence interval includes no relationship, then no_sig_rel will be reported for the estimated_degree_of_relationship [default: %default]")
+    parser.add_option("--output_file",type="string",default="output/ersa.out",help="ERSA output file [default: %default]")
+    parser.add_option("--mask_common_shared_regions",type="string",default="false",help="excludes chromosomal regions that are commonly shared from evaluation.    Used only when the control_files or mask_region_file parameter is specified [default: %default].")
+    parser.add_option("--mask_region_cross_length",type="int",default=1000000,help="length in base pairs that a shared segment must extend past a masked segment in order to avoid truncation.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
+    parser.add_option("--mask_region_file",type="string",help="file containing chromosomal regions to exclude from from evaluation.    Used only when mask_common_shared_regions parameter is specified.")
+    parser.add_option("--mask_region_threshold",type="float",default=4.0,help="Threshold for the ratio of observed vs. expected segment sharing in controls before a region will be masked.    Used only in conjunction with control_files and mask_common_shared_regions parameters when mask_region_file is not specified [default: %default].")
+    parser.add_option("--mask_region_simulation_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim.    The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
+    parser.add_option("--recombination_files",type="string",help="file containing genetic distances for all chromosomes.    This parameter must be specified with Beagle fibd input files")
+    parser.add_option("--beagle_markers_files",type="string",help="Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker).    Each filename must begin with the chromosome name followed by a period.    This parameter must be specified with Beagle fibd input files")
+    parser.add_option("--model_output_file",type="string",default=None,help="Specifies an output file to report likelihoods for all models [default: %default].")
+    parser.add_option('--verbose', action="store_true", default=False, help="Determines whether or not you want to log console output print statements.")      
+
+    (options, sys.args) = parser.parse_args()
+
+    runner(options, sys.args)
+
+    # If it makes it this far, it means that the options are being passed to the runner in optparse format

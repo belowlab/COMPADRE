@@ -4,3 +4,5 @@ lib/KDE_data/*
 lib/1KG_reference_data/*
 lib/perl_modules/File
 lib/perl_modules/Getopt
+testing/*
+__pycache__/

@@ -250,8 +250,6 @@ sub get_relationship_likelihood_vectors {
 			my $vector_str = join(',',@vector);
 			my $python_utility_path = "/data100t1/home/grahame/projects/compadre/primus-ersa-v2/helper3.py";
 
-			#print "\nPython arguments: $name1 | $name2 | $vector_str | $match_data\n";
-
 			my $new_vector = `python3 \"$python_utility_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
 			chomp($new_vector);
 
