@@ -1,8 +1,18 @@
 import pandas as pd
 import os, sys, json, math, time, re
-from dotenv import dotenv_values
-
 import ersa 
+
+
+'''
+TODO:
+
+- incorporate the file preprocessing as an initial step of the socket connection 
+    - convert germline file into leaner dictionary
+    - keep in system memory
+
+- update ersa.py to iterate through dictionary, not regular g2 file 
+
+'''
 
 
 ###############################################################
@@ -41,23 +51,13 @@ ersa_input_file = sys.argv[4].strip()
 
 if 'Missing' not in id1 and 'Missing' not in id2:   # CHANGE THIS???? 
 
-    vector_arr = [float(x) for x in vector_str.split(',')]
-    
     ersa_dir = ersa_input_file.split('/')[:-1]
     ersa_dir = '/'.join(ersa_dir) + '/ersa2'
-   
-    # make an output dir for ersa pairwise results
     if not os.path.exists(ersa_dir):
         os.makedirs(ersa_dir, exist_ok=True)
 
     id1_temp = id1.split('_')[-1]
     id2_temp = id2.split('_')[-1]
-
-    '''
-    ERSA PACKAGE UPDATE
-    Generate a dictionary of ERSA arguments to pass into the function call
-    '''
-
     ersa_outfile = f'{ersa_dir}/output_new_{id1_temp}_{id2_temp}'
 
     # OLD
@@ -68,10 +68,11 @@ if 'Missing' not in id1 and 'Missing' not in id2:   # CHANGE THIS????
     # NEW
     ersa_options = {
         "single_pair": f"{id1_temp}:{id2_temp}",
-        "segment_files":ersa_input_file,
-        "model_output_file":f"{ersa_outfile}.model",
-        "output_file":f"{ersa_outfile}.out",
-        "return_output":True
+        "segment_files": ersa_input_file,
+        "model_output_file": f"{ersa_outfile}.model",
+        "output_file": f"{ersa_outfile}.out",
+        "return_output": True,
+        "write_output": False
     }
     output_model_df = ersa.runner(ersa_options)
 
@@ -79,16 +80,13 @@ if 'Missing' not in id1 and 'Missing' not in id2:   # CHANGE THIS????
         print (vector_str) # return what was provided since it can't be improved 
 
     else:
-        # function call 
         ersa_props = calculate_ersa_props(output_model_df)
 
-        # multiply the ERSA proportions by p0-2 to re-fit them back into the PRIMUS probability space
+        vector_arr = [float(x) for x in vector_str.split(',')]
         prop02 = 1 - (vector_arr[0] + vector_arr[1])
-        ersa_props_updated = tuple(x * prop02 for x in ersa_props) # 2,3,4,UN
-
+        ersa_props_updated = tuple(x * prop02 for x in ersa_props) # multiply the ERSA proportions by p0-2 to re-fit them back into the PRIMUS probability space
         updated_vector = f'{vector_arr[0]},{vector_arr[1]},{ersa_props_updated[0]},{ersa_props_updated[1]},{ersa_props_updated[2]},{ersa_props_updated[3]}'
-
-        print (updated_vector)
+        print (updated_vector) # returned to PRIMUS
 
 else:
     print (vector_str)

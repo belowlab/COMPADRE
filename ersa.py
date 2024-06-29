@@ -58,7 +58,7 @@ def get_overlap(first_segment,second_segment):
     return v_return
 
 def get_total_overlap(i,segments,expected_length=-1):
-    global options
+    
     first_segment=segments[i]
     observed_length=0.0
     j=0
@@ -71,7 +71,7 @@ def get_total_overlap(i,segments,expected_length=-1):
     return observed_length
 
 def simulate_segments(segments):
-    global options
+    
     iterations=options.max_region_simulation_count
     for iter in range(iterations):
         if options.verbose:
@@ -190,7 +190,7 @@ def set_confidence(conf_level):
     return [cstat,conf_level]
 
 def background_ll(segment_list,emp_segment_lambda,emp_lambda,ascertained_segments=[],related_segments=[],related_asc_segments=[]):
-    global options
+    
     bn=0
     for segment in segment_list:
         if segment>0:
@@ -214,7 +214,7 @@ def background_ll(segment_list,emp_segment_lambda,emp_lambda,ascertained_segment
     return b_ll
 
 def related_0p_ll(segment_list,n,ascertained_segments=[]):
-    global options
+    
     rn=0
     for segment in segment_list:
         rn+=1
@@ -237,7 +237,7 @@ def related_0p_ll(segment_list,n,ascertained_segments=[]):
     return r_ll
 
 def related_1p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
-    global options
+    
     rn=0
     for segment in segment_list:
         rn+=1
@@ -260,7 +260,7 @@ def related_1p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
         return min_ll_constant
 
 def related_2p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
-    global options
+    
     rn=0
     for segment in segment_list:
         rn+=1
@@ -308,7 +308,7 @@ def related_2p_ll(segment_list,n,ascertained_segments=[],genome_proportion=1.0):
         return r_ll
 
 def ibd2_sib_ll(segment_list):
-    global options
+    
     rn=0
     k_count=0
     for segment in segment_list:
@@ -324,7 +324,7 @@ def ibd2_sib_ll(segment_list):
     return r_ll
 
 def add_segment(ind_sharing,ind_id,cm,controls="no"):
-    global options
+    
     if abs(cm)>=options.min_cm:
         if controls=="no" or cm<=options.max_cm:
             if ind_id in ind_sharing: 
@@ -333,7 +333,7 @@ def add_segment(ind_sharing,ind_id,cm,controls="no"):
                 ind_sharing[ind_id]=[cm]
 
 def get_masked_coordinates(chromosome,begin_position,end_position,masked_segments_dict):
-    global options
+    
     new_begin=begin_position
     new_end=end_position
     if chromosome in masked_segments_dict:
@@ -346,7 +346,7 @@ def get_masked_coordinates(chromosome,begin_position,end_position,masked_segment
     return [new_begin,new_end]
 
 def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm,controls,begin_position,end_position,recombination_rates,IBD2,control_segments,masked_segments_dict,masked_sum):
-    global options
+    
     if ind_id not in masked_sum:
         masked_sum[ind_id]=0.0
     if chromosome==options.ascertained_chromosome and options.ascertained_position>=begin_position and options.ascertained_position<=end_position and controls=="no" and IBD2=="no":
@@ -374,7 +374,7 @@ def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm
             # Note: this was the point at which they were being removed from unrelated founders -- default 2.5 cM 
 
 def get_cm(begin_position,end_position,segment_begin_position,segment_end_position,cm,recombination_rates):
-    global options
+    
     if options.recombination_files is None or options.ascertained_chromosome=="no_ascertainment":
         return cm*float(end_position-begin_position)/(segment_end_position-segment_begin_position)
     else:
@@ -395,7 +395,7 @@ def get_cm(begin_position,end_position,segment_begin_position,segment_end_positi
         return cm_return
 
 def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,model_output_file):
-    global options
+    
     global model_df
     n_0p=[]
     n_1p=[]
@@ -468,7 +468,7 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
     return [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]
 
 def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,filename,recombination_rates,pairs,masked_segments_dict,ascertained_dict={},ibd2_dict={},control_ind=None,control_segments=None,masked_sum={}):
-     global options
+     
      '''
      reading in segment_files arg -- this is where we can find out what the .match columns are supposed to be
      '''
@@ -625,7 +625,6 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,f
                      sharing_dict[ind_id]=[]
 
 def shorten_match_file(pair, matchfile):
-    global options
 
     newmatchfile = matchfile.split('.match')[0] + '_' + pair.replace(':', '-') + '.match'
 
@@ -662,7 +661,7 @@ def return_to_primus(id1, id2, dor):
 
 # Wrap everything below in a function 
 
-# we'll need to update how they call global options EVERYWHERE 
+# we'll need to update how they call  EVERYWHERE 
 
 # figure out how to pull in optparse arguments from a provided dictionary 
 

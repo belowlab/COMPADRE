@@ -9,6 +9,13 @@ You can read more about these individual methods in the original [PRIMUS](https:
 and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
 
+
+## Changelog
+
+1. Added support for 1000 Genomes Project reference data.
+2. Added support for ERSA-derived shared segments relationship estimation ahead of pedigree reconstruction. This mode requires a [GERMLINE2](https://github.com/gusevlab/germline2)-generated .match file as input. Use the flag `--segment_data=/your/germline/path/here.match` 
+
+
 ## Installation
 
 Via git:
@@ -19,10 +26,8 @@ git clone https://github.com/belowlab/primus-ersa-v2.git
 
 # SSH
 git clone git@github.com:belowlab/primus-ersa-v2.git
-
-cd primus-ersa-v2
 ```
-Via zip file:
+Via direct download:
 
 https://github.com/belowlab/primus-ersa-v2/archive/refs/heads/main.zip
 
@@ -30,9 +35,11 @@ https://github.com/belowlab/primus-ersa-v2/archive/refs/heads/main.zip
 
 ## Execution
 
-We have provided a Dockerfile to assist with installing dependencies and reference data. You must first install Docker Engine on your system [here](https://docs.docker.com/engine/install/).
+We have provided a Dockerfile to assist with installing dependencies and reference data. Instructions to install Docker Engine on your system can be found [here](https://docs.docker.com/engine/install/).
 
 ```bash
+cd primus-ersa-v2
+
 # Build
 docker build -t compadre .
 
@@ -44,12 +51,24 @@ docker run compadre --file ../example_data/MEX_pop --genome -o ./testoutput -v 3
 ```
 
 
-## Questions?
+## Additional Resources
 
-Please email grahame.f.evans AT vanderbilt DOT edu, or submit an issue in this repository. 
+The source code for generating family genetic data simulations can be found [here](https://github.com/belowlab/unified-simulations). 
+
+More documentation:
+- [Original PRIMUS docs](https://primus.gs.washington.edu/primusweb/res/documentation.html)
+- [Original ERSA docs](https://hufflab.org/software/ersa/)
+
+Please visit the [official COMPADRE website](https://compadre.dev/about) for publication information and other details. 
 
 
 
 ## License
 
-COMPADRE was developed by the [Below Lab](https://thebelowlab.com) at Vanderbilt University School of Medicine, and licensed under the following APACHE 2.0 license: https://compadre.dev/software/license.txt
+COMPADRE was developed by the [Below Lab](https://thebelowlab.com) at Vanderbilt University School of Medicine, and distributed under the following APACHE 2.0 license: https://compadre.dev/licenses/compadre_license.txt
+
+
+
+## Questions?
+
+Please email <strong><i>contact AT compadre DOT dev</strong></i> with the subject line "COMPADRE Help" or submit an issue in this repository. 

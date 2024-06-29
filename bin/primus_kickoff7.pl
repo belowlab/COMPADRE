@@ -27,6 +27,8 @@ use PRIMUS::PRIMUS_plus_ERSA;
 use File::Path qw(make_path);
 
 my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
+my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
+
 my $package = "PRIMUS";
 my $lib_dir; 
 my $bin_dir; 
@@ -54,6 +56,7 @@ my $verbose = 1;
 my $study_name = "";
 my $output_dir = "";
 my $ersa_data = "";
+my $reference_pop = "";
 my $log_file;
 my $LOG;
 
@@ -421,7 +424,11 @@ sub print_files_and_settings
 	print "\nERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
 	print $LOG "ERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
 
+	print "\nReference file specification: $reference_pop\n\n" if $reference_pop ne "";
+	print $LOG "Reference file specification: $reference_pop\n\n" if $reference_pop ne "";
+
 	our $ersa_data_glob = $ersa_data;
+	our $reference_pop_glob = $reference_pop;
 
 
 	if(!exists $affections{'FILE'}){print "Affection file: none\n";}
@@ -539,7 +546,7 @@ sub apply_options
 		"int_likelihood_cutoff=f" => \$initial_likelihood_cutoff,
 		"no_IMUS" => sub{$get_max_unrelated_set = 0},
 		"no_PR" => sub{$reconstruct_pedigrees = 0},
-    "generate_likelihoods_only" => sub{$get_max_unrelated_set = 0;$reconstruct_pedigrees = 0;$generate_likelihood_vectors_only=1},
+    	"generate_likelihoods_only" => sub{$get_max_unrelated_set = 0;$reconstruct_pedigrees = 0;$generate_likelihood_vectors_only=1},
 		"missing_val=f"=> \$missing_data_value,
 		"genome" => sub{$run_prePRIMUS = 1},
 		"no_automatic_IBD" => \$no_automatic_IBD,
@@ -603,7 +610,8 @@ sub apply_options
 		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
 		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
 		"output_dir|o=s" => \$output_dir,
-		"ersa_data=s" => \$ersa_data,
+		"segment_data|s:s" => \$ersa_data,
+		"reference_pop:s" => \$reference_pop,
 		"ages=s{1,4}" => sub
 		{ 
 			my @possible_keys = qw(FILE FID IID AGE);

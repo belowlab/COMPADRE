@@ -10,7 +10,9 @@ use File::Path qw(make_path);
 my $lib_dir = "../lib";
 my $PLINK = "plink";
 my $R = "R";
-my $HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
+#my $HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
+my $onekg = "$lib_dir/1KG";
+my $onekg_STEM = "$onekg/all_unrelateds_NEW";
 my $public_html_dir;
 open(my $LOG,"");
 
@@ -41,8 +43,38 @@ my $INTERNAL_REF = 0;
 my $ALTERNATIVE_REF = 0;
 my %intermediate_files;
 
-my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
-my %hm3_colors = ("ASW","steelblue4","CEU","red","CHB","darkred","CHD","green","GIH","darkgreen","JPT","slateblue1","LWK","slateblue4","MEX","sienna1","MKK","sienna4","TSI","black","YRI","darkgoldenrod3");
+#########################
+my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
+my @onekg_pops = ("ASW","CEU","CHB","CHS","GIH","JPT","LWK","MXL","TSI","YRI");
+my %onekg_colors = (
+	"ASW"=>"steelblue4", 		# african
+	"LWK"=>"steelblue3",		# african
+	"YRI"=>"steelblue2",		# african
+	"ACB"=>"steelblue1",		# african
+	"ESN"=>"slateblue1",		# african
+	"GWD"=>"slateblue2",		# african
+	"MSL"=>"slateblue3",		# african
+	"CEU"=>"gray1", 			# european
+	"TSI"=>"gray2",				# european
+	"FIN"=>"gray3",				# european	
+	"GBR"=>"gray4",				# european	
+	"IBS"=>"gray5",				# european
+	"CHB"=>"hotpink",			# asian
+	"CHS"=>"hotpink1",			# asian
+	"GIH"=>"hotpink2",			# asian
+	"JPT"=>"hotpink3",			# asian	
+	"STU"=>"hotpink4",			# asian
+	"BEB"=>"indianred",			# asian
+	"CDX"=>"indianred1",		# asian
+	"ITU"=>"indianred2",		# asian
+	"KHV"=>"indianred3",		# asian
+	"PJL"=>"indianred4",		# asian
+	"MXL"=>"orange",			# hispanic
+	"CLM"=>"orange1",			# hispanic
+	"PEL"=>"orange2",			# hispanic
+	"PUR"=>"orange3",			# hispanic
+);
+
 
 ## Need to change the test_paths() module to be correct, then uncomment next line
 #test_paths();
@@ -119,7 +151,8 @@ sub run_prePRIMUS_main
 	
 	#### Check/set inputs
 	test_paths();
-	$HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
+	#$HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
+	$onekg_STEM = "$lib_dir/1KG/all_unrelateds_NEW";
 	if($alt_ref_stem ne "" && @ref_pops > 0){die "can't use --alt_ref and --ref_pops_ref at the same time\n";}
 	if($remove_AIMs == 1 && $keep_AIMs == 1){die "can't use --remove_AIMs and --keep_AIMs at the same time\n";}
 	$study_name = get_file_name_from_stem($data_stem) if $study_name eq "";
@@ -127,7 +160,6 @@ sub run_prePRIMUS_main
 	make_path($output_dir) if !-d $output_dir;
 	open($LOG,">$output_dir/$study_name.log") if($LOG eq "");
 
-	
 	print "\n\nUsing PLINK to calculate IBD estimates for $study_name\n" if($verbose > 0);
 	print $LOG "\n\nUsing PLINK to calculate IBD estimates for $study_name\n" if($verbose > 0);
 	print "Study_name: $study_name\n" if $test;
@@ -202,10 +234,10 @@ sub run_prePRIMUS_main
 		call_het($cleaned_all_samples_stem,$allele_freqs);
 		$sex_file = call_sex($cleaned_all_samples_stem,$allele_freqs);
 	}
-	else ## Use HapMap3 as a reference
+	else ## Use 1KG as a reference
 	{
-		print "\nRunning $data_stem using HapMap3 to find an appropriate reference\n" if $verbose > 0;
-		print $LOG "\nRunning $data_stem using HapMap3 to find an appropriate reference\n" if $verbose > 0;
+		print "\nRunning $data_stem using 1KG to find an appropriate reference\n" if $verbose > 0;
+		print $LOG "\nRunning $data_stem using 1KG to find an appropriate reference\n" if $verbose > 0;
 		my ($no_dup_stem, @dup_SNPs) = remove_dups($data_stem);
 		my $autosomal_no_dup_stem = remove_non_autosomal_SNPs($no_dup_stem);
 		
@@ -213,8 +245,8 @@ sub run_prePRIMUS_main
 		my($merged_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref);
 		if(@ref_pops < 1) ## Select reference populations if not specified on commandline
 		{
-			($merged_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref) = merge($autosomal_no_dup_stem,$HM3_STEM);
-			my $PCA_plot = make_PCA_plot($merged_stem,$HM3_STEM,$study_name,"hapmap3",1) if !$no_PCA_plot;
+			($merged_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref) = merge($autosomal_no_dup_stem,$onekg_STEM);
+			my $PCA_plot = make_PCA_plot($merged_stem,$onekg_STEM,$study_name,"onekg",1) if !$no_PCA_plot;
 			if($no_automatic_IBD){die "--no_automatic_IBD was selected. Please see $PCA_plot to select a reference population and rerun\n";}
 			@ref_pops = pick_reference_populations($merged_stem,$study_name,1);
 		}
@@ -546,13 +578,13 @@ sub is_admixed
 	## Check if we need to remove AIMs
 	print "Checking if @ref_pops are admixed\n" if $verbose > 1;
 	print $LOG "Checking if @ref_pops are admixed\n" if $verbose > 1;
-	if(grep ($_ eq "ASW", @ref_pops ) || grep ($_ eq "MEX", @ref_pops ) || grep ($_ eq "MKK", @ref_pops ) || grep ($_ eq "GIH", @ref_pops)){$is_admixed = 1}
+	if(grep ($_ eq "ASW", @ref_pops ) || grep ($_ eq "MXL", @ref_pops ) || grep ($_ eq "GIH", @ref_pops)){$is_admixed = 1}
 	my $eur = 0;
 	my $asn = 0;
 	my $afr = 0;
 	if(grep ($_ eq "CEU", @ref_pops ) || grep ($_ eq "TSI", @ref_pops ) ){$eur = 1;}
 	if(grep ($_ eq "YRI", @ref_pops ) || grep ($_ eq "LWK", @ref_pops ) ){$afr = 1;}
-	if(grep ($_ eq "CHB", @ref_pops ) || grep ($_ eq "CHD", @ref_pops ) || grep ($_ eq "JPT", @ref_pops )){$asn = 1;}
+	if(grep ($_ eq "CHB", @ref_pops ) || grep ($_ eq "CHS", @ref_pops ) || grep ($_ eq "JPT", @ref_pops )){$asn = 1;}
 	if(($eur + $asn + $afr) > 1){$is_admixed = 1}
 
 	$ADMIXED = $is_admixed;
@@ -571,19 +603,21 @@ sub pick_reference_populations
 	
 	run_pca($data_stem, 1) if (!-e "$data_stem.eigenvec" || $rerun_pca == 1);
 	
-	my %samples;
+	my %samples; # THIS IS MESSING UP 
 	my %KDEs;
 	my @PC1;
 	my @PC2;
 	my %ref_pops;
 
-	## Make a three column table of the HM3 samples: POP PCV1 PCV2
+	## Make a three column table of the 1kg samples: POP PCV1 PCV2
 	# Read in the unrelated samples list from each pop:q
-	foreach my $pop (@hm3_pops)
+
+	foreach my $pop (@onekg_pops)
 	{
-		my $file = "$lib_dir/hapmap3/hapmap3_r2_b36_fwd.$pop.qc.poly.genome_maximum_independent_set";
+		my $file = "$lib_dir/1KG/1KG_unrelateds_by_subpop/1KG_formatted_set_$pop";
 		open(IN,$file) or die "can't open $file: $!\n";
 		<IN>;
+
 		while(my $line = <IN>)
 		{
 			my ($FID,$IID,$junk) = split(/\s+/,$line);
@@ -596,6 +630,7 @@ sub pick_reference_populations
 	open(IN,"$data_stem.eigenvec") or die "can't open $data_stem.eigenvec: $!\n";
 	my $header = <IN>;
 	open(OUT,">$data_stem\_PCV_vals.txt") or die "can't open $data_stem\_PCV_vals.txt: $!\n";
+
 	while(my $line = <IN>)
 	{
 		$line =~ s/^\s+//; ## get rid of the leading white space
@@ -619,6 +654,8 @@ sub pick_reference_populations
 	$legend_cex = 1 if $legend_cex > 1;
 	$legend_cex = .4 if $legend_cex < .4;
 
+
+############################################
 	open(OUT,">$data_stem\_PCV_vals.r") or die "can't open $data_stem\_PCV_vals.r: $!\n";
 	print OUT "library(KernSmooth)\n"; ## Requires the KernSmooth library
 	print OUT "data <- read.table(\"$data_stem\_PCV_vals.txt\")\n";
@@ -632,19 +669,19 @@ sub pick_reference_populations
 	print OUT "par(mai = c(1,1,1,4), oma = c(1,1,1,1),xpd=T)\n";
 	my $add = "F";
 	my @colors;
-	foreach my $pop (@hm3_pops)
+	foreach my $pop (@onekg_pops)
 	{
 		my $bw = 0.008;
 		if($pop eq "GIH"){$bw = 0.003}
 		if($pop eq "ASW"){$bw = 0.02}
 		if($pop eq "CEU"){$bw = 0.01}
 		if($pop eq "TSI"){$bw = 0.01}
-		if($pop eq "MEX"){$bw = .006}
+		if($pop eq "MXL"){$bw = .006}
 		print OUT "$pop = subset(data, V1==\"$pop\", select = c(\"V2\",\"V3\"))\n";
 		print OUT "$pop\_kde <- bkde2D($pop,c($bw,$bw),c(300,300),ranges)\n";
 		print OUT "write.table($pop\_kde, file = \"$data_stem\_$pop\_kde.txt\",row.names=F,col.names=F)\n";
-		print OUT "contour($pop\_kde\$x1, $pop\_kde\$x2, $pop\_kde\$fhat,add=$add,col=\'$hm3_colors{$pop}\')\n";
-		push(@colors,$hm3_colors{$pop});
+		print OUT "contour($pop\_kde\$x1, $pop\_kde\$x2, $pop\_kde\$fhat,add=$add,col=\'$onekg_colors{$pop}\')\n";
+		push(@colors,$onekg_colors{$pop});
 		$add="T";
 		$intermediate_files{"$data_stem\_$pop\_kde.txt"} = 1;
 	}
@@ -653,12 +690,12 @@ sub pick_reference_populations
 		print OUT "all_data <- read.table(\"$data_stem\_PCV1vPCV2.txt\",stringsAsFactors=FALSE,header=F)\n";
 		print OUT "data <- subset(all_data, V3 == \'$study_name\')\n";
 		print OUT "points(data[,5],data[,6],col='blue',pch=4)\n";
-		print OUT "legend(x=\"left\",inset=1.01,legend=c(\"$study_name\",\"".join('","',@hm3_pops)."\"),text.col=c(\"blue\",\"".join('","',@colors)."\"),fill=c(\"blue\",\"".join('","',@colors)."\"),cex=$legend_cex)\n";
+		print OUT "legend(x=\"left\",inset=1.01,legend=c(\"$study_name\",\"".join('","',@onekg_pops)."\"),text.col=c(\"blue\",\"".join('","',@colors)."\"),fill=c(\"blue\",\"".join('","',@colors)."\"),cex=$legend_cex)\n";
 
 	}
 	else
 	{
-		print OUT "legend(x=\"left\",inset=1.01,legend=c(\"".join('","',@hm3_pops)."\"),text.col=c(\"".join('","',@colors)."\"),fill=c(\"".join('","',@colors)."\"),cex=$legend_cex)\n";
+		print OUT "legend(x=\"left\",inset=1.01,legend=c(\"".join('","',@onekg_pops)."\"),text.col=c(\"".join('","',@colors)."\"),fill=c(\"".join('","',@colors)."\"),cex=$legend_cex)\n";
 	}
 	print OUT "dev.off()\n";
 	close(OUT);
@@ -670,7 +707,7 @@ sub pick_reference_populations
 
 	## Read in KDE tables: one for each population
 	my $PC_loaded = 0;
-	foreach my $pop (@hm3_pops)
+	foreach my $pop (@onekg_pops)
 	{
 		my $kde = "$data_stem\_$pop\_kde.txt";
 		open(IN,$kde) or die "cannot open $data_stem\_$pop\_kde.txt: $!\n";
@@ -703,10 +740,10 @@ sub pick_reference_populations
 
 	}
 
-	## For each sample, compare its PCV1 and PCV2 to each HM3 pop to make a vector
+	## For each sample, compare its PCV1 and PCV2 to each 1KG pop to make a vector
 	open(IN,"$data_stem.eigenvec") or die "can't open $data_stem.eigenvec: $!\n";
 	open(OUT,">$data_stem\_samples_ancestries.txt") or die "can't open $data_stem\_samples_ancestries.txt: $!\n";
-	print OUT "FID\tIID\tHM3_population\tLikelihood_vector(ASW,CEU,CHB,CHD,GIH,JPT,LWK,MEX,MKK,TSI,YRI)\n";
+	print OUT "FID\tIID\t1KG_population\tLikelihood_vector\n";
 	while(my $line = <IN>)
 	{
 		$line =~ s/^\s+//;
@@ -736,7 +773,7 @@ sub pick_reference_populations
 					last;
 				}
 			}
-			foreach my $pop (@hm3_pops)
+			foreach my $pop (@onekg_pops)
 			{
 				my $likelihood = $KDEs{$pop}{$PC1[$pc1_pos]}{$PC2[$pc2_pos]};
 				push(@likelihood_vector,$likelihood);
@@ -747,12 +784,15 @@ sub pick_reference_populations
 			{
 				if(@likelihood_vector[$i] > $MIN_POP_LIKELIHOOD_CUTOFF)
 				{
-					push(@samples_ref_pops,@hm3_pops[$i]);
+					push(@samples_ref_pops,@onekg_pops[$i]);
 				}
-				if(@likelihood_vector[$i] > $MIN_POP_LIKELIHOOD_CUTOFF && $sum > 50)
+				if(@likelihood_vector[$i] > $MIN_POP_LIKELIHOOD_CUTOFF && $sum > 50) # might need to change this now that we have more pops...
 				{
-					$ref_pops{@hm3_pops[$i]} = 1;
+					$ref_pops{@onekg_pops[$i]} = 1;
 				}
+				# else{
+				# 	print "Sum is too small\n" if $verbose > 2;
+				# }
 				#print "@hm3_pops[$i]: @likelihood_vector[$i]\n";
 			}
 			print OUT "$FID\t$IID\t".join(",",@samples_ref_pops)."\t".join(",",@likelihood_vector)."\n";
@@ -767,7 +807,7 @@ sub pick_reference_populations
 	print $LOG "Ref pops: @ref_pops\n" if $verbose > 0;
 	if(@ref_pops < 1)
 	{
-		die "Your samples did not fall near any HapMap3 samples in the PCA plot. Visual inspection required of PCA plot. Select reference populations and rerun PRIMUS with --ref_pops [POP] option (e.g. --ref_pops CEU,TSI,YRI\n";
+		die "Your samples did not fall near any samples in the PCA plot. Visual inspection required of PCA plot. Select reference populations and rerun PRIMUS with --ref_pops [POP] option\n";
 	}
 	return @ref_pops;
 }
@@ -783,21 +823,21 @@ sub multiple_ref_pop_merge
 	print "\nMerging $data_stem with @ref_pops => $new_stem\n" if $verbose > 0;
 	print $LOG "\nMerging $data_stem with @ref_pops => $new_stem\n" if $verbose > 0;
 	
-	my $ref_samples_to_keep_stem = "$new_stem\_hm3_reference_samples";
+	my $ref_samples_to_keep_stem = "$new_stem\_1KG_reference_samples";
     #my $files = "";
     #foreach my $pop (@ref_pops)
     #{
     #	$files .= "$lib_dir/hapmap3/hapmap3_r2_b36_fwd.$pop.qc.poly.genome_maximum_independent_set ";
     #}
     my $grepping_term = join('|',@ref_pops); 
-    system("grep -E \"$grepping_term\" $HM3_STEM.fam > $ref_samples_to_keep_stem.txt");
+    system("grep -E \"$grepping_term\" $onekg_STEM.fam > $ref_samples_to_keep_stem.txt");
     #system("cat $files > $ref_samples_to_keep_stem.txt");
 	$intermediate_files{"$ref_samples_to_keep_stem.txt"} = 1;
 
-	keep_samples($HM3_STEM,"$new_stem\_hm3_reference_samples","$ref_samples_to_keep_stem.txt");
-	$intermediate_files{"$new_stem\_hm3_reference_samples.bed"} = 10;
-	$intermediate_files{"$new_stem\_hm3_reference_samples.bim"} = 10;
-	$intermediate_files{"$new_stem\_hm3_reference_samples.fam"} = 10;
+	keep_samples($onekg_STEM,"$new_stem\_1KG_reference_samples","$ref_samples_to_keep_stem.txt");
+	$intermediate_files{"$new_stem\_1KG_reference_samples.bed"} = 10;
+	$intermediate_files{"$new_stem\_1KG_reference_samples.bim"} = 10;
+	$intermediate_files{"$new_stem\_1KG_reference_samples.fam"} = 10;
 	
 	my ($new_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref) = merge($data_stem,$ref_samples_to_keep_stem,$new_stem);
 	return ($new_stem,$ref_samples_to_keep_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref);
@@ -846,7 +886,7 @@ sub flip
 	my $ref_stem = shift; ## The reference data you want your data to be flipped to match $lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly
 	my $new_stem = shift; ## The stem name of your filed data. If left blank, the name will be $data_stem\_flipped.
 	$new_stem = "$data_stem\_flipped" if $new_stem eq "";
-	$ref_stem = "$HM3_STEM" if $ref_stem eq "";
+	$ref_stem = "$onekg_STEM" if $ref_stem eq "";
 	
 	print "\nFlipping $data_stem to match $ref_stem => $new_stem\n" if $verbose > 0;
 	print $LOG "\nFlipping $data_stem to match $ref_stem => $new_stem\n" if $verbose > 0;
@@ -890,11 +930,11 @@ sub flip
 	## Check compatability between two dataset
 	if($data_has_rsIDs != $ref_data_has_rsIDs)
 	{
-		warn "$ref_stem and $data_stem are not compaitable: one has rsIDs and the other does not\n";
+		warn "$ref_stem and $data_stem are not compatible: one has rsIDs and the other does not\n";
 	}
 	if($data_genotypes_numeric != $ref_data_genotypes_numeric)
 	{
-		warn "$ref_stem and $data_stem are not compaitable: one has numeric genotypes and the other does not\n";
+		warn "$ref_stem and $data_stem are not compatible: one has numeric genotypes and the other does not\n";
 	}
 	elsif($data_genotypes_numeric && $ref_data_genotypes_numeric)
 	{
@@ -1176,7 +1216,7 @@ sub make_PCA_plot
 	my $ref_stem = shift;
 	my $study_name = shift;
 	my $ref_name = shift;
-    my $project_onto_HM3 = shift;
+    my $project_onto_1KG = shift;
 	my $rerun_pca= shift;
 
 	print "\nMaking PCA plot for $stem_name\n" if $verbose > 0;
@@ -1188,7 +1228,7 @@ sub make_PCA_plot
 	
 	if($rerun_pca == 1 || !-e "$stem_name.eigenvec")
     {
-            run_pca($stem_name,$project_onto_HM3);
+            run_pca($stem_name,$project_onto_1KG);
     }
 	
 	## Convert .eigenvec file and color codes into new input file for R
@@ -1206,14 +1246,14 @@ sub make_PCA_plot
 		my ($fid,$iid,@pcv) = split(/\s+/,$line);
         my $color = "blue";
         my $pop = $fid;
-        if(exists $hm3_colors{$pop})
+        if(exists $onekg_colors{$pop})
         {
-            $color = $hm3_colors{$pop};
+            $color = $onekg_colors{$pop};
         }
         $pops{$pop} = $color;
         $max_pop_name_length = length $pop  if length $pop > $max_pop_name_length; ## need this to correctly set the legend
         
-        if(!exists $hm3_colors{$pop})
+        if(!exists $onekg_colors{$pop})
         {
             #print "non ref $pop\n";
             push(@lines,"$fid $iid \"$pop\" \"$color\" @pcv\n"); ## Add the non-reference to back of array to be plotted last 
@@ -1277,7 +1317,7 @@ sub make_PCA_plot
 	system("rm $stem_name\_R_output");
 	if($temp > 0)
 	{
-		die "ERROR!!! Failed to draw eigenstrar results.\n";
+		die "ERROR!!! Failed to draw eigenstrat results.\n";
 	}
 	
 	print "PCA plot: $stem_name\_PCV1vPCV2.pdf\n" if $verbose > 0;
@@ -1287,25 +1327,43 @@ sub make_PCA_plot
 
 sub run_pca
 {	
+
 	my $stem_name = shift;
-	my $project_onto_HM3 = shift;
+	my $project_onto_1KG = shift;
 
 	print "\nRunning plink's pca on $stem_name => $stem_name.eigenvec\n" if $verbose > 0;
 	print $LOG "\nRunning plink's pca on $stem_name => $stem_name.eigenvec\n" if $verbose > 0;
 
 	make_binary_version($stem_name);
 
+	
+	#LD PRUNING STEP 
+	#-----------------------------
+	#inputs: window size (10kb), step size (10 or 100 variants), and r2 threshold (0.2)
+	#outputs: <input>.prune.in and <input>.prune.out files 
+	#add --exclude/--extract to skip them in the subsequent PCA-approx step
+	
+
+	print "\nRunning LD pruning\n" if $verbose > 0;
+	print $LOG "\nRunning LD pruning\n" if $verbose > 0;
+
+	my $temp = system("plink --bfile $stem_name --indep-pairwise 10 10 0.2 --out $stem_name\_pruned");
+
+	################################################################################################################
+
     ## RUN PLINK PCA
 	my $cluster_names;
-    if($project_onto_HM3 eq 1)
+    if($project_onto_1KG eq 1)
     {
-        $cluster_names = "--pca-cluster-names AWS CEU CHB CHD GIH JPT LWK MEX MKK TSI YRI";
+        $cluster_names = "--pca-cluster-names AWS CEU CHB CHS GIH JPT LWK MXL TSI YRI";
     }
 
-    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
+	# added --extract flag from LD pruning
+	#my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
+    my $temp = system("plink2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --memory 600000 --maf $MAF --geno $GENO --out $stem_name");
 	if($temp > 0)
 	{
-		die "ERROR!!! PLINK's PCA failed.\n";
+		die "ERROR!!! PLINK's PCA failed (pca approx step).\n";
 	}
 	$intermediate_files{"$stem_name.log"} = 1;
 	return "$stem_name.eigenvec";
@@ -1325,9 +1383,7 @@ sub get_unrelateds
 	print "\nGet Unrelated set for $stem_name => $new_stem_name\n" if $verbose > 0;
 	print $LOG "\nGet Unrelated set for $stem_name => $new_stem_name\n" if $verbose > 0;
 
-	## added 10/12/22 to try and fix sim issue
-	# --mind
-    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --maf $MAF --geno $GENO --thin-count 10000 --rel-cutoff 0.09375 --mind --out $stem_name");
+    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --maf $MAF --geno $GENO --thin-count 10000 --rel-cutoff 0.09375 --memory 600000 --mind --out $stem_name");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK's rel-cutoff failed.\n";
@@ -1387,7 +1443,7 @@ sub calculate_IBD_estimates
 	$read_freq = "" if $freq_file eq "";
 	
 	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp");
-	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0");
+	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND --memory 600000 $plink_silent --out $new_stem_name --min 0");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK failed to calculate IBD estimates; check log file: $new_stem_name.log\n";
@@ -1514,9 +1570,9 @@ sub get_population_assignments_and_colors
 
 	# my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
 	# my %hm3_colors = ("ASW","steelblue4","CEU","red","CHB","darkred","CHD","green","GIH","darkgreen","JPT","slateblue1","LWK","slateblue4","MEX","sienna1","MKK","sienna4","TSI","black","YRI","darkgoldenrod3");
-	if($ref_name =~ /hapmap3/i)
+	if($ref_name =~ /onekg/i)
 	{
-		open(IN,"$lib_dir/hapmap3/hapmap3_sample_populations.txt");
+		open(IN,"$lib_dir/1KG/1KG_sample_populations.txt");
 		while(my $line = <IN>)
 		{
 			chomp($line);
@@ -1525,9 +1581,9 @@ sub get_population_assignments_and_colors
 			$IDs_to_pops{"$IID"} = $pop;
 		}
 		close(IN);
-		foreach my $pop (keys %hm3_colors)
+		foreach my $pop (keys %onekg_colors)
 		{
-			$IDs_to_pops{$pop} = $hm3_colors{$pop};
+			$IDs_to_pops{$pop} = $onekg_colors{$pop};
 		}
 		$IDs_to_pops{$study_name} = "blue";
 	}
@@ -1582,9 +1638,9 @@ sub keep_samples
 	print $LOG "\nKeep $samples_to_keep samples from $stem_name => $new_stem_name\n" if $verbose > 1;
 
 	## Make an unrelated version of the data
-	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --keep $samples_to_keep --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --keep $samples_to_keep --memory 600000 --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
 	if($temp > 0){die "ERROR!!! PLINK failed to do --keep; check log file: $new_stem_name.log\n";}
-	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --mind $MIND --bfile $new_stem_name --make-bed $plink_silent --out $new_stem_name");
+	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --mind $MIND --memory 600000 --bfile $new_stem_name --make-bed $plink_silent --out $new_stem_name");
 	if($temp > 0){die "ERROR!!! PLINK failed to do --keep; check log file: $new_stem_name.log\n";}
 	return $new_stem_name;
 }
@@ -1634,7 +1690,7 @@ sub remove_SNPs
 	close OUT;
 
 	## Run plink to generate the no_dups version of stem_file
-	system("$PLINK --allow-no-sex --noweb --bfile $stem_name --extract $stem_name.SNPs_to_keep.txt --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+	system("$PLINK --allow-no-sex --memory 600000 --noweb --bfile $stem_name --extract $stem_name.SNPs_to_keep.txt --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
 	system("rm $stem_name.SNPs_to_keep.txt") if $test == 0;
 	return ($new_stem_name);
 }

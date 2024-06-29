@@ -226,44 +226,35 @@ sub get_relationship_likelihood_vectors {
 		
 		my $original_sum = sum(@density_vector);
 		my $original_str = join(',',@density_vector);
-		#print ("\nOriginal vector: $original_str\n");
 		my @vector = normalize(@density_vector); # divides by sum
 
 		# make a copy for later 
 		my @vector_copy = @vector;
 		
 		###################################
-		# density vector updates are done now
-		# at this point we can pass the vector AND the set of IDs into the python script that will use ERSA to update it
-		## re-update a new density_vector after the ERSA processing has been done 
-
+		
 		# adding in ersa match file here --ersa_data
 		my $match_data = $main::ersa_data_glob;
-		print ("ERSA file: $match_data\n\n");
+		if ($match_data ne "") # checking if an argument was actually passed for ersa data
+		{
+			print ("ERSA file: $match_data\n\n");
 
-		my $libpath = $lib_dir; 
-		$libpath =~ s{/$}{};
-		my $parent_dir = File::Spec->catdir(dirname($libpath));
-		my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper.py');
+			my $libpath = $lib_dir; 
+			$libpath =~ s{/$}{};
+			my $parent_dir = File::Spec->catdir(dirname($libpath));
+			my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper.py');
 
-		# Check vector to see if we even need to run ersa
-		my $sum01 = $vector[0] + $vector[1];
-		#print "\n0 1 sum : $sum01\n";
-
-		if ($sum01 < 0.4) {
-			
-			my $vector_str = join(',',@vector);
-			my $new_vector = `python3 \"$helper_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
-			chomp($new_vector);
-
-			# re-assign vector to use the new version from the python utility
-			@vector = split(',', $new_vector);
-
-			#print ("\nNew vector string ( $name1 $name2 ) : $new_vector\n");
-		
+			# Check vector to see if we even need to run ersa
+			my $sum01 = $vector[0] + $vector[1];
+			if ($sum01 < 0.4) {
+				my $vector_str = join(',',@vector);
+				my $new_vector = `python3 \"$helper_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
+				chomp($new_vector);
+				@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
+			}
 		}
 
-		#else { print ("\nDidn't need to run ERSA\n"); }
+		else { print ("\nNo shared segment data provided\n"); }
 		
 		###################################
 
@@ -288,30 +279,29 @@ sub get_relationship_likelihood_vectors {
 		}
 
 		##################################
-		# This is the last point at which the vector hashes are updated before being returned.
-		# I think that the additional processing starting at line 193 is important and could be affecting why the outside-manufactured estimates aren't computing correctly when it comes to reconstruction
 
 		### Vector added to total relationships data structure
-
 		$relationships{$name1}{$name2} = \@vector;
 
 		# fix density vector with the multiplier from before
-		my @density_vector_new = map { $_ * $original_sum } @vector;
-		my $new_sum = sum(@density_vector_new);
+		if ($match_data ne "")
+		{
+			my @density_vector_new = map { $_ * $original_sum } @vector;
+			my $new_sum = sum(@density_vector_new);
 
-		my $new_str_normalized = join(',',@vector);
-		my $new_str = join(',',@density_vector_new);
-		#print ("\nNew vector: $new_str\n");
-		#print ("\nNew vector (normalized): $new_str_normalized\n");
+			my $new_str_normalized = join(',',@vector);
+			my $new_str = join(',',@density_vector_new);
+			
+			$raw_relationship_densities{$name1}{$name2} = \@density_vector_new;
+		}
+		else 
+		{
+			$raw_relationship_densities{$name1}{$name2} = \@density_vector;
+		}
 
-
-		$raw_relationship_densities{$name1}{$name2} = \@density_vector_new;
+		
 
 		##################################
-
-		###########
-		# Update 2/25/24
-		# Theoretically, the relationship prediction is made AFTER my new vector has been generated  -- it's done in the few lines below, given the vector 
 
 		##Testing stuff
 		my @possibilities = predict_relationship(@vector);
