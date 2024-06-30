@@ -18,18 +18,20 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
 ## Installation
 
+***Subject to change after adding Github Releases support
+
 Via git:
 
 ```bash
 # HTTPS
-git clone https://github.com/belowlab/primus-ersa-v2.git
+git clone https://github.com/belowlab/compadre.git
 
 # SSH
-git clone git@github.com:belowlab/primus-ersa-v2.git
+git clone git@github.com:belowlab/compadre.git
 ```
 Via direct download:
 
-https://github.com/belowlab/primus-ersa-v2/archive/refs/heads/main.zip
+https://github.com/belowlab/compadre/archive/refs/heads/main.zip
 
 
 
@@ -37,17 +39,29 @@ https://github.com/belowlab/primus-ersa-v2/archive/refs/heads/main.zip
 
 We have provided a Dockerfile to assist with installing dependencies and reference data. Instructions to install Docker Engine on your system can be found [here](https://docs.docker.com/engine/install/).
 
+Navigate into the compadre directory:
+
 ```bash
-cd primus-ersa-v2
+cd compadre
+```
 
-# Build
+Build the Docker image:
+
+```bash
 docker build -t compadre .
+```
 
-# Run (interactive)
+Run (interactive mode):
+
+```bash
 docker run -it --entrypoint /bin/bash compadre:latest 
+run_PRIMUS.pl --file ../example_data/EUR --genome --output ./testoutput --verbose 3
+```
 
-# Run (non-interactive):
-docker run compadre --file ../example_data/MEX_pop --genome -o ./testoutput -v 3
+Run (non-interactive mode):
+
+```bash
+docker run compadre --file ../example_data/EUR --genome --output ./testoutput --verbose 3
 ```
 
 
@@ -59,7 +73,7 @@ More documentation:
 - [Original PRIMUS docs](https://primus.gs.washington.edu/primusweb/res/documentation.html)
 - [Original ERSA docs](https://hufflab.org/software/ersa/)
 
-Please visit the [official COMPADRE website](https://compadre.dev/about) for publication information and other details. 
+Please visit the [official COMPADRE website](https://compadre.dev/about) for publication updates and other details. 
 
 
 

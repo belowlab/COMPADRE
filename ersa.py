@@ -2,6 +2,7 @@
 import sys, os, math, optparse, glob, operator, random
 from optparse import Values
 import pandas as pd
+from datetime import datetime
 
 options = None
 model_df = None
@@ -58,7 +59,6 @@ def get_overlap(first_segment,second_segment):
     return v_return
 
 def get_total_overlap(i,segments,expected_length=-1):
-    
     first_segment=segments[i]
     observed_length=0.0
     j=0
@@ -71,7 +71,6 @@ def get_total_overlap(i,segments,expected_length=-1):
     return observed_length
 
 def simulate_segments(segments):
-    
     iterations=options.max_region_simulation_count
     for iter in range(iterations):
         if options.verbose:
@@ -349,6 +348,7 @@ def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm
     
     if ind_id not in masked_sum:
         masked_sum[ind_id]=0.0
+
     if chromosome==options.ascertained_chromosome and options.ascertained_position>=begin_position and options.ascertained_position<=end_position and controls=="no" and IBD2=="no":
         [new_begin,new_end]=get_masked_coordinates(chromosome,begin_position,options.ascertained_position,masked_segments_dict)
         ascertained_cm1=get_cm(new_begin,new_end,begin_position,end_position,cm,recombination_rates)
@@ -357,21 +357,26 @@ def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm
         ascertained_cm2=get_cm(new_begin,new_end,begin_position,end_position,cm,recombination_rates)
         add_segment(ascertained_dict,ind_id,ascertained_cm2)
         masked_sum[ind_id]+=cm-(ascertained_cm1+ascertained_cm2)
+
     elif IBD2=="no":
         [new_begin,new_end]=get_masked_coordinates(chromosome,begin_position,end_position,masked_segments_dict)
         new_cm=get_cm(new_begin,new_end,begin_position,end_position,cm,recombination_rates)
         add_segment(sharing_dict,ind_id,new_cm,controls)
         masked_sum[ind_id]+=cm-new_cm
+
     else:
         [new_begin,new_end]=get_masked_coordinates(chromosome,begin_position,end_position,masked_segments_dict)
         new_cm=get_cm(new_begin,new_end,begin_position,end_position,cm,recombination_rates)
         add_segment(ibd2_dict,ind_id,new_cm,controls)
+
     if controls=="yes" and options.mask_common_shared_regions!='false' and masked_segments_dict=={}:
         if chromosome not in control_segments:  
             control_segments[chromosome]=[]
         if abs(cm)>options.min_cm:
             control_segments[chromosome].append([begin_position,end_position,cm])
             # Note: this was the point at which they were being removed from unrelated founders -- default 2.5 cM 
+
+#################################################
 
 def get_cm(begin_position,end_position,segment_begin_position,segment_end_position,cm,recombination_rates):
     
@@ -467,162 +472,206 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
         n_2p_max="none"
     return [n_0p_min,n_0p_max,n_1p_min,n_1p_max,n_2p_min,n_2p_max]
 
-def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,filename,recombination_rates,pairs,masked_segments_dict,ascertained_dict={},ibd2_dict={},control_ind=None,control_segments=None,masked_sum={}):
+def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,seg_input,recombination_rates,pairs,masked_segments_dict,ascertained_dict={},ibd2_dict={},control_ind=None,control_segments=None,masked_sum={}):
      
-     '''
-     reading in segment_files arg -- this is where we can find out what the .match columns are supposed to be
-     '''
-     
-     
-     ind_dict={}
-     IBD2="no"
-     f=open(filename,'r')
+    ind_dict={}
+    IBD2="no"
+    
+    '''handling recombination file stuff'''
+    if not options.recombination_files is None:
+        f=open(seg_input,'r')
+        tmp_pos_dict={}
+        for line in f.readlines():
+            line_list=line.split()
+            if len(line_list)!=5:
+                msg="%prog: File " + seg_input + " is not a Beagle fibd output file and recombination_files was specified"
+                f.close()
+                raise RuntimeError(msg)
+            else:
+                chromosome=get_chromosome(seg_input)
+                begin_position=beagle_marker_dict[chromosome][int(line_list[2])]
+                end_position=beagle_marker_dict[chromosome][int(line_list[3])]
+                if chromosome not in chromosome_positions:
+                    chromosome_positions[chromosome]={}
+                if begin_position not in chromosome_positions[chromosome]:
+                    chromosome_positions[chromosome][begin_position]=0.0
+                    if chromosome not in tmp_pos_dict:
+                        tmp_pos_dict[chromosome]=[]
+                    tmp_pos_dict[chromosome].append(begin_position)
+                if end_position not in chromosome_positions[chromosome]:
+                    chromosome_positions[chromosome][end_position]=0.0
+                    if chromosome not in tmp_pos_dict:
+                        tmp_pos_dict[chromosome]=[]
+                    tmp_pos_dict[chromosome].append(end_position)
+        for chromosome,pos_list in tmp_pos_dict.iteritems():
+            pos_list.sort()
+            pos_index=0
+            try:
+                for position in pos_list:
+                    while pos_index<len(rec_dict[chromosome])-1 and rec_dict[chromosome][pos_index+1][0]<position:
+                        pos_index+=1
+                    if position<rec_dict[chromosome][pos_index][0]:
+                        genetic_map_dist=0.0
+                    else:
+                        genetic_map_dist=rec_dict[chromosome][pos_index][2]+(position-rec_dict[chromosome][pos_index][0])/1e6*rec_dict[chromosome][pos_index][1]
+                    chromosome_positions[chromosome][position]=genetic_map_dist
+            except:
+                msg="%prog: Chromosome " + chromosome + " is not present in the recombination_files"
+                f.close()
+                raise RuntimeError(msg)
+        f.close() 
+          
+    controls="no"
+    if "controls" in pairs:
+        if pairs["controls"]==2:
+            controls="yes"
+    if controls=="no":
+        all_cases="no"
+        if "cases" in pairs:
+            if pairs["cases"]==2:
+                all_cases="yes"
 
-     '''handling recombination file stuff'''
+    '''
+    update 6.30.24
 
-     if not options.recombination_files is None:
-         tmp_pos_dict={}
-         for line in f.readlines():
-             line_list=line.split()
-             if len(line_list)!=5:
-                 msg="%prog: File " + filename + " is not a Beagle fibd output file and recombination_files was specified"
-                 f.close()
-                 raise RuntimeError(msg)
-             else:
-                 chromosome=get_chromosome(filename)
-                 begin_position=beagle_marker_dict[chromosome][int(line_list[2])]
-                 end_position=beagle_marker_dict[chromosome][int(line_list[3])]
-                 if chromosome not in chromosome_positions:
-                     chromosome_positions[chromosome]={}
-                 if begin_position not in chromosome_positions[chromosome]:
-                     chromosome_positions[chromosome][begin_position]=0.0
-                     if chromosome not in tmp_pos_dict:
-                         tmp_pos_dict[chromosome]=[]
-                     tmp_pos_dict[chromosome].append(begin_position)
-                 if end_position not in chromosome_positions[chromosome]:
-                     chromosome_positions[chromosome][end_position]=0.0
-                     if chromosome not in tmp_pos_dict:
-                         tmp_pos_dict[chromosome]=[]
-                     tmp_pos_dict[chromosome].append(end_position)
-         for chromosome,pos_list in tmp_pos_dict.iteritems():
-             pos_list.sort()
-             pos_index=0
-             try:
-                 for position in pos_list:
-                     while pos_index<len(rec_dict[chromosome])-1 and rec_dict[chromosome][pos_index+1][0]<position:
-                         pos_index+=1
-                     if position<rec_dict[chromosome][pos_index][0]:
-                         genetic_map_dist=0.0
-                     else:
-                         genetic_map_dist=rec_dict[chromosome][pos_index][2]+(position-rec_dict[chromosome][pos_index][0])/1e6*rec_dict[chromosome][pos_index][1]
-                     chromosome_positions[chromosome][position]=genetic_map_dist
-             except:
-                 msg="%prog: Chromosome " + chromosome + " is not present in the recombination_files"
-                 f.close()
-                 raise RuntimeError(msg)
+    check if 'filename' is a dict or not 
+    if it is, process differently 
+    '''
 
-     f.close()    
-     f=open(filename,'r')
-     controls="no"
-     if "controls" in pairs:
-         if pairs["controls"]==2:
-             controls="yes"
-     if controls=="no":
-         all_cases="no"
-         if "cases" in pairs:
-             if pairs["cases"]==2:
-                 all_cases="yes"
+    if type(seg_input) == str:
 
-     for line in f.readlines():
-         line_list=line.split()
+        start_time = datetime.now()
 
-         '''handling shortened .match file'''
+        f = open(seg_input,'r')
+        for line in f.readlines():
 
-         if len(line_list)<12:
-             if len(line_list)!=6: # changed from 5 
-                 msg="%prog: File " + filename + " is not a Germline or Beagle fibd output file"
-                 f.close()
-                 raise RuntimeError(msg)
-             else:
+            line_list=line.split()
+
+            if len(line_list) < 12:
+
+                if len(line_list) != 6: # changed from 5 
+                    msg="%prog: File " + seg_input + " is not a Germline2 or Beagle fibd output file"
+                    f.close()
+                    raise RuntimeError(msg)
+                    
+                else: # 6 columns 
+                    
+                    #ind_id=min(line_list[0],line_list[1]) + ":" + max(line_list[0],line_list[1]) ## THIS IS WHAT MESSED ME UP BEFORE -- BAD SORTING
+                    ind_id=line_list[0] + ":" + line_list[1]
+
+                    ind_dict[line_list[0]]=1
+                    ind_dict[line_list[1]]=1
+
+                    if controls == "yes":
+                        control_ind.add(line_list[0]) 
+                        control_ind.add(line_list[1]) 
+                        
+                    #chromosome=get_chromosome(filename)
+                    chromosome = line_list[5] # removed the get_chromosome function since i think this version had the chr in the title instead of the file itself
+                    # tried updating chromosome to int instead of str
+                    if controls == "yes" or all_cases=="yes" or ind_id in pairs:
+                        
+                        '''the code that's commented out below assumes that the recombination file is passed in EVERY TIME the smaller data file is read, which isn't happening now'''
+                        #begin_position=beagle_marker_dict[chromosome][int(line_list[2])]
+                        #end_position=beagle_marker_dict[chromosome][int(line_list[3])]
+                        #cm=chromosome_positions[chromosome][end_position]-chromosome_positions[chromosome][begin_position]
+
+                        begin_position=int(line_list[2])
+                        end_position=int(line_list[3])
+                        cm=float(line_list[4])
+
+                        process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm,controls,begin_position,end_position,recombination_rates,IBD2,control_segments,masked_segments_dict,masked_sum)
+
+            elif line_list[11] != 'cM': # handling for old germline input
+
+                msg="%prog: File " + seg_input + " does not provide the length of shared segments in cM"
+                f.close()
+                raise RuntimeError(msg)
+
+            else: # handling .match file with 12 or more inputs (germline 1.5)
+
                 '''
-                there must be a working version where there's only 5 columns
-                ID1, ID2, begin, end, chrom? maybe try this version 
+                0 - FID1
+                1 - IID1
+                2 - FID2
+                3 - IID2
+                4 - chrom
+                5 - begin_position
+                6 - end_position
+                7 - rsid at beginning (not important)
+                8 - rsid at end (not important)
+                9 - total snps in segment (not important)
+                10 - genetic length (cM)
+                11 - units: cM
                 '''
-
-                #ind_id=min(line_list[0],line_list[1]) + ":" + max(line_list[0],line_list[1])
-                ind_id=line_list[0] + ":" + line_list[1]
-
+                ind_id=line_list[1] + ":" + line_list[3]
                 ind_dict[line_list[0]]=1
                 ind_dict[line_list[1]]=1
-
                 if controls == "yes":
-                    control_ind.add(line_list[0]) 
                     control_ind.add(line_list[1]) 
-                    
-                #chromosome=get_chromosome(filename)
-                chromosome = line_list[5] # removed the get_chromosome function since i think this version had the chr in the title instead of the file itself
-                # tried updating chromosome to int instead of str
+                    control_ind.add(line_list[3]) 
                 if controls == "yes" or all_cases=="yes" or ind_id in pairs:
-                    
-                    '''this code that's commented out below assumes that the recombination file is passed in EVERY TIME the smaller data file is read, which isn't happening now'''
-                    #begin_position=beagle_marker_dict[chromosome][int(line_list[2])]
-                    #end_position=beagle_marker_dict[chromosome][int(line_list[3])]
-                    #cm=chromosome_positions[chromosome][end_position]-chromosome_positions[chromosome][begin_position]
-
-                    """we pull this data out of the GERMLINE2 output file instead of the old dicts that are otherwise empty"""                    
-                    begin_position=int(line_list[2])
-                    end_position=int(line_list[3])
-                    cm=float(line_list[4])
+                    if len(line_list)>13 and line_list[13]=='2' and line_list[14]=='2':
+                        IBD2="yes"
+                    else:
+                        IBD2="no"
+                    cm=float(line_list[10])
+                    chromosome=line_list[4]
+                    begin_position=int(line_list[5])
+                    end_position=int(line_list[6])
 
                     process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm,controls,begin_position,end_position,recombination_rates,IBD2,control_segments,masked_segments_dict,masked_sum)
 
+        f.close()
 
-         elif line_list[11]!='cM':
-             msg="%prog: File " + filename + " does not provide the length of shared segments in cM"
-             f.close()
-             raise RuntimeError(msg)
-         else:
-             #print('\nProcessing .match file with >= 12 fields\n')
-             '''
-             handling .match file with 12 or more inputs (germline 1.5)
+        end_time = datetime.now()
+        time_delta = end_time - start_time
+        total_seconds = time_delta.total_seconds()
+        print(f"Time spent (FILE): {seconds} seconds\n")
 
-            0 - FID1
-            1 - IID1
-            2 - FID2
-            3 - IID2
-            4 - chrom
-            5 - begin_position
-            6 - end_position
-            7 - rsid at beginning (not important)
-            8 - rsid at end (not important)
-            9 - total snps in segment (not important)
-            10 - genetic length (cM)
-            11 - units: cM
+    else: # seg_input is a dict 
 
-             '''
-             ind_id=line_list[1] + ":" + line_list[3]
-             ind_dict[line_list[0]]=1
-             ind_dict[line_list[1]]=1
-             if controls == "yes":
-                 control_ind.add(line_list[1]) 
-                 control_ind.add(line_list[3]) 
-             if controls == "yes" or all_cases=="yes" or ind_id in pairs:
-                 if len(line_list)>13 and line_list[13]=='2' and line_list[14]=='2':
-                     IBD2="yes"
-                 else:
-                     IBD2="no"
-                 cm=float(line_list[10])
-                 chromosome=line_list[4]
-                 begin_position=int(line_list[5])
-                 end_position=int(line_list[6])
-                 process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm,controls,begin_position,end_position,recombination_rates,IBD2,control_segments,masked_segments_dict,masked_sum)
-     f.close()
-     for first_ind in ind_dict.keys():
-         for second_ind in ind_dict.keys():
-             if first_ind!=second_ind:
-                 ind_id=min(first_ind,second_ind) + ":" + max(first_ind,second_ind)
-                 if ind_id not in sharing_dict:
-                     sharing_dict[ind_id]=[]
+        print ('Handling dict of segment information\n')
+
+        # start converting from line 548
+        start_time = datetime.now()
+
+        for ind_id, value in seg_input.items():
+
+            ids = ind_id.split(':')
+            id1, id2 = ids[0], ids[1]
+
+            ind_dict[id1] = 1
+            ind_dict[id2] = 1
+
+            if controls == "yes":
+                control_ind.add(id1) 
+                control_ind.add(id2) 
+
+            chromosome = value[0]
+
+            if controls == "yes" or all_cases == "yes" or ind_id in pairs:
+
+                begin_position, end_position, cm = value[1], value[2], value[3]
+
+                process_segment(chromosome, ascertained_dict, sharing_dict, ibd2_dict, ind_id, cm, controls, begin_position, end_position, recombination_rates, IBD2, control_segments, masked_segments_dict, masked_sum)
+
+        end_time = datetime.now()
+        time_delta = end_time - start_time
+        total_seconds = time_delta.total_seconds()
+        print(f"Time spent (DICT): {seconds} seconds\n")
+
+
+    # not really sure what this is doing at this point since the min/max issue didnt mess anything up 
+
+    for first_ind in ind_dict.keys():
+        for second_ind in ind_dict.keys():
+            if first_ind!=second_ind:
+                ind_id=first_ind + ":" + second_ind # fixed the min() and max() here again 
+                if ind_id not in sharing_dict:
+                    sharing_dict[ind_id]=[]
+
+
 
 def shorten_match_file(pair, matchfile):
 
@@ -641,29 +690,8 @@ def shorten_match_file(pair, matchfile):
     return newmatchfile
 
 
-'''
-Function that writes out a variable matrix per pair of individuals (from the pairs {} dictionary)
-Matrix includes the pair of individuals and the sizes of each IBD segment shared by the pair 
-'''
-
-
-def return_to_primus(id1, id2, dor):
-
-    '''
-    might need to be tweaked depending on how PERL import statements work
-    '''
-
-    return (id1, id2, dor)
-
-####################################################################################################################
-####################################################################################################################
 ####################################################################################################################
 
-# Wrap everything below in a function 
-
-# we'll need to update how they call  EVERYWHERE 
-
-# figure out how to pull in optparse arguments from a provided dictionary 
 
 def runner(options_arg, additional_args=None):
 
@@ -676,9 +704,11 @@ def runner(options_arg, additional_args=None):
 
             # instantiate default options
             parser = optparse.OptionParser()
-            parser.add_option('--return_output', action="store_true",default=False, help="Returns [single pair] output in tuple format for use with PRIMUS.")      
-            parser.add_option('--write_output', action="store_true",default=True, help="Writes output to .out (and/or .model) file(s).")      
-            parser.add_option("--segment_files",type="string",default="*.match",help="Germline or Beagle fibd output file(s), [default: %default]")
+            parser.add_option('--return_output', action="store_true",default=False, help="Return model output data in pandas df format for use with PRIMUS/COMPADRE.")      
+            parser.add_option('--write_output', action="store_true",default=True, help="Write output to .out (and/or .model) file(s).")      
+            parser.add_option("--segment_files",type="string",default="*.match",help="Germline2 or Beagle fibd output file(s), [default: %default]")
+            parser.add_option("--segment_dict",type="dict", default=None, help="Dictionary of id1:id2 keys and tuple cM length values. [COMPADRE]")
+
             parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
             parser.add_option("--max_cm",type="float",default=10.0,help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
             parser.add_option("--max_meioses",type="float",default=40,help="maximum number of meioses to consider [default: %default]")
@@ -737,25 +767,28 @@ def runner(options_arg, additional_args=None):
     ################################
 
     global min_ll_constant
-    min_ll_constant=-9999999999
+    min_ll_constant = -9999999999
 
-    output_file=open(options.output_file,'w')
+    if options.write_output == True:
 
-    #verbose = True if not options.verbose is None else False
+        output_file=open(options.output_file,'w')
+        output_file.write('# ersa version 2.2\n')
+
+        if additional_args is not None:
+            for arg in additional_args:
+                output_file.write('# ' + arg + '\n')
+        else:
+            for arg in argstrings:
+                output_file.write('# ' + arg + '\n')
 
     if not options.model_output_file is None:
-        model_output_file=open(options.model_output_file,'w') 
+
+        if options.write_output == True:
+            model_output_file=open(options.model_output_file,'w') 
     else:
         model_output_file=None
-
-    output_file.write('# ersa version 2.2\n')
-
-    if additional_args is not None:
-        for arg in additional_args:
-            output_file.write('# ' + arg + '\n')
-    else:
-        for arg in argstrings:
-            output_file.write('# ' + arg + '\n')
+    
+    ################################
 
     [confidence_statistic,confidence_level]=set_confidence(options.confidence_level)
     recombination_rates=[]
@@ -816,9 +849,6 @@ def runner(options_arg, additional_args=None):
                     print ("...done")
 
 
-    ########################################
-    # this is what we want to leverage in the library (most likely)
-
     if not options.pair_file is None:
         if options.verbose:
             print ("Processing pair file")
@@ -838,7 +868,7 @@ def runner(options_arg, additional_args=None):
             print (pairs)
 
 
-    # Single pair id1:id2 proccessing here
+    # Single pair id1:id2 processing here
     else:
         if not options.single_pair is None:
             # split data
@@ -847,7 +877,7 @@ def runner(options_arg, additional_args=None):
             pairstr = "%s:%s" % (person1, person2)
             pairs = {pairstr : 1}
             if options.verbose:
-                print (person1, person2)
+                print (f'IDs to analyze: {person1}, {person2}\n')
         else: # old else case
             pairs={"cases":2}
 
@@ -899,9 +929,11 @@ def runner(options_arg, additional_args=None):
                 total_segment_count+=1
                 total_segment_length+=segment
         emp_segment_lambda=emp_shared_segment_sum/float(tmp_pair_count)
-        output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s): " + str(emp_segment_lambda) + '\n')
+        if options.write_output == True:
+            output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s): " + str(emp_segment_lambda) + '\n')
         exp_mean=total_segment_length/total_segment_count
-        output_file.write("#Mean shared segment size in the control file(s): " + str(exp_mean) + '\n')
+        if options.write_output == True:
+            output_file.write("#Mean shared segment size in the control file(s): " + str(exp_mean) + '\n')
         emp_lambda=1/(exp_mean-options.min_cm)
         if options.mask_common_shared_regions!='false' and (options.mask_region_file is None or options.mask_region_simulation_count>0):
             if options.verbose:
@@ -1032,12 +1064,14 @@ def runner(options_arg, additional_args=None):
                     total_segment_length+=segment
             mask_file=open(options.output_file+'.msk','a')
             emp_segment_lambda=emp_shared_segment_sum/float(tmp_pair_count)
-            output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s) after masking: " + str(emp_segment_lambda) + '\n')
+            if options.write_output == True:
+                output_file.write("#Mean number of shared segments between pairs of individuals in the control file(s) after masking: " + str(emp_segment_lambda) + '\n')
             mask_file.write('# pois_mean '+str(emp_segment_lambda)+'\n')
             exp_mean=total_segment_length/total_segment_count
             mask_file.write('# exp_mean '+str(exp_mean)+'\n')
             mask_file.close()
-            output_file.write("#Mean shared segment size in the control file(s) after masking: " + str(exp_mean) + '\n')
+            if options.write_output == True:
+                output_file.write("#Mean shared segment size in the control file(s) after masking: " + str(exp_mean) + '\n')
             emp_lambda=1/(exp_mean-options.min_cm)
 
     masked_sum={}
@@ -1045,16 +1079,33 @@ def runner(options_arg, additional_args=None):
         msg="Segment file " + options.segment_files + " does not exist"
         raise RuntimeError(msg)
 
-    for segment_filename in glob.glob(options.segment_files):
+    for segment_input in glob.glob(options.segment_files):
         if options.verbose:
-            print ("Reading segment file " + segment_filename)
+            print ("Reading segment input " + segment_input)
 
-        # Restricts .match file down to only the pair we're interested in (if that flag is enabled) 
-        if not options.single_pair is None:
-            segment_filename = shorten_match_file(options.single_pair, segment_filename)
+        # add_segments is the main function call that basically handles everything else 
+        # segment_filename is the file that gets read in -- we want to replace this with dict 
 
-        add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_filename,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
+        # IF A DICT IS PASSED, REPLACE SEGMENT_FILENAME
+        if not options.segment_dict is None:
+            segment_input = options.segment_dict
+
+        else: # check for pairwise mode and making file smaller
+            # Restricts .match file down to only the pair we're interested in (if that flag is enabled) 
+            if not options.single_pair is None:
+                segment_input = shorten_match_file(options.single_pair, segment_input)
+
+        add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_input,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
         
+        '''
+        FLOW
+
+        - add_segments calls process_segment()
+        - 
+        
+        
+        '''
+
         if options.verbose:
             print ("...done")
 
@@ -1067,19 +1118,20 @@ def runner(options_arg, additional_args=None):
     genetic_map=options.rec_per_meioses*100.0-(total_masked_length/1e6)*1.3
 
     # header
-
-    output_file.write("individual_1\tindividual_2\test_number_of_shared_ancestors\test_degree_of_relatedness\t"+str(confidence_level)+" CI_2p_lower\t2p_upper\t1p_lower\t1p_upper\t0p_lower\t0p_upper\tmaxlnl_relatedness\tmaxlnl_unrelatedness"+'\n')
+    if options.write_output == True:
+        output_file.write("individual_1\tindividual_2\test_number_of_shared_ancestors\test_degree_of_relatedness\t"+str(confidence_level)+" CI_2p_lower\t2p_upper\t1p_lower\t1p_upper\t0p_lower\t0p_upper\tmaxlnl_relatedness\tmaxlnl_unrelatedness"+'\n')
 
     if not options.model_output_file is None:
 
+        column_names = ['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl']
+
         if options.return_output == True:
             global model_df
-            model_df = pd.DataFrame(columns=['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl'])
+            model_df = pd.DataFrame(columns=column_names)
 
-        # instantiate df here 
-        column_names = ['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl']
-        columnstr = ('\t'.join(column_names) + '\n')
-        model_output_file.write(columnstr)
+        if options.write_output == True:        
+            columnstr = ('\t'.join(column_names) + '\n')
+            model_output_file.write(columnstr)
 
     for ind_id,ind_item in ind_sharing.items():
         print (ind_id)
@@ -1232,7 +1284,8 @@ def runner(options_arg, additional_args=None):
                 # no significant relatedness
                 if ll+confidence_statistic>=max_model_ll:
                     dor = 'no_sig_rel'
-                    output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+                    if options.write_output == True:
+                        output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
                 
                 # there is some relatedness
                 else:
@@ -1242,14 +1295,16 @@ def runner(options_arg, additional_args=None):
                         dor=str(max_model.meioses)
                     if second_relationship:
                         dor+="("+second_relationship+")"
-                    output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+                    if options.write_output == True:
+                        output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
 
 
         
         else: # Writing every pair, not a single one 
 
             if ll+confidence_statistic>=max_model_ll:
-                output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+                if options.write_output == True:
+                    output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
             else:
                 if max_model.ancestors==2:
                     dor=str(max_model.meioses-1)
@@ -1257,7 +1312,8 @@ def runner(options_arg, additional_args=None):
                     dor=str(max_model.meioses)
                 if second_relationship:
                     dor+="("+second_relationship+")"
-                output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+                if options.write_output == True:
+                    output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
 
     '''Add in support for building a dataframe instead of file writing if the argument is passed'''
 
@@ -1266,8 +1322,8 @@ def runner(options_arg, additional_args=None):
         print ("ERSA completed successfully\n")
 
     # running ersa pairwise generates a filtered .match file for the pair, which is unnecessary, so i'm auto-deleting them after running
-    if not options.single_pair is None:
-        os.system(f'rm {segment_filename}')
+    if not options.single_pair is None and options.segment_dict is None:
+        os.system(f'rm {segment_input}')
 
     if options.return_output == True:
         return model_df
