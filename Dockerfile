@@ -15,12 +15,6 @@ WORKDIR /usr/src
 
 COPY . .
 
-# Download and install PLINK2
-RUN wget https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64.zip && \
-    unzip plink2_linux_x86_64.zip && \
-    mv plink2 /usr/local/bin/ && \
-    rm plink2_linux_x86_64.zip
-
 # this might not be necessary anymore -- symbolic link to 'old' plink that primus might be expecting
 RUN ln -s /bin/plink1.9 /bin/plink
 

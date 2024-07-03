@@ -13,12 +13,16 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 ## Changelog
 
 1. Added support for 1000 Genomes Project reference data.
-2. Added support for ERSA-derived shared segments relationship estimation ahead of pedigree reconstruction. This mode requires a [GERMLINE2](https://github.com/gusevlab/germline2)-generated .match file as input. Use the flag `--segment_data=/your/germline/path/here.match` 
+2. Added support for ERSA-derived shared segments relationship estimation ahead of pedigree reconstruction. This requires a [GERMLINE2](https://github.com/gusevlab/germline2)-generated .match file as input via the `segment_data` flag.
+
+    ```bash
+    --segment_data /your/germline/output/here.match
+    ```
 
 
 ## Installation
 
-***Subject to change after adding Github Releases support
+***Subject to change after adding Github Releases support ~ might not require regular cloning steps
 
 Via git:
 

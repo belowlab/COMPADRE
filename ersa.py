@@ -1,5 +1,5 @@
 #!/usr/bin/env/python
-import sys, os, math, optparse, glob, operator, random
+import sys, os, math, optparse, glob, operator, random, json
 from optparse import Values
 import pandas as pd
 from datetime import datetime
@@ -410,7 +410,6 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
     for model in models:
         if not options.model_output_file is None:
             
-
             if model.ancestors==2:
                 dor=model.meioses-1
             else:
@@ -627,39 +626,43 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,s
         end_time = datetime.now()
         time_delta = end_time - start_time
         total_seconds = time_delta.total_seconds()
-        print(f"Time spent (FILE): {seconds} seconds\n")
+        if options.verbose:
+            print(f"Time spent (FILE): {total_seconds} seconds\n")
 
     else: # seg_input is a dict 
-
-        print ('Handling dict of segment information\n')
+        if options.verbose:
+            print ('Handling dict of segment information\n')
 
         # start converting from line 548
         start_time = datetime.now()
 
-        for ind_id, value in seg_input.items():
+        for ind_id, segments in seg_input.items():
 
             ids = ind_id.split(':')
             id1, id2 = ids[0], ids[1]
 
-            ind_dict[id1] = 1
-            ind_dict[id2] = 1
+            for segment_tuple in segments: # iterate through all the segments stored for this pair
 
-            if controls == "yes":
-                control_ind.add(id1) 
-                control_ind.add(id2) 
+                ind_dict[id1] = 1
+                ind_dict[id2] = 1
 
-            chromosome = value[0]
+                if controls == "yes":
+                    control_ind.add(id1) 
+                    control_ind.add(id2) 
 
-            if controls == "yes" or all_cases == "yes" or ind_id in pairs:
+                chromosome = segment_tuple[0]
 
-                begin_position, end_position, cm = value[1], value[2], value[3]
+                if controls == "yes" or all_cases == "yes" or ind_id in pairs:
 
-                process_segment(chromosome, ascertained_dict, sharing_dict, ibd2_dict, ind_id, cm, controls, begin_position, end_position, recombination_rates, IBD2, control_segments, masked_segments_dict, masked_sum)
+                    begin_position, end_position, cm = segment_tuple[1], segment_tuple[2], segment_tuple[3]
+
+                    process_segment(chromosome, ascertained_dict, sharing_dict, ibd2_dict, ind_id, cm, controls, begin_position, end_position, recombination_rates, IBD2, control_segments, masked_segments_dict, masked_sum)
 
         end_time = datetime.now()
         time_delta = end_time - start_time
         total_seconds = time_delta.total_seconds()
-        print(f"Time spent (DICT): {seconds} seconds\n")
+        if options.verbose:
+            print(f"Time spent (DICT): {total_seconds} seconds\n")
 
 
     # not really sure what this is doing at this point since the min/max issue didnt mess anything up 
@@ -707,7 +710,7 @@ def runner(options_arg, additional_args=None):
             parser.add_option('--return_output', action="store_true",default=False, help="Return model output data in pandas df format for use with PRIMUS/COMPADRE.")      
             parser.add_option('--write_output', action="store_true",default=True, help="Write output to .out (and/or .model) file(s).")      
             parser.add_option("--segment_files",type="string",default="*.match",help="Germline2 or Beagle fibd output file(s), [default: %default]")
-            parser.add_option("--segment_dict",type="dict", default=None, help="Dictionary of id1:id2 keys and tuple cM length values. [COMPADRE]")
+            parser.add_option("--segment_dict",type="string", default=None, help="Dictionary of id1:id2 keys and tuple cM length values. [COMPADRE]")
 
             parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
             parser.add_option("--max_cm",type="float",default=10.0,help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
@@ -751,7 +754,8 @@ def runner(options_arg, additional_args=None):
 
             # add dict args in here
             for key, value in options_arg.items():
-                print (f'New option value read in from dict: {key}:{value}')
+                if options.verbose:
+                    print (f'New option value read in from dict: {key}:{value}')
                 argstrings.append(f'--{key}={value}')
                 setattr(options, key, value)
 
@@ -781,12 +785,12 @@ def runner(options_arg, additional_args=None):
             for arg in argstrings:
                 output_file.write('# ' + arg + '\n')
 
-    if not options.model_output_file is None:
+    # if not options.model_output_file is None:
 
-        if options.write_output == True:
-            model_output_file=open(options.model_output_file,'w') 
-    else:
-        model_output_file=None
+    #     if options.write_output == True:
+    #         model_output_file=open(options.model_output_file,'w') 
+    # else:
+    #     model_output_file=None
     
     ################################
 
@@ -1075,36 +1079,29 @@ def runner(options_arg, additional_args=None):
             emp_lambda=1/(exp_mean-options.min_cm)
 
     masked_sum={}
-    if len(glob.glob(options.segment_files))==0: 
-        msg="Segment file " + options.segment_files + " does not exist"
-        raise RuntimeError(msg)
 
-    for segment_input in glob.glob(options.segment_files):
+    if not options.segment_dict is None: # dictionary mode
+
+        # convert segment_dict to dict from str
+        segment_input = json.loads(options.segment_dict)
+
         if options.verbose:
-            print ("Reading segment input " + segment_input)
+            print ("Running ERSA in dictionary mode")
+        add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_input,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
+    
+    else: # regular file
+        if len(glob.glob(options.segment_files))==0: 
+            msg="Segment file " + options.segment_files + " does not exist"
+            raise RuntimeError(msg)
 
-        # add_segments is the main function call that basically handles everything else 
-        # segment_filename is the file that gets read in -- we want to replace this with dict 
+        for segment_input in glob.glob(options.segment_files):
+            if options.verbose:
+                print ("Reading segment input " + segment_input)
 
-        # IF A DICT IS PASSED, REPLACE SEGMENT_FILENAME
-        if not options.segment_dict is None:
-            segment_input = options.segment_dict
-
-        else: # check for pairwise mode and making file smaller
-            # Restricts .match file down to only the pair we're interested in (if that flag is enabled) 
             if not options.single_pair is None:
                 segment_input = shorten_match_file(options.single_pair, segment_input)
 
-        add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_input,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
-        
-        '''
-        FLOW
-
-        - add_segments calls process_segment()
-        - 
-        
-        
-        '''
+            add_segments(beagle_marker_dict,rec_dict,chromosome_positions,ind_sharing,segment_input,recombination_rates,pairs,masked_segments_dict,ascertained_sharing,ibd2_sharing,set([]),{},masked_sum)
 
         if options.verbose:
             print ("...done")
@@ -1123,6 +1120,8 @@ def runner(options_arg, additional_args=None):
 
     if not options.model_output_file is None:
 
+        model_output_file = open(options.model_output_file, 'w')
+
         column_names = ['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl']
 
         if options.return_output == True:
@@ -1134,7 +1133,6 @@ def runner(options_arg, additional_args=None):
             model_output_file.write(columnstr)
 
     for ind_id,ind_item in ind_sharing.items():
-        print (ind_id)
         ind_item.sort(key=abs,reverse=True)
         n=1
         s=len(ind_item)
@@ -1315,8 +1313,6 @@ def runner(options_arg, additional_args=None):
                 if options.write_output == True:
                     output_file.write(ind1+"\t"+ind2+"\t"+str(int(max_model.ancestors))+"\t"+dor+"\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
 
-    '''Add in support for building a dataframe instead of file writing if the argument is passed'''
-
 
     if options.verbose:
         print ("ERSA completed successfully\n")
@@ -1324,6 +1320,12 @@ def runner(options_arg, additional_args=None):
     # running ersa pairwise generates a filtered .match file for the pair, which is unnecessary, so i'm auto-deleting them after running
     if not options.single_pair is None and options.segment_dict is None:
         os.system(f'rm {segment_input}')
+
+    if not options.model_output_file is None:
+        model_output_file.close()
+
+    # if not options.output_file is None and not options.write_output is None:
+    #     output_file.close()
 
     if options.return_output == True:
         return model_df

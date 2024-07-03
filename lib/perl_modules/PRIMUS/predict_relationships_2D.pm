@@ -237,7 +237,7 @@ sub get_relationship_likelihood_vectors {
 		my $match_data = $main::ersa_data_glob;
 		if ($match_data ne "") # checking if an argument was actually passed for ersa data
 		{
-			print ("ERSA file: $match_data\n\n");
+			#print ("ERSA file: $match_data\n\n");
 
 			my $libpath = $lib_dir; 
 			$libpath =~ s{/$}{};
