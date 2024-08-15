@@ -4,6 +4,9 @@ use Data::Dumper;
 use warnings;
 use File::Basename;
 use File::Spec;
+use IO::Socket::INET; # added for socket compadre helper connectionuse IPC::Open2;
+use IPC::Open2; # also for new compadre helper
+
 
 my $KDE_density_resolution = 1000; 
 my $MIN_LIKELIHOOD = 0.1;
@@ -18,6 +21,38 @@ my $verbose = 1;
 my $curr_bw;
 my $curr_kde_type;
 #my $ersa_data;
+
+sub send_to_compadre_helper {
+    my ($data, $port) = @_;
+    $port //= 6000;  
+
+    my $socket = IO::Socket::INET->new(
+        PeerAddr => 'localhost',
+        PeerPort => $port,
+        Proto    => 'tcp',
+    ) or die "Cannot connect to Python server: $!\n";
+
+    #print "Sending data: $data\n";
+    $socket->print($data);
+    
+    my $response = <$socket>;
+    if (defined $response) {
+        chomp $response;
+        #print "Received response: $response\n";
+    } else {
+        #print "No response received\n";
+        $response = "No response";
+    }
+    
+    close($socket);
+    return $response;
+}
+
+# Closes the python socket when the Perl requests to it are done (PR done)
+sub close_socket {
+	my ($port) = @_;
+    send_to_compadre_helper('close', $port);
+}
 
 # THIS IS WHAT WE ARE INTERESTED IN REPLACING
 sub get_relationship_likelihood_vectors {
@@ -52,6 +87,48 @@ sub get_relationship_likelihood_vectors {
 	if ($MIN_LIKELIHOOD == "") {
 		$MIN_LIKELIHOOD = 0.3
 	}
+
+	###############################################################################################
+	###############################################################################################
+	###############################################################################################
+
+	# NEW: open socket connection to compadre helper at the beginning of this subroutine
+
+	# adding in ersa match file here --ersa_data
+	my $match_data = $main::ersa_data_glob;
+	my $port_number = $main::port_number_glob;
+	
+
+	# if ($match_data ne "") # checking if an argument was actually passed for ersa data
+	# {
+	# 	print "\nSegment file: $match_data\n";
+	# 	print "\nOpening COMPADRE helper socket ...\n";
+
+	# 	# get absolute path of compadre helper 
+	# 	my $libpath = $lib_dir; 
+	# 	$libpath =~ s{/$}{};
+	# 	my $parent_dir = File::Spec->catdir(dirname($libpath));
+	# 	my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper_new.py');
+
+	# 	# instantiate the new compadre helper using the filepath from $match_data
+	# 	my ($reader, $writer);
+	# 	my $pid = open2($reader, $writer, "python3 $helper_path $match_data");
+
+	# 	# Wait for the server to be ready
+	# 	while (my $line = <$reader>) {
+	# 		if ($line =~ /COMPADRE helper socket is ready/) {
+	# 			print "\nCOMPADRE helper socket is ready\n";
+	# 			last;
+	# 		}
+	# 	}
+	# }
+
+	### Now, we can make socket requests using send_to_compadre_helper() subroutine
+
+	###############################################################################################
+	###############################################################################################
+	###############################################################################################
+
 	
   	open(PROB_OUT,">$outfile") or die "Can't open likelihood vector output file ($outfile): $!\n";
 	open(MZ_OUT,">$output_dir/mz_twins") or die "Can't open mz twin output file ($output_dir/mz_twins): $!\n";
@@ -162,6 +239,7 @@ sub get_relationship_likelihood_vectors {
 		}
 
 		my $relationship = @temp[14];
+		$relationship //= '';
 		$relationship =~ s/^AV$/HAG/;
 		$relationship =~ s/^GG$/HAG/;
 		$relationship =~ s/^HS$/HAG/;
@@ -234,28 +312,57 @@ sub get_relationship_likelihood_vectors {
 		###################################
 		
 		# adding in ersa match file here --ersa_data
-		my $match_data = $main::ersa_data_glob;
+		# my $match_data = $main::ersa_data_glob;
+
+		# #### COMMENT THIS OUT AFTER INCORPORATING SOCKET UPDATE
+		# if ($match_data ne "") # checking if an argument was actually passed for ersa data
+		# {
+		# 	#print ("ERSA file: $match_data\n\n");
+
+		# 	my $libpath = $lib_dir; 
+		# 	$libpath =~ s{/$}{};
+		# 	my $parent_dir = File::Spec->catdir(dirname($libpath));
+		# 	my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper.py');
+
+		# 	# Check vector to see if we even need to run ersa
+		# 	my $sum01 = $vector[0] + $vector[1];
+		# 	if ($sum01 < 0.4) {
+		# 		my $vector_str = join(',',@vector);
+		# 		my $new_vector = `python3 \"$helper_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
+		# 		chomp($new_vector);
+		# 		@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
+		# 	}
+		# }
+
+		# else { print ("\nNo shared segment data provided\n"); }
+		########################################################################
+		
+
+		###################################
+		# New version 
+		###################################
+
 		if ($match_data ne "") # checking if an argument was actually passed for ersa data
 		{
-			#print ("ERSA file: $match_data\n\n");
-
-			my $libpath = $lib_dir; 
-			$libpath =~ s{/$}{};
-			my $parent_dir = File::Spec->catdir(dirname($libpath));
-			my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper.py');
-
 			# Check vector to see if we even need to run ersa
 			my $sum01 = $vector[0] + $vector[1];
 			if ($sum01 < 0.4) {
+
 				my $vector_str = join(',',@vector);
-				my $new_vector = `python3 \"$helper_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
+				my $socket_data = "$name1|$name2|$vector_str";
+				my $new_vector = send_to_compadre_helper($socket_data, $port_number); # NEW WAY TO SEND DATA
+
 				chomp($new_vector);
 				@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
 			}
 		}
 
-		else { print ("\nNo shared segment data provided\n"); }
-		
+		#else { print ("\nNo segment data provided\n"); }
+
+
+
+		###################################
+		###################################
 		###################################
 
 
@@ -311,7 +418,7 @@ sub get_relationship_likelihood_vectors {
 		my $rel_old = get_maximum_relationship(@vector_copy);
 
 		if ($rel ne $rel_old) {
-			print "\nNEW relationship prediction ( $name1 $name2 ) : $rel (previously $rel_old)\n";
+			print "NEW relationship prediction ( $name1 $name2 ) : $rel (previously $rel_old)\n";
 		}
 
 		my $ibd0 = $k0/$KDE_density_resolution;

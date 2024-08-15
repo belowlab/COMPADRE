@@ -12,7 +12,11 @@
 ################ Common stuff ################
 use strict;
 use File::Find;
+use File::Basename;
+use File::Spec;
 use warnings;
+use IO::Socket::INET; # added for socket compadre helper connectionuse IPC::Open2;
+use IPC::Open2; # also for new compadre helper
 
 my @commandline_options = @ARGV;
 
@@ -56,6 +60,7 @@ my $verbose = 1;
 my $study_name = "";
 my $output_dir = "";
 my $ersa_data = "";
+my $port_number = 6000;
 my $reference_pop = "";
 my $log_file;
 my $LOG;
@@ -366,6 +371,10 @@ sub run_PR
 	print "converted .ps to .pdf.\n" if $verbose > 0;
 	print $LOG "converted .ps to .pdf.\n" if $verbose > 0;
 
+	# This is the spot to kill the socket connection? 
+
+	PRIMUS::predict_relationships_2D::close_socket($port_number);
+
 	## Write out pairwise Summary file based on the results in the Summary file and possible pedigrees
 	#my $rels_ref = PRIMUS::get_pairwise_summary::get_possible_relationships($output_dir,"$output_dir/Summary_$dataset_name.txt");
 	#PRIMUS::get_pairwise_summary::write_table("$output_dir/Summary_$dataset_name\_pairwise_table.txt",$rels_ref);
@@ -424,10 +433,42 @@ sub print_files_and_settings
 	print "\nERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
 	print $LOG "ERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
 
+	print "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
+	print $LOG "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
+
+	# Instantiate the socket here? 
+
+	if ($ersa_data ne "") # checking if an argument was actually passed for ersa data
+	{
+		#print "\nSegment file: $ersa_data\n";
+		print "\nOpening COMPADRE helper socket ...\n";
+
+		# get absolute path of compadre helper 
+		my $libpath = $lib_dir; 
+		$libpath =~ s{/$}{};
+		my $parent_dir = File::Spec->catdir(dirname($libpath));
+		my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper_new.py');
+
+		# instantiate the new compadre helper using the filepath from $match_data
+		my ($reader, $writer);
+		my $pid = open2($reader, $writer, "python3 $helper_path $ersa_data $port_number");
+
+		# Wait for the server to be ready
+		while (my $line = <$reader>) {
+			if ($line =~ /COMPADRE helper socket is ready/) {
+				print "\nCOMPADRE helper socket is ready\n";
+				last;
+			}
+		}
+	}
+
+
+
 	print "\nReference file specification: $reference_pop\n\n" if $reference_pop ne "";
 	print $LOG "Reference file specification: $reference_pop\n\n" if $reference_pop ne "";
 
 	our $ersa_data_glob = $ersa_data;
+	our $port_number_glob = $port_number;
 	our $reference_pop_glob = $reference_pop;
 
 
@@ -611,6 +652,7 @@ sub apply_options
 		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
 		"output_dir|o=s" => \$output_dir,
 		"segment_data|s:s" => \$ersa_data,
+		"port_number:i" => \$port_number,
 		"reference_pop:s" => \$reference_pop,
 		"ages=s{1,4}" => sub
 		{ 

@@ -1339,6 +1339,7 @@ if __name__ == "__main__":
     parser.add_option('--return_output', action="store_true",default=False, help="Returns [single pair] output in tuple format for use with PRIMUS.")      
     parser.add_option('--write_output', action="store_true",default=True, help="Writes output to .out (and/or .model) file(s).")      
     parser.add_option("--segment_files",type="string",default="*.match",help="Germline or Beagle fibd output file(s), [default: %default]")
+    parser.add_option("--segment_dict",type="string", default=None, help="Dictionary of id1:id2 keys and tuple cM length values. [COMPADRE]")
     parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
     parser.add_option("--max_cm",type="float",default=10.0,help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
     parser.add_option("--max_meioses",type="float",default=40,help="maximum number of meioses to consider [default: %default]")

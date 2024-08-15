@@ -89,9 +89,9 @@ sub run_IMUS
 		print $LOG "\t$_ ($trait_files{$_})\n" if $verbose > 0;
 	}
 	
-	if($verbose >= 1){print "\nIDENTFYING FAMILY NETWORKS IN DATA\n";}
+	if($verbose >= 1){print "\nIDENTIFYING FAMILY NETWORKS IN DATA\n";}
 	if($verbose >= 1){print "Writing network files to $output_dir/\n";}
-	if($verbose >= 1){print $LOG "\nIDENTFYING FAMILY NETWORKS IN DATA\n";}
+	if($verbose >= 1){print $LOG "\nIDENTIFYING FAMILY NETWORKS IN DATA\n";}
 	if($verbose >= 1){print $LOG "Writing network files to $output_dir/\n";}
 
 	if($verbose >= 1){print "Loading data...\n";}
