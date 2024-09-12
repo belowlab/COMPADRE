@@ -323,6 +323,8 @@ def ibd2_sib_ll(segment_list):
     return r_ll
 
 def add_segment(ind_sharing,ind_id,cm,controls="no"):
+
+    # ind_sharing is the same as ibd2_dict
     
     if abs(cm)>=options.min_cm:
         if controls=="no" or cm<=options.max_cm:
@@ -364,7 +366,7 @@ def process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm
         add_segment(sharing_dict,ind_id,new_cm,controls)
         masked_sum[ind_id]+=cm-new_cm
 
-    else:
+    else: # IBD2=="yes"
         [new_begin,new_end]=get_masked_coordinates(chromosome,begin_position,end_position,masked_segments_dict)
         new_cm=get_cm(new_begin,new_end,begin_position,end_position,cm,recombination_rates)
         add_segment(ibd2_dict,ind_id,new_cm,controls)
@@ -438,8 +440,6 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
                     row_df = pd.DataFrame([df_info])
                     model_df = pd.concat([model_df, row_df], ignore_index=True)
 
-            
-        
         if model.ml+confidence_statistic>=max_model_ll:
             if model.ancestors==0:
                 n_0p.append(model.meioses)
@@ -474,7 +474,7 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
 def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,seg_input,recombination_rates,pairs,masked_segments_dict,ascertained_dict={},ibd2_dict={},control_ind=None,control_segments=None,masked_sum={}):
      
     ind_dict={}
-    IBD2="no"
+    
     
     '''handling recombination file stuff'''
     if not options.recombination_files is None:
@@ -530,14 +530,8 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,s
             if pairs["cases"]==2:
                 all_cases="yes"
 
-    '''
-    update 6.30.24
 
-    check if 'filename' is a dict or not 
-    if it is, process differently 
-    '''
-
-    if type(seg_input) == str:
+    if type(seg_input) == str: # Previously standard behavior (passing in a file location for the .match file)
 
         start_time = datetime.now()
 
@@ -629,19 +623,27 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,s
         if options.verbose:
             print(f"Time spent (FILE): {total_seconds} seconds\n")
 
-    else: # seg_input is a dict 
+    else: # Dict object processing, usually for pairwise calculation 
+
+        '''
+        The segment dictionary now has another variable in the k:v tuple ~ 'NA' if no IBD data, otherwise 1 or 2 
+        (chrom, start, end, cmlen, ibd)
+        '''
+
         if options.verbose:
             print ('Handling dict of segment information\n')
 
         # start converting from line 548
         start_time = datetime.now()
 
-        for ind_id, segments in seg_input.items():
+        for ind_id, segments in seg_input.items(): # Keys in the dict 
 
             ids = ind_id.split(':')
             id1, id2 = ids[0], ids[1]
 
             for segment_tuple in segments: # iterate through all the segments stored for this pair
+
+                ### MOVED IBD2 variable into the loop because that might have been messing it up? 
 
                 ind_dict[id1] = 1
                 ind_dict[id2] = 1
@@ -655,6 +657,14 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,s
                 if controls == "yes" or all_cases == "yes" or ind_id in pairs:
 
                     begin_position, end_position, cm = segment_tuple[1], segment_tuple[2], segment_tuple[3]
+
+                    # New 9/3/24 ~ check IBD data in the tuple (NA, 1, or 2)
+                    ibd_status = segment_tuple[4]
+                    if ibd_status == 2:
+                        #print ('yes')
+                        IBD2 = 'yes'
+                    else:
+                        IBD2 = "no"
 
                     process_segment(chromosome, ascertained_dict, sharing_dict, ibd2_dict, ind_id, cm, controls, begin_position, end_position, recombination_rates, IBD2, control_segments, masked_segments_dict, masked_sum)
 

@@ -1,8 +1,9 @@
 lib/hapmap3/*
 lib/KDE_data/*
 lib/1KG/*
-lib/perl_modules/File
-lib/perl_modules/Getopt
 testing/*
 __pycache__/
 output/*
+alyssa/*
+example_data/
+compadre_testing.ipynb

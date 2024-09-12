@@ -18,14 +18,15 @@ COPY . .
 # this might not be necessary anymore -- symbolic link to 'old' plink that primus might be expecting
 RUN ln -s /bin/plink1.9 /bin/plink
 
-# Download reference data
-# RUN wget https://compadre.dev/api/data/primus_reference_data.tgz -O lib/reference_data/primus_reference_data.tgz && \
-#     tar -xzvf lib/reference_data/primus_reference_data.tgz -C lib/reference_data && \
-#     rm lib/reference_data/primus_reference_data.tgz
-#     ## ^ This assumes that the unzipped folders in the .tgz download are correctly named, need to double check this 
-
 # Install python packages 
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+#######
+## IN PROGRESS: install reference data from github releases URL 
+RUN wget https://github.com/belowlab/compadre/releases/download/v1.0.0/reference-data.dat
+
+## after downloading, move it into the lib folder accordingly 
+#######
 
 # Install the KernSmooth R package
 RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')"

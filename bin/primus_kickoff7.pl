@@ -447,7 +447,7 @@ sub print_files_and_settings
 		my $libpath = $lib_dir; 
 		$libpath =~ s{/$}{};
 		my $parent_dir = File::Spec->catdir(dirname($libpath));
-		my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper_new.py');
+		my $helper_path = File::Spec->catfile($parent_dir, 'helper.py');
 
 		# instantiate the new compadre helper using the filepath from $match_data
 		my ($reader, $writer);
@@ -456,7 +456,8 @@ sub print_files_and_settings
 		# Wait for the server to be ready
 		while (my $line = <$reader>) {
 			if ($line =~ /COMPADRE helper socket is ready/) {
-				print "\nCOMPADRE helper socket is ready\n";
+				chomp $line;  
+        		print "\n$line\n";
 				last;
 			}
 		}
