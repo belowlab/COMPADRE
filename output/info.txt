@@ -1,0 +1,2 @@
+COMPADRE output saved to the Docker container output/ directory will also be saved here 
+when you run COMPADRE in interactive mode with the -v flag set.

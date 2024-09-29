@@ -1,9 +1,9 @@
-# COMPADRE (Alpha)
+# COMPADRE
 
-COMPADRE uses both genome-wide IBD sharing estimates from the program [PRIMUS](https://primus.gs.washington.edu/primusweb/index.html) 
-and shared segment length- and quantity-based data from the program [ERSA](https://hufflab.org/software/ersa) to build more accurate 
-relationship estimates for each sample pair in a given non-directional graph of possible family members. 
-We aim to extend the number and variety of constructed pedigrees derived from populations with increased admixture and sample missingness.
+COMPADRE integrates genome-wide IBD sharing estimates from [PRIMUS](https://primus.gs.washington.edu/primusweb/index.html) 
+and shared segment length- and quantity-based data from [ERSA](https://hufflab.org/software/ersa) to improve 
+relationship estimation accuracy in family networks ahead of pedigree generation. 
+We aim to extend the number and variety of constructed pedigrees derived from populations with increased data heterogeneity.
 
 You can read more about these individual methods in the original [PRIMUS](https://compadre.dev/publications/primus.pdf) 
 and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
@@ -52,7 +52,7 @@ Run (interactive mode):
 
 ```bash
 # Set entrypoint with port mapping from 
-docker run -p 6000:6000 -it --entrypoint /bin/bash compadre:latest 
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 -it --entrypoint /bin/bash compadre:latest 
 
 # Run COMPADRE
 perl run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
@@ -61,12 +61,13 @@ perl run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/
 Run (non-interactive mode):
 
 ```bash
-docker run -p 6000:6000 compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
 ```
 
-Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
-
-NOTE: Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such with the `--port_number=<INT>` flag (COMPADRE option) as well as the `-p` Docker option at runtime. 
+Important notes:
+- In order to easily access COMPADRE results on your local machine, make sure to update the `-v` flag in the entrypoint step to reflect your own machine's path to the COMPADRE repository folder (specifically, the `output` folder). For example, on MacOS, this might be `/Users/yourname/compadre/output`. 
+- Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such with the `--port_number=<INT>` flag (COMPADRE option) as well as the `-p` Docker option at runtime. 
+- Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
 
 
 

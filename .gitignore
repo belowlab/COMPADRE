@@ -1,9 +1,10 @@
+
 lib/hapmap3/*
 lib/KDE_data/*
 lib/1KG/*
 testing/*
 __pycache__/
-output/*
+output/*/
 alyssa/*
 example_data/
 compadre_testing.ipynb

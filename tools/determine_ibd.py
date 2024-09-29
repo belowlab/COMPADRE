@@ -138,5 +138,6 @@ def run_transform(simdir, write_output=True):
 
 
 if __name__ == "__main__":
+    
     simdir = sys.argv[1] # /data100t1/home/grahame/projects/compadre/unified-simulations/analysis-output/simulations/EUR/uniform3_size20_sim200/uniform3_size20_sim200-4
     run_transform(simdir)
