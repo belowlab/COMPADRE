@@ -1,12 +1,11 @@
 package PRIMUS::predict_relationships_2D;
 use strict;
 use Data::Dumper;
-use warnings;
+#use warnings;
 use File::Basename;
 use File::Spec;
 use IO::Socket::INET; # added for socket compadre helper connection
 use IPC::Open2; # also for new compadre helper
-
 
 my $KDE_density_resolution = 1000; 
 my $MIN_LIKELIHOOD = 0.1;
@@ -23,24 +22,23 @@ my $curr_kde_type;
 #my $ersa_data;
 
 sub send_to_compadre_helper {
+
     my ($data, $port) = @_;
     $port //= 6000;  
+	my $host = $ENV{COMPADRE_HOST} // 'localhost';
 
     my $socket = IO::Socket::INET->new(
-        PeerAddr => 'localhost',
+        PeerAddr => $host,
         PeerPort => $port,
         Proto    => 'tcp',
     ) or die "Cannot connect to Python server: $!\n";
 
-    #print "Sending data: $data\n";
     $socket->print($data);
     
     my $response = <$socket>;
     if (defined $response) {
         chomp $response;
-        #print "Received response: $response\n";
     } else {
-        #print "No response received\n";
         $response = "No response";
     }
     
@@ -80,7 +78,7 @@ sub get_relationship_likelihood_vectors {
 	#my $outfile = "$IBD_file\_KDE_likelihood_vectors_prop$MIN_LIKELIHOOD\_bw$bw\_$kde_type.txt\n";
 	my $outfile = "$IBD_file\_KDE_likelihood_vectors\n";
 	#print "[NEW LOG] OUTFILE : $outfile\n";
-	print "[NEW LOG] IBDFILE : $IBD_file\n";
+	#print "[NEW LOG] IBDFILE : $IBD_file\n";
 	#my $outfile = "$output_dir/KDE_likelihood_vectors.txt";
 	my %possibility_counts;
 
@@ -310,37 +308,6 @@ sub get_relationship_likelihood_vectors {
 		my @vector_copy = @vector;
 		
 		###################################
-		
-		# adding in ersa match file here --ersa_data
-		# my $match_data = $main::ersa_data_glob;
-
-		# #### COMMENT THIS OUT AFTER INCORPORATING SOCKET UPDATE
-		# if ($match_data ne "") # checking if an argument was actually passed for ersa data
-		# {
-		# 	#print ("ERSA file: $match_data\n\n");
-
-		# 	my $libpath = $lib_dir; 
-		# 	$libpath =~ s{/$}{};
-		# 	my $parent_dir = File::Spec->catdir(dirname($libpath));
-		# 	my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper.py');
-
-		# 	# Check vector to see if we even need to run ersa
-		# 	my $sum01 = $vector[0] + $vector[1];
-		# 	if ($sum01 < 0.4) {
-		# 		my $vector_str = join(',',@vector);
-		# 		my $new_vector = `python3 \"$helper_path\" \"$name1\" \"$name2\" \"$vector_str\" \"$match_data\"`;
-		# 		chomp($new_vector);
-		# 		@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
-		# 	}
-		# }
-
-		# else { print ("\nNo shared segment data provided\n"); }
-		########################################################################
-		
-
-		###################################
-		# New version 
-		###################################
 
 		if ($match_data ne "") # checking if an argument was actually passed for ersa data
 		{
@@ -356,15 +323,6 @@ sub get_relationship_likelihood_vectors {
 				@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
 			}
 		}
-
-		#else { print ("\nNo segment data provided\n"); }
-
-
-
-		###################################
-		###################################
-		###################################
-
 
 		## If the intial_likelihood_cutoff is dropped low enough, the FS will overlap with HAG (2nd degree), 
 		if (@vector[1] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
@@ -461,14 +419,6 @@ sub get_relationship_likelihood_vectors {
 	}
 	close(IN);
 	close(MZ_OUT);
-
-	##################################################
-
-	# print "\nPrinting data that's sent to reconstruct_pedigree ...\n\n";
-	# print "Relationships : \%relationships\n";
-	# print "Relationship densities : \%raw_relationship_densities\n";
-	# print "Total possibilities : \%total_possibilities\n\n";
-
 
 	return (\%relationships,\%raw_relationship_densities, $total_possibilities, @fails);
 

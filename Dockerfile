@@ -10,7 +10,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     unzip \
     python3 \
     python3-pip \
-    r-base
+    r-base 
+
+# Install Ghostscript -- TBD
 
 WORKDIR /usr/src
 
@@ -28,7 +30,6 @@ RUN wget https://github.com/belowlab/compadre/releases/download/pre-release/comp
 ## after downloading, move things according accordingly 
 RUN mv compadre_data_v0.1.0/1KG /usr/src/lib && mv compadre_data_v0.1.0/hapmap3 /usr/src/lib && mv compadre_data_v0.1.0/KDE_data /usr/src/lib && mv compadre_data_v0.1.0/example_data .
 RUN mkdir output
-RUN rm 
 
 # Install the KernSmooth R package
 RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')"
@@ -37,6 +38,10 @@ RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')
 CMD ["mkdir", '-p', "/usr/src/perl"]
 ENV PERL_PATH=/usr/src/perl
 ENV PERL5LIB=$PERL_PATH:$PERL_PATH/lib/perl5:/usr/src/lib/perl_modules/:/usr/src/lib/perl_modules/PRIMUS/:$PERL5LIB
+
+# Change this if you need to use a different port
+EXPOSE 6000
+ENV COMPADRE_HOST=0.0.0.0
 
 # Set primus executable entrypoint
 WORKDIR /usr/src/bin

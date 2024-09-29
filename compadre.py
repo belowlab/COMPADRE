@@ -54,16 +54,20 @@ def main(matchfile, portnumber):
 
     signal.signal(signal.SIGPIPE, signal_handler)
     segment_dict = {}
-    ibd2_status = 'false' # Default behavior for ERSA
+    ibd2_status = 'false'
     ibd2_counter = 0
 
     with open (matchfile, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
 
-        if 'haploid_ibd' in matchfile: # handling for IBD2 data ~ 9/3/24
+        # Check number of columns to determine if it has IBD1/2 data or not 
+        header_line = f.readline().strip()
+        num_columns = len(header_line.split())
+
+        if num_columns == 7: # File with segment-by-segment IBD status
             ibd2_status = 'true'
             next(f)
             for line in f:
-                ls = line.split('\t')
+                ls = line.strip().split('\t')
                 iid1, iid2, start, end, cmlen, chrom, ibd = ls[0], ls[1], int(ls[2]), int(ls[3]), round(float(ls[4]), 2), int(ls[5]), int(ls[6].strip())
                 key = f"{iid1}:{iid2}"
                 value = (chrom, start, end, cmlen, ibd)
@@ -72,13 +76,14 @@ def main(matchfile, portnumber):
                 if ibd == 2:
                     ibd2_counter += 1
 
-                #if cmlen >= 5.0: ## No longer necessary, this filtering is done beforehand
-                if key not in segment_dict:
-                    segment_dict[key] = [value,]
-                else:
-                    segment_dict[key] += [value,]
+                if cmlen >= 5.0: 
+                    if key not in segment_dict:
+                        segment_dict[key] = [value,]
+                    else:
+                        segment_dict[key] += [value,]
 
-        else: # non-IBD2 data file (normal)
+        elif num_columns == 6: # File without segment-by-segment IBD status
+            next(f)
             for line in f:
                 ls = line.split('\t')
                 if len(ls) == 11: # germline1
@@ -93,14 +98,21 @@ def main(matchfile, portnumber):
                     else:
                         segment_dict[key] += [value,]
 
+        else:
+            safe_print('Unrecognized segment file type. Please refer to the README for formatting guidelines.')
+            sys.exit(1)
+
     
     
     ####################################################################################################
     # Everything above this is done ONCE -- when COMPADRE starts -- and kept in memory for easy access when new requests are made over the socket
 
+    # Check for $COMPADRE_HOST ENV variable 
+    socket_host = os.environ['COMPADRE_HOST'] if 'COMPADRE_HOST' in os.environ else 'localhost'
+
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind(('localhost', portnumber))
+    server_socket.bind((socket_host, portnumber))
     server_socket.listen(1)
     safe_print(f"COMPADRE helper socket is ready. Total IBD2 pairs: {ibd2_counter}")
     sys.stdout.flush()

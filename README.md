@@ -51,8 +51,8 @@ docker build -t compadre .
 Run (interactive mode):
 
 ```bash
-# Set entrypoint
-docker run -it --entrypoint /bin/bash compadre:latest 
+# Set entrypoint with port mapping from 
+docker run -p 6000:6000 -it --entrypoint /bin/bash compadre:latest 
 
 # Run COMPADRE
 perl run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
@@ -61,12 +61,12 @@ perl run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/
 Run (non-interactive mode):
 
 ```bash
-docker run compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
+docker run -p 6000:6000 compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
 ```
 
 Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
 
-NOTE: Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such with the `--port_number=<INT>` flag at runtime. 
+NOTE: Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such with the `--port_number=<INT>` flag (COMPADRE option) as well as the `-p` Docker option at runtime. 
 
 
 

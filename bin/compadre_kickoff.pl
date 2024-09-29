@@ -14,7 +14,7 @@ use strict;
 use File::Find;
 use File::Basename;
 use File::Spec;
-use warnings;
+#use warnings;
 use IO::Socket::INET; # added for socket compadre helper connectionuse IPC::Open2;
 use IPC::Open2; # also for new compadre helper
 
@@ -447,7 +447,7 @@ sub print_files_and_settings
 		my $libpath = $lib_dir; 
 		$libpath =~ s{/$}{};
 		my $parent_dir = File::Spec->catdir(dirname($libpath));
-		my $helper_path = File::Spec->catfile($parent_dir, 'helper.py');
+		my $helper_path = File::Spec->catfile($parent_dir, 'compadre.py');
 
 		# instantiate the new compadre helper using the filepath from $match_data
 		my ($reader, $writer);
