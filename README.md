@@ -34,7 +34,7 @@ Direct download: https://github.com/belowlab/compadre/archive/refs/heads/main.zi
 
 ## Execution
 
-We have provided a Dockerfile to assist with installing dependencies and reference data. Instructions to install Docker Engine on your system can be found [here](https://docs.docker.com/engine/install/).
+We have provided a Dockerfile to assist with installing dependencies and reference data. You must install and start the Docker client on your machine prior to building and running COMPADRE. Instructions to install Docker Engine on your system can be found [here](https://docs.docker.com/engine/install/).
 
 Navigate into the compadre directory:
 
@@ -55,13 +55,13 @@ Run (interactive mode):
 docker run -it --entrypoint /bin/bash compadre:latest 
 
 # Run COMPADRE
-run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ./output/test --verbose 3
+perl run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
 ```
 
 Run (non-interactive mode):
 
 ```bash
-docker run compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ./output/test --verbose 3
+docker run compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ../output/test --verbose 3
 ```
 
 Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 

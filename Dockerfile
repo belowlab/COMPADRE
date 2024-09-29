@@ -23,11 +23,12 @@ RUN ln -s /bin/plink1.9 /bin/plink
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 ## IN PROGRESS: install reference data from github releases URL 
-RUN wget https://github.com/belowlab/compadre/releases/download/pre-release/compadre_data.tgz -O example_data.zip && unzip example_data.zip && rm example_data.zip
+RUN wget https://github.com/belowlab/compadre/releases/download/pre-release/compadre_data.zip -O example_data.zip && unzip example_data.zip && rm example_data.zip
 
 ## after downloading, move things according accordingly 
-RUN mv -r example_data/1KG /usr/src/lib/ && mv -r example_data/hapmap3 /usr/src/lib/ mv -r example_data/KDE_data /usr/src/lib/ 
+RUN mv compadre_data_v0.1.0/1KG /usr/src/lib && mv compadre_data_v0.1.0/hapmap3 /usr/src/lib && mv compadre_data_v0.1.0/KDE_data /usr/src/lib && mv compadre_data_v0.1.0/example_data .
 RUN mkdir output
+RUN rm 
 
 # Install the KernSmooth R package
 RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')"
