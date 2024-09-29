@@ -1,6 +1,6 @@
 # COMPADRE (Alpha)
 
-COMPADRE uses both genome-wide IBD estimates from the program [PRIMUS](https://primus.gs.washington.edu/primusweb/index.html) 
+COMPADRE uses both genome-wide IBD sharing estimates from the program [PRIMUS](https://primus.gs.washington.edu/primusweb/index.html) 
 and shared segment length- and quantity-based data from the program [ERSA](https://hufflab.org/software/ersa) to build more accurate 
 relationship estimates for each sample pair in a given non-directional graph of possible family members. 
 We aim to extend the number and variety of constructed pedigrees derived from populations with increased admixture and sample missingness.
@@ -12,12 +12,14 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
 ## Updates
 
-1. Added support for 1000 Genomes Project reference data.
-2. Added support for ERSA-derived shared segments relationship estimation ahead of pedigree reconstruction. This requires a [GERMLINE2](https://github.com/gusevlab/germline2)-generated .match file as input via the `segment_data` flag.
+1. Added support for using 1000 Genomes Project genetic reference data to generate pairwise IBD estimates.
+2. Added support for shared segments-based relationship estimation. This requires a file with pairwise shared segment data provided as input via the `segment_data` flag. We used [GERMLINE2](https://github.com/gusevlab/germline2) in our benchmarking, but there are a large number of tools that can generate these data. File formatting examples for this input can be found in the `example_data` folder(s).
 
     ```bash
-    --segment_data /your/germline/output/here.match
+    --segment_data example_data/simulations/AMR/AMR_size20_segments.txt
     ```
+
+    Note: COMPADRE does not require segment-specific IBD[1/2] status as part of the `--segment_data` input; however, inclusion of this information can improve the composite algorithm's performance. We have provided a generic script to identify IBD2 segments in standard IBD detection output: `tools/determine_ibd.py`. COMPADRE will check for the presence of an `ibd` column with values 1 or 2 at the last index of the `--segment_data` input file. 
 
 
 ## Installation
@@ -49,15 +51,23 @@ docker build -t compadre .
 Run (interactive mode):
 
 ```bash
+# Set entrypoint
 docker run -it --entrypoint /bin/bash compadre:latest 
-run_PRIMUS.pl --file ../example_data/EUR --genome --output ./testoutput --verbose 3
+
+# Run COMPADRE
+run_COMPADRE.pl --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ./output/test --verbose 3
 ```
 
 Run (non-interactive mode):
 
 ```bash
-docker run compadre --file ../example_data/EUR --genome --output ./testoutput --verbose 3
+docker run compadre --file ../example_data/simulations/AMR/AMR_size20_0missing/AMR_size20_0missing --segment_data ../example_data/simulations/AMR/AMR_size20_segments.txt --genome --output ./output/test --verbose 3
 ```
+
+Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
+
+NOTE: Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such with the `--port_number=<INT>` flag at runtime. 
+
 
 
 ## Additional Resources
@@ -80,4 +90,4 @@ COMPADRE was developed by the [Below Lab](https://thebelowlab.com) at Vanderbilt
 
 ## Questions?
 
-Please email <strong><i>contact AT compadre DOT dev</strong></i> with the subject line "COMPADRE Help" or submit an issue in this repository. 
+Please email <strong><i>contact AT compadre DOT dev</strong></i> with the subject line "COMPADRE Help" or [submit an issue report](https://github.com/belowlab/compadre/issues). 

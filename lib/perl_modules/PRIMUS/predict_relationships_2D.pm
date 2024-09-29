@@ -4,7 +4,7 @@ use Data::Dumper;
 use warnings;
 use File::Basename;
 use File::Spec;
-use IO::Socket::INET; # added for socket compadre helper connectionuse IPC::Open2;
+use IO::Socket::INET; # added for socket compadre helper connection
 use IPC::Open2; # also for new compadre helper
 
 
@@ -84,8 +84,8 @@ sub get_relationship_likelihood_vectors {
 	#my $outfile = "$output_dir/KDE_likelihood_vectors.txt";
 	my %possibility_counts;
 
-	if ($MIN_LIKELIHOOD == "") {
-		$MIN_LIKELIHOOD = 0.3
+	if (!defined($MIN_LIKELIHOOD) || $MIN_LIKELIHOOD eq "") {
+		$MIN_LIKELIHOOD = 0.3;
 	}
 
 	###############################################################################################
@@ -181,8 +181,8 @@ sub get_relationship_likelihood_vectors {
 		$UN = get_data_arrays($UN_KDE_file);
 	}
 
-	if ($MIN_LIKELIHOOD == "") {
-		$MIN_LIKELIHOOD = 0.3
+	if (!defined($MIN_LIKELIHOOD) || $MIN_LIKELIHOOD eq "") {
+		$MIN_LIKELIHOOD = 0.3;
 	}
 
 	### Load in .genome file 

@@ -1031,16 +1031,16 @@ __END__
 
 =head1 NAME
 
-run_PRIMUS.pl - Run an IBD file through PRIMUS
+run_COMPADRE.pl - Run an IBD file through COMPADRE
 
 =head1 SYNOPSIS
 
-B<run_PRIMUS.pl> [I<options>] -p F<file> | -i FILE=F<file> [I<options>] | -h 
+B<run_COMPADRE.pl> [I<options>] -p F<file> | -i FILE=F<file> [I<options>] | -h 
 
 
 =head1 DESCRIPTION
 
-B<run_PRIMUS.pl> will read genome-wide IBD estimates and will identify a maximum unrelated set and/or all possible pedigrees for each family within the dataset. You may weight the selection of your unrelated set by loading in files containing values on which to weight. For pedigree reconstruction, you may also load information on sex, age, and affection status for each sample. PRIMUS is also able to generate IBD estimates for SNP data in PLINK input file formats (ped/map or bed/bim/fam) as long as the system also has the following software installed: R, PLINK.
+B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maximum unrelated set and/or all possible pedigrees for each family within the dataset. You may weight the selection of your unrelated set by loading in files containing values on which to weight. For pedigree reconstruction, you may also load information on sex, age, and affection status for each sample. PRIMUS is also able to generate IBD estimates for SNP data in PLINK input file formats (ped/map or bed/bim/fam) as long as the system also has the following software installed: R, PLINK.
 
 =head1 OPTIONS
 
@@ -1139,7 +1139,7 @@ and these are the default column settings for this option.
 
 Specify path to a a file containing white-space separated file in which each row shows a pairwise comparison of two samples (e.g. genome-wide IBD estimates). This file must contain a family ID (FID) and an individual ID (IID) for each sample and the combination of the FID and IID must be unique. The order of columns doesn't matter but if they differ from the default settings (see option --prePRIMUS for defaults and expected column names) then the user must specify the column number for each necessary column. For identification of a maximum unrelated set, the input file must have FID1, IID1, FID2, IID2, and PI_HAT (or another numerical way of representing a relationship). For pedigree reconstruction, the input file must have columns 1-4 and 7-10 described in option --plink_ibd, except that the PI_HAT/RELATEDNESS column can be a different measure of relatedness. The PI_HAT column is used to identify the family networks. The input file MUST have a header line, but the column headings do not need to match those described in this document. However, you must specify each column number that differs from the defaults, and this is what the <options> section allows you to do. For example, your input file is named F<input.txt> and has the following columns: FID1(1) IID1(2) FID2(3) IID2(4) IDB0(5) IBD1(6) IBD2(7) PI_HAT(8), you will need to use the following command:
 
-run_PRIMUS.pl -i FILE=F<path/input.txt> IBD0=5 IBD1=6 IBD2=7 PI_HAT=8
+run_COMPADRE.pl -i FILE=F<path/input.txt> IBD0=5 IBD1=6 IBD2=7 PI_HAT=8
 
 Notice that I didn't have to specify the columns for the FIDs or the IIDs because they still match the defaults. I did have to specify the columns numbers for the other 4 columns. 
 
@@ -1155,7 +1155,7 @@ B<Note: All column numbers are done using one based numbering, i.e. the first co
 
 Path to a PLINK formatted ped/map or bed/bim/fam files, but without the file extensions. This option behaves just like PLINK's --file and --bfile options, but here it must be used with the --genome option. For example, if your ped and map files are F</usr/data/foo.ped> and F</usr/data/foo.map>, then you could use the following command: 
 
-run_PRIMUS.pl --file F</usr/data/foo> --genome 
+run_COMPADRE.pl --file F</usr/data/foo> --genome 
 
 Check the PLINK documentation (http://pngu.mgh.harvard.edu/~purcell/plink/) for details on the formatting for this file. 
 
@@ -1214,7 +1214,7 @@ Rather than specifying the the PI_HAT cutoff you want, you can specify the maxim
 
 Path to a PLINK formatted ped/map or bed/bim/fam files, but without the file extensions. This option behaves just like PLINK's --file and --bfile options, but here it must be used with the --genome option. For example, if your ped and map files are F</usr/data/foo.ped> and F</usr/data/foo.map>, then you could use the following command: 
 
-run_PRIMUS.pl --file F</usr/data/foo> --genome 
+run_COMPADRE.pl --file F</usr/data/foo> --genome 
 
 Check the PLINK documentation (http://pngu.mgh.harvard.edu/~purcell/plink/) for details on the formatting for this file. 
 
@@ -1551,7 +1551,7 @@ Example 1. Read in PLINK's .genome file
 
 =over 8
 
-B<./run_PRIMUS.pl> B<--plink> F<../example_data/complete.genome>
+B<./run_COMPADRE.pl> B<--plink> F<../example_data/complete.genome>
 
 This command will run both parts of PRIMUS on the IBD estimates in F<complete.genome> and the results should be in F<../example_data/complete.genome_PRIMUS/> These data make up a single family network of 12 individuals. The resulting pedigree should not have any missing individuals. The maximum unrelated set should contain 6 individuals.
  
@@ -1561,7 +1561,7 @@ Example 2. Read in sex and affection status information
 		
 =over 8
 
-B<./run_PRIMUS.pl> B<--plink> F<../example_data/complete.genome> B<--sex_file> F<../example_data/complete.sex> B<--affections> FILE=F<../example_data/complete.fam> AFFECTION=6 AFFECTION_VALUE=1
+B<./run_COMPADRE.pl> B<--plink> F<../example_data/complete.genome> B<--sex_file> F<../example_data/complete.sex> B<--affections> FILE=F<../example_data/complete.fam> AFFECTION=6 AFFECTION_VALUE=1
 	
 The B<--sex_file> option is straight forward because we just pass the F<complete.sex> file that matches the default 3-column format (FID = column 1; IID = column 2; SEX = column 3). Maybe you noticed this F<complete.sex> file does not have a file header; don't worry, it doesn't matter if these files have headers or not. Alternatively, you could have used B<--sexes> FILE=F<../example_data/complete.sex> SEX=3  because this is the same as the command used above.
 
@@ -1573,7 +1573,7 @@ Example 3. Only reconstruct pedigrees for an incomplete dataset
 
 =over 8
 
-B<./run_PRIMUS.pl> B<--plink> F<../example_data/incomplete.genome> B<--sexes> FILE=F<../example_data/complete.fam> SEX=5 B<--affections> FILE=F<../example_data/complete.fam> AFFECTION=6 AFFECTION_VALUE=1 B<--no_IMUS>
+B<./run_COMPADRE.pl> B<--plink> F<../example_data/incomplete.genome> B<--sexes> FILE=F<../example_data/complete.fam> SEX=5 B<--affections> FILE=F<../example_data/complete.fam> AFFECTION=6 AFFECTION_VALUE=1 B<--no_IMUS>
 
 This run is very similar to Example 2, except now it is calling F<incomplete.genome> and using the sex column from the F<complete.fam> file instead of the F<complete.sex> file. The F<incomplete.genome> file is the same family as F<complete.genome> except with 5 individuals removed (id2, id5, id7, id8, and id9). It is ok that the sex and affection status files contain all individuals, the ones not included in the F<incomplete.genome> file will be ignored. The only addition to the command line is the B<--no_IMUS> option which will only run pedigree reconstruction and not identify a maximum unrelated set. 
 
@@ -1585,7 +1585,7 @@ Example 4. Reconstruct a HapMap3/1K genomes MEX family using fake ages that prod
 
 =over 8
 
-B<./run_PRIMUS.pl> B<--plink> F<../example_data/1K_genomes_MEX_family.genome> B<--sex_file> F<../example_data/1K_genomes_MEX_family.features> B<--ages> FILE=F<../example_data/1K_genomes_MEX_family.features> AGE=4
+B<./run_COMPADRE.pl> B<--plink> F<../example_data/1K_genomes_MEX_family.genome> B<--sex_file> F<../example_data/1K_genomes_MEX_family.features> B<--ages> FILE=F<../example_data/1K_genomes_MEX_family.features> AGE=4
 
 This dataset includes 3 trios and another individual unreported to be related within the original HapMap3 and 1K genomes releases. It reconstructs to 4 possible pedigrees. I fabricated ages for the samples to illustrate the effectiveness of PRIMUS at flagging pedigrees that do not match the supplied ages. Look at F<PRIMUS_v*/example_data/1K_genomes_MEX_family.genome_PRIMUS/1K_genomes_MEX_family.genome_network1/Summary_1K_genomes_MEX_family.genome_network1.txt> will summarize the pedigree results.
 
@@ -1595,7 +1595,7 @@ Example 5. Calculate IBD estimates using the prePRIMUS pipeline, and then recons
 
 =over 8
 
-B<./run_PRIMUS.pl> B<--file> F<../example_data/MEX_pop> B<--genome> B<--sexes> FILE=F<../example_data/MEX_pop.fam> SEX=6 
+B<./run_COMPADRE.pl> B<--file> F<../example_data/MEX_pop> B<--genome> B<--sexes> FILE=F<../example_data/MEX_pop.fam> SEX=6 
 
 NOTE: This run requires that you have PLINK1.9(sept 2014) or newer and R installed on your machine and in your PATH environment variable. If PLINK is installed but are not in your path, then you will need to use the --plink_ex PATH/TO/EXECUTABLE/plink.
 
@@ -1609,7 +1609,7 @@ Example 6. Run PRIMUS using mtDNA and NRY pairwise estimates
 
 =over 8
 
-B<./run_PRIMUS.pl> B<--file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2.genome> B<--sex_file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2.sex> --mito_matches FILE=F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2_MT_estimates.txt> --y_matches FILE=F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2_Y_estimates.txt>
+B<./run_COMPADRE.pl> B<--file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2.genome> B<--sex_file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2.sex> --mito_matches FILE=F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2_MT_estimates.txt> --y_matches FILE=F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2_Y_estimates.txt>
 
 =back
 
@@ -1617,7 +1617,7 @@ Example 7. RUN prePRIMUS using ped/map files with mtDNA and NRY coded as chromso
 
 =over 8
 
-B<./run_PRIMUS.pl> B<--file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2> B<--genome> B<--sex_file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2.sex>  
+B<./run_COMPADRE.pl> B<--file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2> B<--genome> B<--sex_file> F<../example_data/mt_and_y_halfsib3_size20_sim46-7_v2.sex>  
 
 =back
 
