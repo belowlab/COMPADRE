@@ -5,6 +5,7 @@ lib/1KG/*
 testing/*
 __pycache__/
 output/*/
+input/*/
 alyssa/*
 example_data/
 compadre_testing.ipynb

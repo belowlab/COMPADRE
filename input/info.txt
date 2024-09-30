@@ -1,0 +1,1 @@
+Move any data you'd like to run through COMPADRE into this folder before building the COMPADRE Docker image. 
