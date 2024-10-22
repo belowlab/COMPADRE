@@ -3710,7 +3710,7 @@ sub check_network
 		my @parents = $$network_ref{$node_name}->parents();
 		if(@parents[0] ne "" && @parents[0] eq @parents[1])
 		{
-			print "[check_network] [ERROR] Parents are the same\n";
+			print "[check_network] [ERROR] Parents are the same\n" if $verbose > 2;
 			return 100;
 		}
 		my $node = $$network_ref{$node_name};
@@ -3720,15 +3720,15 @@ sub check_network
 		
 		my $fail = $$network_ref{$node_name}->are_relationships_missing_in_pedigree($network_ref,$phase-1);
 		if($fail >= 1){
-			print "[check_network] [ERROR] relationships missing in pedigree (?)\n";
+			print "[check_network] [ERROR] relationships missing in pedigree (?)\n" if $verbose > 2;
 			return 99;
 		}
 	}	
 	my $num_generations = get_num_generations($network_ref);
 	if($num_generations > $MAX_GENERATIONS)
 	{
-		print "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n";
-		print $LOG "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n";
+		print "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n" if $verbose > 2;
+		print $LOG "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n" if $verbose > 2;
 		return 101;
 	}
 	
@@ -3736,7 +3736,7 @@ sub check_network
 	if($sibling_mating eq 1)
 	{
 		## Full-sib mating; that is illegal
-		print "[check_network] [ERROR] Illegal full-sib mating\n";
+		print "[check_network] [ERROR] Illegal full-sib mating\n"  if $verbose > 2;
 		return 102;
 	}
 	
@@ -3752,7 +3752,7 @@ sub check_network
             foreach my $id2 (keys %{ $$age_flags_ref{$network_ref}{$id1} })
             {
                 #print "##################  AGE INCOMPATIBLE!!!!!!!!!!!!!!!!!!!!!!!!\n";
-				print "[check_network] [ERROR] Age incompatible\n";
+				print "[check_network] [ERROR] Age incompatible\n" if $verbose > 2;
                 return 105;
             }
         }

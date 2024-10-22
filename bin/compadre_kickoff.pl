@@ -362,6 +362,8 @@ sub run_PR
 	system("$bin_dir/make_dataset_summary.pl $output_dir $dataset_name");
 	system("./make_dataset_pairwise_summary.pl $output_dir $dataset_name");
 
+
+
 	print "done.\n" if $verbose > 0;
 	print $LOG "done.\n" if $verbose > 0;
 
@@ -389,20 +391,6 @@ sub process_file
         system($command) == 0 or warn "Failed to execute: $command\n";
     }
 }
-
-# sub run_system
-# {
-# 	my $command_to_run = shift;
-# 	if ($ECHO_SYSTEM) {
-# 		print("$command_to_run\n");
-# 	}
-# 	system($command_to_run);
-# 	if ($? != 0) {
-# 		my $exit_code = $? >> 8;
-# 		confess "Exit code was $exit_code Failed to run $command_to_run";
-# 	}
-# }
-
 
 sub print_files_and_settings
 {
