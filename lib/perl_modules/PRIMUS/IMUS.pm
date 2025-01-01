@@ -732,7 +732,7 @@ sub colapse_networks
 		};
 		if($@)
 		{
-			print "ERROR: IBD ESTIMATES are not good enough. $@\n";
+			print "ERROR running predict_relationships_2d.pm: $@\n";
 			die;
 		};
 	}

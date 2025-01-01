@@ -1294,6 +1294,8 @@ def runner(options_arg, additional_args=None):
                     dor = 'no_sig_rel'
                     if options.write_output == True:
                         output_file.write(ind1+"\t" + ind2+"\t0\tno_sig_rel\t"+str(n_2p_min)+"\t"+str(n_2p_max)+"\t"+str(n_1p_min)+"\t"+str(n_1p_max)+"\t"+str(n_0p_min)+'\t'+str(n_0p_max)+'\t'+str(max_model_ll)+"\t"+str(ll)+"\n")
+
+                        # output_file.write("individual_1\tindividual_2\test_number_of_shared_ancestors\test_degree_of_relatedness\t"+str(confidence_level)+" CI_2p_lower\t2p_upper\t1p_lower\t1p_upper\t0p_lower\t0p_upper\tmaxlnl_relatedness\tmaxlnl_unrelatedness"+'\n')
                 
                 # there is some relatedness
                 else:

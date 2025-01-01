@@ -26,8 +26,8 @@ my $ersa_data;
 
 ## Necessary variables
 my $MAX_MATING_GENERATION_GAP = 0;
-my $MAX_RUNTIME = 12960; # 43200 = 12 hours; 129,600 = 36 hours
-my $MAX_NETWORKS_TO_RESOLVE = 3000;
+my $MAX_RUNTIME = 129600; # 43200 = 12 hours; 129,600 = 36 hours
+my $MAX_NETWORKS_TO_RESOLVE = 100000;
 my $MAX_GENERATIONS = 5;
 my $affected_status_value = 2;
 my $MIN_LIKELIHOOD = 0.1; ## should be .1, adjusted in OG primus paper to 0.375 
