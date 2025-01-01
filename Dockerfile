@@ -18,11 +18,11 @@ WORKDIR /usr/src
 
 COPY . .
 
-# symbolic link to 'old' plink that primus is    expecting
+# symbolic link to 'old' plink that primus is expecting
 RUN ln -s /bin/plink1.9 /bin/plink
 
 # Install python packages 
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install -r requirements.txt
 
 ## IN PROGRESS: install reference data from github releases URL 
 RUN wget https://github.com/belowlab/compadre/releases/download/pre-release/compadre_data.zip && unzip compadre_data.zip && rm compadre_data.zip
