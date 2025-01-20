@@ -71,7 +71,7 @@ perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_
 Run COMPADRE (non-interactive mode):
 
 ```bash
-docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 3
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1
 ```
 
 

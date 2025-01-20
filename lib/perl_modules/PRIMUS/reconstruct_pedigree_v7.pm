@@ -51,8 +51,8 @@ my $degree_rel_cutoff = 3;
 
 open($LOG,"");
 
-sub reconstruct_pedigree
-{
+sub reconstruct_pedigree {
+
 	my @commands = @_;
 	$dummy_ctr = 1;
 	my $network_name;
@@ -179,6 +179,8 @@ sub reconstruct_pedigree
 	## Load network data
 	## $relationships_ref = a reference to a hash of hashes of arrays; format is $relationship{$id1}{$id2} = [likelihood of relationships]
 	my ($relationships_ref,$raw_relationship_densities_ref,$total_possibilities, @fails);
+	my ($fallback_relationships_ref, $fallback_raw_densities_ref);
+
 	eval
 	{
 		print "\nmin_likelihood: $MIN_LIKELIHOOD\n\n";
@@ -189,8 +191,25 @@ sub reconstruct_pedigree
 
 		print "\nIBD file: $MIN_LIKELIHOOD\n\n";
 		print $LOG "min_likelihood: $MIN_LIKELIHOOD\n" if $verbose > 1;
+
+		## fallback
 		
-		($relationships_ref,$raw_relationship_densities_ref,$total_possibilities, @fails) = PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors($IBD_file_ref,$MIN_LIKELIHOOD,$verbose,$lib_dir,$output_directory);
+		# old
+		#($relationships_ref,$raw_relationship_densities_ref,$total_possibilities, @fails) = PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors($IBD_file_ref,$MIN_LIKELIHOOD,$verbose,$lib_dir,$output_directory);
+
+		# new
+		eval {
+			if ($ersa_data ne "") {
+				($relationships_ref, $raw_relationship_densities_ref, $total_possibilities, 
+				$fallback_relationships_ref, $fallback_raw_densities_ref, @fails) = 
+					PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors(
+						$IBD_file_ref, $MIN_LIKELIHOOD, $verbose, $lib_dir, $output_directory);
+			} else {
+				($relationships_ref, $raw_relationship_densities_ref, $total_possibilities, @fails) = 
+					PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors(
+						$IBD_file_ref, $MIN_LIKELIHOOD, $verbose, $lib_dir, $output_directory);
+			}
+		};
 
 		# can we just run the LOAD function here instead? why do we need to do this twice 
 	
@@ -230,6 +249,7 @@ sub reconstruct_pedigree
 
 	my %relationships = %{$relationships_ref};
 	my $network_ref = load_network(\%relationships,$mito_ref,$y_ref,\%gender);
+
 	foreach(keys %$network_ref)
 	{
 		push(@sample_names,$_);
@@ -249,6 +269,16 @@ sub reconstruct_pedigree
 		write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@networks,\@sample_names,"",$@);
 		return $total_possibilities;
 	};
+
+	# new 
+	# If no valid pedigrees found and we have fallback data, try reconstruction with fallback
+    if (@networks == 0 && defined $fallback_relationships_ref) {
+        print "No valid pedigrees found with enhanced data, attempting reconstruction with base data...\n" if $verbose;
+        
+        # Create new network with fallback data
+        $network_ref = load_network($fallback_relationships_ref, $mito_ref, $y_ref, \%gender);
+        @networks = reconstruct_network($network_ref);
+    }
 		
 	
 	## Test if timed out

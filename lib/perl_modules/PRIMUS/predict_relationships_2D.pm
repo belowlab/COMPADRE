@@ -71,6 +71,8 @@ sub get_relationship_likelihood_vectors {
 
 	my %relationships;
 	my %raw_relationship_densities;
+	my %fallback_relationships;
+    my %fallback_raw_densities;
 	my $original_sum;
 	my @fails;
 	my $total = 0;
@@ -311,6 +313,12 @@ sub get_relationship_likelihood_vectors {
 
 		if ($match_data ne "") # checking if an argument was actually passed for ersa data
 		{
+			
+			## fallback
+			$fallback_relationships{$name1}{$name2} = [@vector_copy];
+            $fallback_raw_densities{$name1}{$name2} = [@density_vector];
+
+
 			# Check vector to see if we even need to run ersa
 			my $sum01 = $vector[0] + $vector[1];
 			if ($sum01 < 0.4) {
@@ -318,7 +326,6 @@ sub get_relationship_likelihood_vectors {
 				my $vector_str = join(',',@vector);
 				my $socket_data = "$name1|$name2|$vector_str";
 				my $new_vector = send_to_compadre_helper($socket_data, $port_number); # NEW WAY TO SEND DATA
-
 				chomp($new_vector);
 				@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
 			}
@@ -333,7 +340,9 @@ sub get_relationship_likelihood_vectors {
 			#@vector[2] += @vector[1];
 			#@vector[1] =  0;	
 		}
-		## If the intial_likelihood_cutoff is dropped low enough, the HAG (2nd degree) will overlap with PC, 
+
+
+		## If the initial_likelihood_cutoff is dropped low enough, the HAG (2nd degree) will overlap with PC, 
 		if (@vector[0] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
 			if ($verbose > 1) {
 				warn "WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n";
@@ -353,10 +362,8 @@ sub get_relationship_likelihood_vectors {
 		{
 			my @density_vector_new = map { $_ * $original_sum } @vector;
 			my $new_sum = sum(@density_vector_new);
-
 			my $new_str_normalized = join(',',@vector);
 			my $new_str = join(',',@density_vector_new);
-			
 			$raw_relationship_densities{$name1}{$name2} = \@density_vector_new;
 		}
 		else 
@@ -420,7 +427,13 @@ sub get_relationship_likelihood_vectors {
 	close(IN);
 	close(MZ_OUT);
 
-	return (\%relationships,\%raw_relationship_densities, $total_possibilities, @fails);
+	#return (\%relationships,\%raw_relationship_densities, $total_possibilities, @fails);
+
+	if ($match_data ne "") {
+        return (\%relationships, \%raw_relationship_densities, $total_possibilities, \%fallback_relationships, \%fallback_raw_densities, @fails);
+    } else {
+        return (\%relationships, \%raw_relationship_densities, $total_possibilities, @fails);
+    }
 
 }
 

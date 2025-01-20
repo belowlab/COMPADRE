@@ -3,14 +3,26 @@ FROM ubuntu:20.04
 # Download and install dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     perl \
-    plink1.9 \
-    plink2 \
     r-cran-devtools \
     wget \
     unzip \
     python3 \
     python3-pip \
-    r-base 
+    r-base \
+    build-essential \
+    zlib1g-dev
+
+# Download and install PLINK 1.9
+RUN wget https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20230116.zip && \
+    unzip plink_linux_x86_64_20230116.zip && \
+    mv plink /bin/plink1.9 && \
+    rm plink_linux_x86_64_20230116.zip
+
+# Download and install PLINK 2
+RUN wget https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20230914.zip && \
+    unzip plink2_linux_x86_64_20230914.zip && \
+    mv plink2 /bin/plink2 && \
+    rm plink2_linux_x86_64_20230914.zip
 
 # Install Ghostscript -- TBD
 
