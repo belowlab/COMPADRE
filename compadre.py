@@ -120,6 +120,7 @@ def main(matchfile, portnumber):
     # At this point, the script executes a while loop as a way to wait for incoming messages.
 
     while True:
+
         conn, address = server_socket.accept()
         #safe_print(f"Connection from: {address}")
         msg = conn.recv(1024).decode()
@@ -130,61 +131,90 @@ def main(matchfile, portnumber):
             conn.close()
             break
 
-        # Everything below here is the 'default' handling for COMPADRE requests
+        ms = msg.strip().split('|')
 
-        msgsplit = msg.split('|')
-        id1 = msgsplit[0]
-        id2 = msgsplit[1]
-        vector_str = msgsplit[2].strip()
-        #ersa_input_file = msgsplit[3].strip() ## No longer needed since main() launches with the matchfile provided from Perl via sysarg
+        if 'padre' in ms: # PADRE version of running everyone
 
-        id1_temp = id1.split('_')[-1] # just in case
-        id2_temp = id2.split('_')[-1]
-        idcombo = f"{id1_temp}:{id2_temp}"
+            '''
+            Run ERSA on everyone in the segment_dict
+            '''
+            
+            # object to pass to ersa is the WHOLE dictionary
+            segment_obj = json.dumps(segment_dict)
 
-        if idcombo in segment_dict.keys():
-
-            segment_obj = {idcombo : segment_dict[idcombo]} # we're using this as ersa input now, NOT the match file (too big)
-            segment_obj = json.dumps(segment_obj)
-
-            # Old code that handles ersa function mode options 
-
+            # make output directory
             ersa_dir = matchfile.split('/')[:-1]
             ersa_dir = '/'.join(ersa_dir) + '/ersa'
             if not os.path.exists(ersa_dir):
                 os.makedirs(ersa_dir, exist_ok=True)
-            ersa_outfile = f'{ersa_dir}/output_new_{id1_temp}_{id2_temp}'
-
+            ersa_outfile = f'{ersa_dir}/output_all_ersa'
+            
             ersa_options = {
-                "single_pair": f"{id1_temp}:{id2_temp}",
                 "segment_dict": segment_obj,
                 "segment_files": matchfile,
                 "model_output_file": f"{ersa_outfile}.model",
                 "output_file": f"{ersa_outfile}.out",
-                "return_output": True,
-                "write_output": False,
-                "use_ibd2_siblings": ibd2_status 
+                "return_output": False,
+                "write_output": True
             }
-            output_model_df = ersa.runner(ersa_options) # run ersa function mode 
 
-            if len(output_model_df) == 0: # no ersa data outputted
-                result = vector_str 
+            ersa.runner(ersa_options) # run ersa function mode 
 
-            else:
-                ersa_props = calculate_ersa_props(output_model_df)
-                vector_arr = [float(x) for x in vector_str.split(',')]
-                prop02 = 1 - (vector_arr[0] + vector_arr[1])
-                ersa_props_updated = tuple(x * prop02 for x in ersa_props) 
-                updated_vector = f'{vector_arr[0]},{vector_arr[1]},{ersa_props_updated[0]},{ersa_props_updated[1]},{ersa_props_updated[2]},{ersa_props_updated[3]}'
-                #print (updated_vector) 
-                result = updated_vector
+            conn.send(ersa_outfile.encode())
+            conn.close()
 
-        else: # Combo isn't in dictionary because they share zero segments >= 5cM 
-            result = vector_str
 
-        # send whatever 'result' is at the end of this logic back to Perl
-        conn.send(result.encode())
-        conn.close()
+        else: # "Pairwise" normal behavior
+
+            id1, id2, vector_str, analysis_type = ms
+
+            id1_temp = id1.split('_')[-1] # just in case
+            id2_temp = id2.split('_')[-1]
+            idcombo = f"{id1_temp}:{id2_temp}"
+
+            if idcombo in segment_dict.keys():
+
+                segment_obj = {idcombo : segment_dict[idcombo]} 
+                segment_obj = json.dumps(segment_obj)
+
+                # Old code that handles ersa function mode options 
+
+                ersa_dir = matchfile.split('/')[:-1]
+                ersa_dir = '/'.join(ersa_dir) + '/ersa'
+                if not os.path.exists(ersa_dir):
+                    os.makedirs(ersa_dir, exist_ok=True)
+                ersa_outfile = f'{ersa_dir}/output_new_{id1_temp}_{id2_temp}'
+
+                ersa_options = {
+                    "single_pair": f"{id1_temp}:{id2_temp}",
+                    "segment_dict": segment_obj,
+                    "segment_files": matchfile,
+                    "model_output_file": f"{ersa_outfile}.model",
+                    "output_file": f"{ersa_outfile}.out",
+                    "return_output": True,
+                    "write_output": False,
+                    "use_ibd2_siblings": ibd2_status 
+                }
+                output_model_df = ersa.runner(ersa_options) # run ersa function mode 
+
+                if len(output_model_df) == 0: # no ersa data outputted
+                    result = vector_str 
+
+                else:
+                    ersa_props = calculate_ersa_props(output_model_df)
+                    vector_arr = [float(x) for x in vector_str.split(',')]
+                    prop02 = 1 - (vector_arr[0] + vector_arr[1])
+                    ersa_props_updated = tuple(x * prop02 for x in ersa_props) 
+                    updated_vector = f'{vector_arr[0]},{vector_arr[1]},{ersa_props_updated[0]},{ersa_props_updated[1]},{ersa_props_updated[2]},{ersa_props_updated[3]}'
+                    #print (updated_vector) 
+                    result = updated_vector
+
+            else: # Combo isn't in dictionary because they share zero segments >= 5cM 
+                result = vector_str
+
+            # send whatever 'result' is at the end of this logic back to Perl
+            conn.send(result.encode())
+            conn.close()
 
     #large_file.close()
 

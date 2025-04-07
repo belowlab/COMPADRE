@@ -1,0 +1,24 @@
+family_name: full.genome
+num_networks: 14
+
+Network_num	network_directory	num_possible_pedigrees	num_unflagged_pedigrees	num_samples	num_at_max_score	Samples_IIDs	Error_messages
+1	full.genome_network1	1	1	2	1	0__F002717,0__F002719	none
+2	full.genome_network2	1	1	5	1	0__F002247,0__F004718,0__F002724,0__F021340,0__F012770	none
+3	full.genome_network3	2	2	2	2	0__F012778,0__F024110	none
+4	full.genome_network4	2	2	2	2	0__F024121,0__F024140	none
+5	full.genome_network5	2	2	2	2	0__F036273,0__F036279	none
+6	full.genome_network6	1	1	2	1	0__F036289,0__F036275	none
+7	full.genome_network7	2	2	2	2	0__F036313,0__F036314	none
+8	full.genome_network8	1	1	2	1	0__F036333,0__F036332	none
+9	full.genome_network9	1	1	2	1	0__F036324,0__F036335	none
+10	full.genome_network10	1	1	3	1	0__F036304,0__F036345,0__F036343	none
+11	full.genome_network11	1	1	7	1	0__F001008,0__F036378,0__F036448,0__F036377,0__F036375,0__F036391,0__F036376	none
+12	full.genome_network12	1	1	2	1	0__F036421,0__F036395	none
+13	full.genome_network13	1	1	2	1	0__F032732,0__F036396	none
+14	full.genome_network14	1	1	2	1	0__F064225,0__F064472	none
+
+
+
+
+
+

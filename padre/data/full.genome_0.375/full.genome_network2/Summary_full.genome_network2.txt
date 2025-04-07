@@ -1,0 +1,10 @@
+## Network_name: full.genome_network2
+## Num_pedigrees: 1
+## Num_pedigrees_unflagged: 1
+## Num_samples: 5
+## Num_at_max_score: 1
+## Sample_IIDs: 0__F002247,0__F004718,0__F002724,0__F021340,0__F012770
+## Error_message: none
+
+Pedigree_num	num_dummies	num_generations	rank	Age_flags
+1	3	2	1	

@@ -324,7 +324,7 @@ sub get_relationship_likelihood_vectors {
 			if ($sum01 < 0.4) {
 
 				my $vector_str = join(',',@vector);
-				my $socket_data = "$name1|$name2|$vector_str";
+				my $socket_data = "$name1|$name2|$vector_str|pairwise";
 				my $new_vector = send_to_compadre_helper($socket_data, $port_number); # NEW WAY TO SEND DATA
 				chomp($new_vector);
 				@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility

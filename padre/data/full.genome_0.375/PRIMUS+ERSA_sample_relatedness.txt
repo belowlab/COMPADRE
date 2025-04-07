@@ -1,0 +1,1 @@
+Network	Pedigree	ID	Network	Pedigree	ID	degree_related	p_value

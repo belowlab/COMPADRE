@@ -12,7 +12,7 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
 ## Updates
 
-1. Added support for shared segments-based relationship estimation. This requires a file with pairwise shared segment data provided as input via the `segment_data` flag. We used [GERMLINE2](https://github.com/gusevlab/germline2) in our benchmarking, but there are a large number of tools that can generate these data. File formatting examples for this input can be found in the `example_data` folder(s).
+1. Added support for shared segments-based relationship estimation. This requires a file with pairwise shared segment data provided as input via the `--segment_data <FILE>` flag. We used [GERMLINE2](https://github.com/gusevlab/germline2) in our benchmarking, but there are a large number of tools that can generate these data. File formatting examples for this input can be found in the `example_data` folder(s).
 
     ```bash
     --segment_data example_data/simulations/EUR/eur_size20_segments.txt
@@ -20,7 +20,9 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
     Note: COMPADRE does not require segment-specific IBD[1/2] status as part of the `--segment_data` input; however, inclusion of this information can improve the composite algorithm's performance. We have provided a generic script to identify IBD2 segments from a standard IBD detection output file here: `tools/determine_ibd.py`. COMPADRE will check for the presence of an `ibd` column containing values 1 or 2 at the last index of the `--segment_data` input file. 
 
-2. Added support for using 1000 Genomes Project genetic reference data to generate pairwise IBD estimates.
+2. Added support for optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
+
+3. Added support for using 1000 Genomes Project genetic reference data to generate pairwise IBD estimates.
 
 
 ## Installation
@@ -65,20 +67,20 @@ docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 -
 
 # Run COMPADRE 
 # (replace inputs with your own from the input/ folder)
-perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt --genome --output ../output/eur_test --verbose 3
+perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt --genome --output ../output/eur_test --verbose 1 --run_padre
 ```
 
 Run COMPADRE (non-interactive mode):
 
 ```bash
-docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1 --run_padre
 ```
 
 
 ### Execution notes
 ---
 - In order to easily access COMPADRE results on your local machine, use the `-v` flag in the Docker entrypoint step to link your local COMPADRE repository folder path (specifically, the `output` folder). For example, on macOS, this might be `/Users/yourname/Downloads/compadre/output` if you cloned the repository into your Downloads folder. 
-- Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such  at runtime by using the `--port_number=<INT>` COMPADRE flag and the `-p` Docker flag. 
+- Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such  at runtime by using the `--port_number <INT>` COMPADRE flag and the `-p` Docker flag. 
 - Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
 
 

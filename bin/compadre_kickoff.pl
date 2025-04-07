@@ -30,6 +30,10 @@ use PRIMUS::prePRIMUS_pipeline_v7;
 use PRIMUS::PRIMUS_plus_ERSA;
 use File::Path qw(make_path);
 
+use Cwd qw(abs_path);
+my $script_path = abs_path($0);
+my $project_root = dirname(dirname($script_path));
+
 my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
 my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
 
@@ -61,6 +65,7 @@ my $study_name = "";
 my $output_dir = "";
 my $ersa_data = "";
 my $port_number = 6000;
+my $run_padre = 0;  # New flag for PADRE
 my $reference_pop = "";
 my $log_file;
 my $LOG;
@@ -112,7 +117,7 @@ my $PADRE_multiple_test_correct = 0;
 my $debug = 0;			# debugging
 my $test = 0;			# test mode.
 my $cluster = 0;		# run on cluster
-my $public_html_dir = "/nfs/home/grapas2/public_html";
+my $public_html_dir = "";
 
 
 ## Process command line options.
@@ -373,6 +378,26 @@ sub run_PR
 	print "converted .ps to .pdf.\n" if $verbose > 0;
 	print $LOG "converted .ps to .pdf.\n" if $verbose > 0;
 
+
+	if ($run_padre) {
+
+		print "Requesting ERSA output path from COMPADRE helper...\n" if $verbose > 0;
+
+		my $ersa_output_path_prefix = PRIMUS::predict_relationships_2D::send_to_compadre_helper("padre", $port_number);
+
+		print "Received ERSA output path prefix: $ersa_output_path_prefix\n" if $verbose > 0;
+
+		# Get the exact ones for regular and model files
+		my $ersa_model_output_path = "$ersa_output_path_prefix.model";
+		my $ersa_output_path = "$ersa_output_path_prefix.out";
+
+		my $padre_command = "perl $project_root/padre/bin/run_PADRE.pl --ersa_model_output $ersa_model_output_path --ersa_results $ersa_output_path --project_summary $output_dir/Summary_$dataset_name.txt --degree_rel_cutoff $degree_rel_cutoff --output_dir $output_dir/padre_results";
+
+		system($padre_command) == 0
+			or warn "Failed to run PADRE: $padre_command\n";
+	}
+
+
 	# This is the spot to kill the socket connection? 
 
 	PRIMUS::predict_relationships_2D::close_socket($port_number);
@@ -548,8 +573,7 @@ sub get_sample_info
 }
 
 
-sub apply_options 
-{
+sub apply_options {
     my $help = 0;		
     my $ident = 0;		
     my $man = 0;		
@@ -569,6 +593,7 @@ sub apply_options
 		'public_html' => \$public_html_dir,
 
 		# Settings
+		"run_padre" => \$run_padre,
 		"rel_threshold|threshold|t=f" => \$relatedness_threshold, 
 		"degree_rel_cutoff|d=i" => \$degree_rel_cutoff,
 		"max_gens=i" => \$max_generations,

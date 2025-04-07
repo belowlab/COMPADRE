@@ -1,0 +1,8 @@
+graph network2 {
+	node [shape=circle];
+
+	"0_F002247" -- "0_F021340" [color=black];
+	"0_F002724" -- "0_F002247" [color=black];
+	"0_F004718" -- "0_F012770" [color=black];
+	"0_F004718" -- "0_F002724" [color=black];
+}

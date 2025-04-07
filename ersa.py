@@ -430,7 +430,9 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
 
                     if options.return_output == True:
                         row_df = pd.DataFrame([df_info])
-                        model_df = pd.concat([model_df, row_df], ignore_index=True)
+                        #model_df = pd.concat([model_df, row_df], ignore_index=True)
+
+                        model_df = pd.concat([model_df, row_df], axis=0, ignore_index=True)
                         #print (f'concatenated {ind_ids[0]}-{ind_ids[1]}-{model.ancestors}-{dor}')
 
             else:
@@ -622,6 +624,8 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,s
         total_seconds = time_delta.total_seconds()
         if options.verbose:
             print(f"Time spent (FILE): {total_seconds} seconds\n")
+
+
 
     else: # Dict object processing, usually for pairwise calculation 
 
