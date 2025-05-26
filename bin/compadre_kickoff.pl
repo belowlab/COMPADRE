@@ -122,6 +122,14 @@ my $public_html_dir = "";
 
 ## Process command line options.
 apply_options();
+
+if(-d $output_dir) # The output directory exist we are going to rename
+{
+	system("mv $output_dir $output_dir\_OLD");	
+} 
+# Then we need to create the directory to output to
+make_path($output_dir) if !-d $output_dir;
+
 open($LOG,">$log_file") if($LOG eq "");
 
 print $LOG "Commandline options used: @commandline_options\n";
@@ -398,9 +406,10 @@ sub run_PR
 	}
 
 
-	# This is the spot to kill the socket connection? 
+	# This is the spot to kill the socket connection -- UPDATED to stop sending that error
 
-	PRIMUS::predict_relationships_2D::close_socket($port_number);
+	my $shutdown_ack = PRIMUS::predict_relationships_2D::send_to_compadre_helper("close", $port_number);
+	print "COMPADRE socket shutdown message: $shutdown_ack\n" if $verbose > 0;	
 
 	## Write out pairwise Summary file based on the results in the Summary file and possible pedigrees
 	#my $rels_ref = PRIMUS::get_pairwise_summary::get_possible_relationships($output_dir,"$output_dir/Summary_$dataset_name.txt");
@@ -443,8 +452,8 @@ sub print_files_and_settings
 	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){print $LOG "Sex file: $sexes{'FILE'} does not exists\n"; $pod2usage->(2)}
 	else{print $LOG "Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n";}
 
-	print "\nERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
-	print $LOG "ERSA .match file: $ersa_data\n\n" if $ersa_data ne "";
+	print "\nSegment data file: $ersa_data\n\n" if $ersa_data ne "";
+	print $LOG "Segment data file: $ersa_data\n\n" if $ersa_data ne "";
 
 	print "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
 	print $LOG "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;

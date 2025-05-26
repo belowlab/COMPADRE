@@ -1,2 +1,5 @@
 pandas==1.3.4
 python-dotenv==1.0.1
+matplotlib
+numpy
+scikit-learn

@@ -5,9 +5,9 @@ import pandas as pd
 from datetime import datetime
 
 options = None
-model_df = None
+model_df = pd.DataFrame(columns=['individual_1', 'individual_2', 'number_of_shared_ancestors', 'degree_of_relatedness', 'maxlnl'])
 
-#########################################################################################################################
+##############################################################################################################
 
 class rec_entry:
     def __init__(self,chromosome,begin_position,end_position,combined_rate,genetic_map_dist):
@@ -404,12 +404,16 @@ def get_cm(begin_position,end_position,segment_begin_position,segment_end_positi
 def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,model_output_file):
     
     global model_df
+
     n_0p=[]
     n_1p=[]
     n_2p=[]
+
     if models[max_model_id].ancestors==2 and models[max_model_id].meioses==2 and not (options.use_ibd2_siblings=="false"):
         n_2p.append(2)
+
     for model in models:
+
         if not options.model_output_file is None:
             
             if model.ancestors==2:
@@ -432,15 +436,28 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
                         row_df = pd.DataFrame([df_info])
                         #model_df = pd.concat([model_df, row_df], ignore_index=True)
 
-                        model_df = pd.concat([model_df, row_df], axis=0, ignore_index=True)
-                        #print (f'concatenated {ind_ids[0]}-{ind_ids[1]}-{model.ancestors}-{dor}')
+                        if model_df.empty:
+                            model_df = row_df.copy()
+                        else:
+                            # Use append method (deprecated but works for pandas versions < 2.0)
+                            model_df = model_df._append(row_df, ignore_index=True)
+
 
             else:
                 if options.write_output == True:
                     model_output_file.write(ind_ids[0]+'\t'+ind_ids[1]+'\t'+str(model.ancestors)+'\t'+str(dor)+'\t'+str(model.ml)+'\n')
+
                 if options.return_output == True:
+
                     row_df = pd.DataFrame([df_info])
-                    model_df = pd.concat([model_df, row_df], ignore_index=True)
+                    if model_df.empty:
+                        model_df = row_df.copy()
+                    else:
+                        # Use append method (deprecated but works for pandas versions < 2.0)
+                        model_df = model_df._append(row_df, ignore_index=True)
+
+                    # row_df = pd.DataFrame([df_info])
+                    # model_df = pd.concat([model_df, row_df], ignore_index=True)
 
         if model.ml+confidence_statistic>=max_model_ll:
             if model.ancestors==0:

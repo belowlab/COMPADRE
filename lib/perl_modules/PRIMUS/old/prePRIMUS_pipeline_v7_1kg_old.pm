@@ -4,51 +4,15 @@ use strict;
 use Getopt::Long qw(GetOptionsFromArray);
 use PRIMUS::IMUS qw(run_IMUS);
 use File::Path qw(make_path);
-use IO::Socket::INET; # added for socket compadre helper connection
-use IPC::Open2; # also for new compadre helper
-use Cwd qw(abs_path);
-use File::Find;
-use File::Basename;
 
-sub send_to_compadre_helper {
 
-    my ($data, $port) = @_;
-    $port //= 6000;  
-	my $host = $ENV{COMPADRE_HOST} // 'localhost';
-
-    my $socket = IO::Socket::INET->new(
-        PeerAddr => $host,
-        PeerPort => $port,
-        Proto    => 'tcp',
-    ) or die "Cannot connect to Python server: $!\n";
-
-    $socket->print($data);
-    
-    my $response = <$socket>;
-    if (defined $response) {
-        chomp $response;
-    } else {
-        $response = "No response";
-    }
-    
-    close($socket);
-    return $response;
-}
-
-my $preprimus_script_path = abs_path($0);
-my $pmloc = dirname(dirname($preprimus_script_path)); 
-
+## Paths to needed files/programs
+my $lib_dir = "../lib";
 my $PLINK = "plink";
 my $R = "R";
 #my $HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
-my $lib_dir = "../lib";
-my $onekg = "$pmloc/lib/1KG";
-#print "\n\n1KG directory: $onekg\n\n";
-
-#$HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
-#my $onekg_STEM = "$onekg/all_unrelateds_NEW";
-my $onekg_STEM = "$onekg/1KG_reference"; # new
-
+my $onekg = "$lib_dir/1KG";
+my $onekg_STEM = "$onekg/all_unrelateds_NEW";
 my $public_html_dir;
 open(my $LOG,"");
 
@@ -57,7 +21,7 @@ my $verbose = 3;
 my $plink_silent = "";
 my $test = 0;
 my $rerun = 0;
-my $MIND = .1;
+my $MIND = .1; ## default is .2
 my $GENO = .05;
 my $MAF = .1;
 my $MIN_POP_LIKELIHOOD_CUTOFF = 0.3;
@@ -81,7 +45,7 @@ my %intermediate_files;
 
 #########################
 my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
-
+my @onekg_pops = ("ASW","CEU","CHB","CHS","GIH","JPT","LWK","MXL","TSI","YRI");
 my %onekg_colors = (
 	"ASW"=>"steelblue4", 		# african
 	"LWK"=>"steelblue3",		# african
@@ -117,7 +81,8 @@ my %onekg_colors = (
 #set_paths();
 
 ######
-sub run_prePRIMUS_main {
+sub run_prePRIMUS_main
+{
 
 	my $study_name;
 	my $genome_file;
@@ -177,6 +142,7 @@ sub run_prePRIMUS_main {
 		"no_mito=i" => \$NO_MITO,
 		"no_y=i" => \$NO_Y,
 
+
 		# IMUS Settings
 		"rel_threshold=f" => \$THRESHOLD, 
 
@@ -185,7 +151,8 @@ sub run_prePRIMUS_main {
 	
 	#### Check/set inputs
 	test_paths();
-
+	#$HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
+	$onekg_STEM = "$lib_dir/1KG/all_unrelateds_NEW";
 	if($alt_ref_stem ne "" && @ref_pops > 0){die "can't use --alt_ref and --ref_pops_ref at the same time\n";}
 	if($remove_AIMs == 1 && $keep_AIMs == 1){die "can't use --remove_AIMs and --keep_AIMs at the same time\n";}
 	$study_name = get_file_name_from_stem($data_stem) if $study_name eq "";
@@ -279,18 +246,15 @@ sub run_prePRIMUS_main {
 		if(@ref_pops < 1) ## Select reference populations if not specified on commandline
 		{
 			($merged_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref) = merge($autosomal_no_dup_stem,$onekg_STEM);
-			#my $PCA_plot = make_PCA_plot($merged_stem,$onekg_STEM,$study_name,"onekg",1) if !$no_PCA_plot;
-			#if($no_automatic_IBD){die "--no_automatic_IBD was selected. Please see $PCA_plot to select a reference population and rerun\n";}
+			my $PCA_plot = make_PCA_plot($merged_stem,$onekg_STEM,$study_name,"onekg",1) if !$no_PCA_plot;
+			if($no_automatic_IBD){die "--no_automatic_IBD was selected. Please see $PCA_plot to select a reference population and rerun\n";}
 			@ref_pops = pick_reference_populations($merged_stem,$study_name,1);
 		}
-
-		# Now we have ref_pops from pop_classifier code
 		
 
 		#### Proceeds down one of 4 paths depending on whether it is admixed and the number of unrelated samples
 		my $allele_freqs;
 		my $cleaned_all_samples_stem;
-
 		if((is_admixed(@ref_pops) || $remove_AIMs ) && @unrelated_samples >= $MIN_SAMPLES_WITHOUT_REF && !$keep_AIMs)
 		{
 			print "\nREMOVING AIMS and >= $MIN_SAMPLES_WITHOUT_REF UNRELATED SAMPLES\n" if $verbose > 0;
@@ -301,7 +265,6 @@ sub run_prePRIMUS_main {
 			$cleaned_all_samples_stem = remove_SNPs($no_dup_stem,$remove_SNP_arr_ref,"$data_stem\_cleaned");
 			$cleaned_all_samples_stem = remove_SNPs($cleaned_all_samples_stem,\@AIMs,$cleaned_all_samples_stem) if @AIMs > 0;
 		}
-
 		elsif((is_admixed(@ref_pops) || $remove_AIMs) && @unrelated_samples < $MIN_SAMPLES_WITHOUT_REF && !$keep_AIMs)
 		{
 			print "\nREMOVING AIMS and < $MIN_SAMPLES_WITHOUT_REF UNRELATED SAMPLES\n" if $verbose > 0;
@@ -317,7 +280,6 @@ sub run_prePRIMUS_main {
 			$cleaned_all_samples_stem = flip_SNPs($cleaned_all_samples_stem,$cleaned_all_samples_stem,@$flipped_SNP_arr_ref);
 			#$cleaned_all_samples_stem = remove_homozygous_SNPs($cleaned_all_samples_stem,$cleaned_all_samples_stem); ## This is necessary until --read-freq will allow homozygosity in the dataset (currently, 0/A in data fails if C/A in .frq);
 		}
-
 		elsif((!is_admixed(@ref_pops) || $keep_AIMs) && @unrelated_samples >= $MIN_SAMPLES_WITHOUT_REF)
 		{
 			print "\nNOT REMOVING AIMS and >= $MIN_SAMPLES_WITHOUT_REF UNRELATED SAMPLES\n" if $verbose > 0;
@@ -326,7 +288,6 @@ sub run_prePRIMUS_main {
 			$allele_freqs = get_allele_freqs($unrelated_stem);
 			$cleaned_all_samples_stem = remove_SNPs($no_dup_stem,$remove_SNP_arr_ref,"$data_stem\_cleaned");
 		}
-
 		elsif((!is_admixed(@ref_pops) || $keep_AIMs) && @unrelated_samples < $MIN_SAMPLES_WITHOUT_REF)
 		{
 			print "\nNOT REMOVING AIMS and < $MIN_SAMPLES_WITHOUT_REF UNRELATED SAMPLES\n" if $verbose > 0;
@@ -340,36 +301,28 @@ sub run_prePRIMUS_main {
 			$cleaned_all_samples_stem = flip_SNPs($cleaned_all_samples_stem,$cleaned_all_samples_stem,@$flipped_SNP_arr_ref);
 			#$cleaned_all_samples_stem = remove_homozygous_SNPs($cleaned_all_samples_stem,$cleaned_all_samples_stem); ## This is necessary until --read-freq will allow homozygosity in the dataset (currently, 0/A in data fails if C/A in .frq);
 		}
-
 		else
 		{
 			die "INVALID INPUT OPTIONS\n";
 		}
 
-		# calculate_IBD_estimates subroutine must take the stem with the reference people merged in 
-
 		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs);
 		$IBD0_vs_IBD1_plot = make_IBD0_vs_IBD1_plot($genome_file,$study_name);
-
-
         #call_callrate($cleaned_all_samples_stem);
         #call_het($cleaned_all_samples_stem,$allele_freqs);
         #$sex_file = call_sex($cleaned_all_samples_stem,$allele_freqs);
 	}
-
 	remove_intermediate_files(11,$output_dir) if !$keep_intermediate_files;
 	print "IBD estimates are in $genome_file\n" if $verbose > 0;
 	print $LOG "IBD estimates are in $genome_file\n" if $verbose > 0;
 	print "IBD0 vs IBD1 plot: $IBD0_vs_IBD1_plot\n" if $verbose > 0;
 	print $LOG "IBD0 vs IBD1 plot: $IBD0_vs_IBD1_plot\n" if $verbose > 0;
-	print "\n\nPREPRIMUS 1KG POPCLASSIFIER VERSION DONE!\n\n";
 	return ($genome_file,$sex_file,$mt_file,$y_file);
 }
 
 #############################################################################
 ############## EXTERNALLY USEFUL METHODS ####################################
 #############################################################################
-
 sub get_MT_estimates
 {
 	my $data_stem = shift;
@@ -619,61 +572,23 @@ sub remove_non_autosomal_SNPs
 
 sub is_admixed
 {
-    my @ref_pops = @_;
-    my $is_admixed = 0;
+	my @ref_pops = @_;
+	my $is_admixed = 0;
 
-    print "Checking if @ref_pops are admixed\n" if $verbose > 1;
-    print $LOG "Checking if @ref_pops are admixed\n" if $verbose > 1;
-    
-    # Known admixed populations
-    # ASW - African Ancestry in Southwest US (African + European admixture)
-    # ACB - African Caribbean (African + European admixture)
-    # MXL - Mexican Ancestry in Los Angeles (Native American + European + African admixture)
-    # CLM - Colombian in Medellin (Native American + European + African admixture)
-    # PEL - Peruvian in Lima (Native American + European admixture)
-    # PUR - Puerto Rican in Puerto Rico (European + African + Native American admixture)
-    # GIH - Gujarati Indian in Houston (complex South Asian genetics)
-    # BEB - Bengali in Bangladesh (complex South Asian genetics)
-    # ITU - Indian Telugu in the UK (complex South Asian genetics)
-    # PJL - Punjabi in Lahore, Pakistan (complex South Asian genetics)
-    # STU - Sri Lankan Tamil in the UK (complex South Asian genetics)
+	## Check if we need to remove AIMs
+	print "Checking if @ref_pops are admixed\n" if $verbose > 1;
+	print $LOG "Checking if @ref_pops are admixed\n" if $verbose > 1;
+	if(grep ($_ eq "ASW", @ref_pops ) || grep ($_ eq "MXL", @ref_pops ) || grep ($_ eq "GIH", @ref_pops)){$is_admixed = 1}
+	my $eur = 0;
+	my $asn = 0;
+	my $afr = 0;
+	if(grep ($_ eq "CEU", @ref_pops ) || grep ($_ eq "TSI", @ref_pops ) ){$eur = 1;}
+	if(grep ($_ eq "YRI", @ref_pops ) || grep ($_ eq "LWK", @ref_pops ) ){$afr = 1;}
+	if(grep ($_ eq "CHB", @ref_pops ) || grep ($_ eq "CHS", @ref_pops ) || grep ($_ eq "JPT", @ref_pops )){$asn = 1;}
+	if(($eur + $asn + $afr) > 1){$is_admixed = 1}
 
-	# Automatically set to admixed TRUE if it's one of the default admixed pops 
-
-    if(grep {$_ eq "ASW" || $_ eq "ACB" || $_ eq "MXL" || $_ eq "CLM" || $_ eq "PEL" || $_ eq "PUR" || 
-            $_ eq "GIH" || $_ eq "BEB" || $_ eq "ITU" || $_ eq "PJL" || $_ eq "STU"} @ref_pops) {
-        $is_admixed = 1;
-    }
-    
-    my $eur = 0;
-    my $asn = 0;
-    my $afr = 0;
-    my $sas = 0;
-
-    # European populations (EUR)
-    if(grep {$_ eq "CEU" || $_ eq "TSI" || $_ eq "FIN" || $_ eq "GBR" || $_ eq "IBS"} @ref_pops) {
-        $eur = 1;
-    }
-    
-    # African populations (AFR)
-    if(grep {$_ eq "YRI" || $_ eq "LWK" || $_ eq "GWD" || $_ eq "MSL" || $_ eq "ESN"} @ref_pops) {
-        $afr = 1;
-    }
-    
-    # East Asian populations (EAS)
-    if(grep {$_ eq "CHB" || $_ eq "CHS" || $_ eq "JPT" || $_ eq "CDX" || $_ eq "KHV"} @ref_pops) {
-        $asn = 1;
-    }
-    
-	# All the SAS subpops are de facto admixed so they're handled above for now
-
-    # If more than one continental ancestry is involved, consider it admixed
-    if(($eur + $asn + $afr + $sas) > 1) {
-        $is_admixed = 1;
-    }
-
-    $ADMIXED = $is_admixed;
-    return $is_admixed;
+	$ADMIXED = $is_admixed;
+	return $is_admixed;
 }
 
 sub pick_reference_populations {
@@ -682,37 +597,218 @@ sub pick_reference_populations {
 	my $study_name = shift;
 	my $rerun_pca= shift;
 
-	print "\nSelecting reference population(s) for $data_stem\n" if $verbose > 0;
-	print $LOG "\nSelecting reference population(s) for $data_stem\n" if $verbose > 0;
+	print "\nSelecting reference population for $data_stem\n" if $verbose > 0;
+	print $LOG "\nSelecting reference population for $data_stem\n" if $verbose > 0;
 	$study_name = get_file_name_from_stem($data_stem) if $study_name eq "";
-
-	#if (!-e "$data_stem.eigenvec" || $rerun_pca == 1) { print "\nNeed to run PCA\n"; }
+	
 	run_pca($data_stem, 1) if (!-e "$data_stem.eigenvec" || $rerun_pca == 1);
 	
-	my %samples; 
+	my %samples; # THIS IS MESSING UP 
 	my %KDEs;
 	my @PC1;
 	my @PC2;
-	my @ref_pops;
+	my %ref_pops;
 
-	my $port_number = $main::port_number_glob;
-	my $onekg_idfile = "$onekg/1KG_pop_classifier_ids.txt";
-	my $socket_data = "$data_stem.eigenvec|$onekg_idfile|pop_classifier";
+	## Make a three column table of the 1kg samples: POP PCV1 PCV2
+	# Read in the unrelated samples list from each pop:q
 
-	# Run population classifier and return the top populations as @ref_pops
-	my $ref_pops_str = send_to_compadre_helper($socket_data, $port_number);
-
-	if($ref_pops_str eq 'No response')
+	foreach my $pop (@onekg_pops)
 	{
-		die "Error. Run population classifier script in isolation with PLINK's PCA *.eigenvec file for more information.  You can also manually select reference sub-populations (ex., CEU) and rerun COMPADRE with the --ref_pops [POP] option\n";
+		my $file = "$lib_dir/1KG/1KG_unrelateds_by_subpop/1KG_formatted_set_$pop";
+		open(IN,$file) or die "can't open $file: $!\n";
+		<IN>;
+
+		while(my $line = <IN>)
+		{
+			my ($FID,$IID,$junk) = split(/\s+/,$line);
+			$samples{$IID} = $pop;
+		}
+		close(IN);
+	}
+	
+	# Process eigenvec file
+	open(IN,"$data_stem.eigenvec") or die "can't open $data_stem.eigenvec: $!\n";
+	my $header = <IN>;
+	open(OUT,">$data_stem\_PCV_vals.txt") or die "can't open $data_stem\_PCV_vals.txt: $!\n";
+
+	while(my $line = <IN>)
+	{
+		$line =~ s/^\s+//; ## get rid of the leading white space
+		my ($FID,$IID,$pc1,$pc2,@rest) = split(/\s+/,$line);
+		if(exists $samples{$IID})
+		{
+			print OUT "$samples{$IID}\t$pc1\t$pc2\n";
+		}
+	}
+	close(IN);
+	close(OUT);
+	$intermediate_files{"$data_stem\_PCV_vals.txt"} = 1;
+
+	## Read in that table into R and make the KDE (increasing bandwidth?)
+	##  and write the KDE to a file (and make the image?)
+
+	my $cex_main = 2 - ((length $study_name) - 10)*.028;
+	$cex_main = .4 if $cex_main < .4;
+	$cex_main = 2 if $cex_main > 2;
+	my $legend_cex = 1 - ($study_name-30)*.015;
+	$legend_cex = 1 if $legend_cex > 1;
+	$legend_cex = .4 if $legend_cex < .4;
+
+
+############################################
+	open(OUT,">$data_stem\_PCV_vals.r") or die "can't open $data_stem\_PCV_vals.r: $!\n";
+	print OUT "library(KernSmooth)\n"; ## Requires the KernSmooth library
+	print OUT "data <- read.table(\"$data_stem\_PCV_vals.txt\")\n";
+	print OUT "all_kde <- bkde2D(data[,1-2],c(.01,.01),c(300,300))\n";
+	print OUT "pc1_min = min(all_kde\$x1) - .01\n";
+	print OUT "pc1_max = max(all_kde\$x1) + .01\n";
+	print OUT "pc2_min = min(all_kde\$x2) - .01\n";
+	print OUT "pc2_max = max(all_kde\$x2) + .01\n";
+	print OUT "ranges<-list(c(pc1_min,pc1_max),c(pc2_min,pc2_max))\n";
+	print OUT "pdf(\"$data_stem\_KDE_contours.pdf\", height=8, width=10.5,family=\"mono\")\n";
+	print OUT "par(mai = c(1,1,1,4), oma = c(1,1,1,1),xpd=T)\n";
+	my $add = "F";
+	my @colors;
+	foreach my $pop (@onekg_pops)
+	{
+		my $bw = 0.008;
+		if($pop eq "GIH"){$bw = 0.003}
+		if($pop eq "ASW"){$bw = 0.02}
+		if($pop eq "CEU"){$bw = 0.01}
+		if($pop eq "TSI"){$bw = 0.01}
+		if($pop eq "MXL"){$bw = .006}
+		print OUT "$pop = subset(data, V1==\"$pop\", select = c(\"V2\",\"V3\"))\n";
+		print OUT "$pop\_kde <- bkde2D($pop,c($bw,$bw),c(300,300),ranges)\n";
+		print OUT "write.table($pop\_kde, file = \"$data_stem\_$pop\_kde.txt\",row.names=F,col.names=F)\n";
+		print OUT "contour($pop\_kde\$x1, $pop\_kde\$x2, $pop\_kde\$fhat,add=$add,col=\'$onekg_colors{$pop}\')\n";
+		push(@colors,$onekg_colors{$pop});
+		$add="T";
+		$intermediate_files{"$data_stem\_$pop\_kde.txt"} = 1;
+	}
+	if(-e "$data_stem\_PCV1vPCV2.txt")
+	{
+		print OUT "all_data <- read.table(\"$data_stem\_PCV1vPCV2.txt\",stringsAsFactors=FALSE,header=F)\n";
+		print OUT "data <- subset(all_data, V3 == \'$study_name\')\n";
+		print OUT "points(data[,5],data[,6],col='blue',pch=4)\n";
+		print OUT "legend(x=\"left\",inset=1.01,legend=c(\"$study_name\",\"".join('","',@onekg_pops)."\"),text.col=c(\"blue\",\"".join('","',@colors)."\"),fill=c(\"blue\",\"".join('","',@colors)."\"),cex=$legend_cex)\n";
+
+	}
+	else
+	{
+		print OUT "legend(x=\"left\",inset=1.01,legend=c(\"".join('","',@onekg_pops)."\"),text.col=c(\"".join('","',@colors)."\"),fill=c(\"".join('","',@colors)."\"),cex=$legend_cex)\n";
+	}
+	print OUT "dev.off()\n";
+	close(OUT);
+	$intermediate_files{"$data_stem\_PCV_vals.r"} = 1;
+	
+	## Run R script to get the KDE results
+	system("R --vanilla --slave < $data_stem\_PCV_vals.r > $data_stem\_PCV_vals.R_output");
+	system("rm $data_stem\_PCV_vals.R_output");
+
+	## Read in KDE tables: one for each population
+	my $PC_loaded = 0;
+	foreach my $pop (@onekg_pops)
+	{
+		my $kde = "$data_stem\_$pop\_kde.txt";
+		open(IN,$kde) or die "cannot open $data_stem\_$pop\_kde.txt: $!\n";
+		my @lines = <IN>;
+		
+		if($PC_loaded  == 0)
+		{
+			foreach my $line (@lines)
+			{
+				chomp($line);
+				my ($pc1,$pc2,@rest) = split(/\s+/,$line);
+				push(@PC1,$pc1);
+				push(@PC2,$pc2);
+			}
+			$PC_loaded = 1;
+		}
+		for(my $i = 0; $i < @lines; $i++)
+		{
+			my $line = @lines[$i];
+			chomp($line);
+			my ($junk1,$junk2,@rest) = split(/\s+/,$line);
+			for(my $j = 0; $j < @rest; $j++)
+			{
+				my $pc1 = @PC1[$i];
+				my $pc2 = @PC2[$j];
+				$KDEs{$pop}{$pc1}{$pc2} = @rest[$j];
+			}
+			
+		}
+
 	}
 
-	@ref_pops = split(/\|/, $ref_pops_str);
+	## For each sample, compare its PCV1 and PCV2 to each 1KG pop to make a vector
+	open(IN,"$data_stem.eigenvec") or die "can't open $data_stem.eigenvec: $!\n";
+	open(OUT,">$data_stem\_samples_ancestries.txt") or die "can't open $data_stem\_samples_ancestries.txt: $!\n";
+	print OUT "FID\tIID\t1KG_population\tLikelihood_vector\n";
+	while(my $line = <IN>)
+	{
+		$line =~ s/^\s+//;
+		my ($FID,$IID,$pc1,$pc2, @rest) = split(/\s+/,$line);
+		if(!exists $samples{$IID})
+		{
+			my @likelihood_vector;
+			my @samples_ref_pops;
+			my $pc1_pos;
+			my $pc2_pos;
 
+			## COMPARE TO THE KDEs 
+			# Find the correct position in the PC arrays
+			for(my $i = 0; $i < @PC1; $i++)
+			{
+				if($pc1 < $PC1[$i])
+				{
+					$pc1_pos = $i;
+					last;
+				}
+			}
+			for(my $i = 0; $i < @PC2; $i++)
+			{
+				if($pc2 < $PC2[$i])
+				{
+					$pc2_pos = $i;
+					last;
+				}
+			}
+			foreach my $pop (@onekg_pops)
+			{
+				my $likelihood = $KDEs{$pop}{$PC1[$pc1_pos]}{$PC2[$pc2_pos]};
+				push(@likelihood_vector,$likelihood);
+			}
+			#print "non normalized likelihood vector: @likelihood_vector\n";
+			my $sum = normalize_vector(\@likelihood_vector);
+			for(my $i = 0; $i < @likelihood_vector; $i++)
+			{
+				if(@likelihood_vector[$i] > $MIN_POP_LIKELIHOOD_CUTOFF)
+				{
+					push(@samples_ref_pops,@onekg_pops[$i]);
+				}
+				if(@likelihood_vector[$i] > $MIN_POP_LIKELIHOOD_CUTOFF && $sum > 50) # might need to change this now that we have more pops...
+				{
+					$ref_pops{@onekg_pops[$i]} = 1;
+				}
+				# else{
+				# 	print "Sum is too small\n" if $verbose > 2;
+				# }
+				#print "@hm3_pops[$i]: @likelihood_vector[$i]\n";
+			}
+			print OUT "$FID\t$IID\t".join(",",@samples_ref_pops)."\t".join(",",@likelihood_vector)."\n";
+			#print "$FID\t$IID\t".join(",",@samples_ref_pops)."\t".join(",",@likelihood_vector)."\n";
+		}
+	}
+	close(IN);
+	close(OUT);
+	
+	my @ref_pops = sort keys %ref_pops;
 	print "Ref pops: @ref_pops\n" if $verbose > 0;
 	print $LOG "Ref pops: @ref_pops\n" if $verbose > 0;
-
-
+	if(@ref_pops < 1)
+	{
+		die "Your samples did not fall near any samples in the PCA plot. Visual inspection required of PCA plot. Select reference populations and rerun PRIMUS with --ref_pops [POP] option\n";
+	}
 	return @ref_pops;
 }
 
@@ -747,8 +843,8 @@ sub multiple_ref_pop_merge
 	return ($new_stem,$ref_samples_to_keep_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref);
 }
 
-sub merge {
-
+sub merge
+{
 	my $data_stem = shift;
 	my $ref_stem = shift;
 	my $new_stem = shift;
@@ -851,7 +947,7 @@ sub flip
 	my @triallelic;
 	my @ambigious;
 	my @SNPs_to_be_flipped;
-	my @weird;
+	my @wierd;
 	foreach my $snp (keys %data)
 	{
 		if(!exists $ref_data{$snp})
@@ -872,7 +968,7 @@ sub flip
 		{
 			if($allele !~ /^[a|c|g|t|A|C|G|T]$/)
 			{
-				push(@weird,$snp);
+				push(@wierd,$snp);
 			}
 		}
 
@@ -893,7 +989,7 @@ sub flip
 		
 		if(@alleles > 4) ## should never happen since .bim files only have two alleles each
 		{
-			push(@weird,$snp);
+			push(@wierd,$snp);
 		}
 		elsif(@alleles == 4)
 		{
@@ -925,9 +1021,9 @@ sub flip
 			else
 			{
 				## if(@a1 == 2 && @a2 == 2) then no need to flip
-				## if(@a1 == 1 && @a2 == 2) then @a1 is in @a2; no need to flip, but is this weird?
-				## if(@a1 == 2 && @a2 == 1) then @a2 is in @a1; no need to flip, but is this weird?
-				## if(@a1 == 1 && @a2 == 1) then @a1 and @a2 have no overlap and are not ambiguous; no need to flip, but is this weird?
+				## if(@a1 == 1 && @a2 == 2) then @a1 is in @a2; no need to flip, but is this wierd?
+				## if(@a1 == 2 && @a2 == 1) then @a2 is in @a1; no need to flip, but is this wierd?
+				## if(@a1 == 1 && @a2 == 1) then @a1 and @a2 have no overlap and are not ambiguous; no need to flip, but is this wierd?
 			}
 		}
 		else
@@ -937,7 +1033,7 @@ sub flip
 	}
 
 	## Combine SNPs and remove
-	my @SNPs_to_remove = (@triallelic,@ambigious,@weird,@non_overlap_SNPs);
+	my @SNPs_to_remove = (@triallelic,@ambigious,@wierd,@non_overlap_SNPs);
 	print "# of SNPs overlap between datasets: " . @overlap_SNPs . "\n" if $verbose > 1;
 	print $LOG "# of SNPs overlap between datasets: " . @overlap_SNPs . "\n" if $verbose > 1;
 	print "# of SNPs non-overlap between datasets: " . @non_overlap_SNPs . "\n" if $verbose > 1;
@@ -1113,8 +1209,8 @@ sub get_AIMs
 ## Input2: If you want the points ot be color coded, provide a hash reference with the name=>color of the samples in the data/eigenvec file
 ## Input3: For the subroutine to rerun pca, if the stem_name.evev file already exists, then specify 1;
 ## Output: Path to the PFD for the plot.
-sub make_PCA_plot {
-
+sub make_PCA_plot
+{
 	## Set file paths
 	my $stem_name = shift;
 	my $ref_stem = shift;
@@ -1132,7 +1228,7 @@ sub make_PCA_plot {
 	
 	if($rerun_pca == 1 || !-e "$stem_name.eigenvec")
     {
-        run_pca($stem_name,$project_onto_1KG);
+            run_pca($stem_name,$project_onto_1KG);
     }
 	
 	## Convert .eigenvec file and color codes into new input file for R
@@ -1235,8 +1331,8 @@ sub run_pca
 	my $stem_name = shift;
 	my $project_onto_1KG = shift;
 
-	print "\nRunning plink's PCA (new) on $stem_name => $stem_name.eigenvec\n" if $verbose > 0;
-	print $LOG "\nRunning plink's PCA (new) on $stem_name => $stem_name.eigenvec\n" if $verbose > 0;
+	print "\nRunning plink's pca on $stem_name => $stem_name.eigenvec\n" if $verbose > 0;
+	print $LOG "\nRunning plink's pca on $stem_name => $stem_name.eigenvec\n" if $verbose > 0;
 
 	make_binary_version($stem_name);
 
@@ -1259,15 +1355,12 @@ sub run_pca
 	my $cluster_names;
     if($project_onto_1KG eq 1)
     {
-        $cluster_names = "--pca-cluster-names ACB ASW BEB CDX CEU CHB CHS CLM ESN FIN GBR GIH GWD IBS ITU JPT KHV LWK MSL MXL PEL PJL PUR STU TSI YRI";
+        $cluster_names = "--pca-cluster-names AWS CEU CHB CHS GIH JPT LWK MXL TSI YRI";
     }
-
 
 	# added --extract flag from LD pruning
 	#my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
     my $temp = system("plink2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --memory 600000 --maf $MAF --geno $GENO --out $stem_name");
-
-
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK's PCA failed (pca approx step).\n";
@@ -1315,7 +1408,6 @@ sub get_unrelateds
     #print $LOG "\nRun IMUS on IBDs for all original samples\n" if $verbose > 1;
     #my @IMUS_commands = ("--do_IMUS",1,"--do_PR",0,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--output_dir","$stem_name\_IMUS","--lib",$lib_dir, "--rel_threshold",$THRESHOLD,"--log_file_handle",$LOG);
     #my ($unrelated_file, @unrelated_samples) = PRIMUS::IMUS::run_IMUS(@IMUS_commands);
-
 	my $unrelated_file = "$stem_name.rel.id";
     my @unrelated_samples = `cat $unrelated_file`;
     chomp(@unrelated_samples);
@@ -1336,24 +1428,19 @@ sub get_unrelateds
 	return ($new_stem_name,@unrelated_samples);
 }
 
-sub calculate_IBD_estimates {
-
-	# Generates a .genome file with the cleaned_all_samples_stem files 
-
+sub calculate_IBD_estimates
+{
 	my $stem_name = shift;
 	my $new_stem_name = shift;
 	my $freq_file = shift;
-
 	$new_stem_name = "$stem_name" if $new_stem_name eq "";
-	print "\nCalculating IBDs for $stem_name (.frq = $freq_file) => $new_stem_name.genome\n" if $verbose > 0;
-	print $LOG "\nCalculating IBDs for $stem_name (.frq = $freq_file) => $new_stem_name.genome\n" if $verbose > 0;
+	print "\nCalcualte IBDs for $stem_name (.frq = $freq_file) => $new_stem_name.genome\n" if $verbose > 0;
+	print $LOG "\nCalcualte IBDs for $stem_name (.frq = $freq_file) => $new_stem_name.genome\n" if $verbose > 0;
 	
 	make_binary_version($stem_name);
 	
 	my $read_freq = "--read-freq $freq_file";
 	$read_freq = "" if $freq_file eq "";
-
-	# Maybe roll back this change? 
 	
 	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp");
 	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND --memory 600000 $plink_silent --out $new_stem_name --min 0");
@@ -1485,7 +1572,7 @@ sub get_population_assignments_and_colors
 	# my %hm3_colors = ("ASW","steelblue4","CEU","red","CHB","darkred","CHD","green","GIH","darkgreen","JPT","slateblue1","LWK","slateblue4","MEX","sienna1","MKK","sienna4","TSI","black","YRI","darkgoldenrod3");
 	if($ref_name =~ /onekg/i)
 	{
-		open(IN,"$onekg/1KG_sample_populations.txt");
+		open(IN,"$lib_dir/1KG/1KG_sample_populations.txt");
 		while(my $line = <IN>)
 		{
 			chomp($line);

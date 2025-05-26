@@ -36,6 +36,9 @@ RUN ln -s /bin/plink1.9 /bin/plink
 # Install python packages 
 RUN pip3 install -r requirements.txt
 
+# For some reason this has to be installed via conda, pip install doesn't work
+RUN conda install scikit-learn
+
 ## IN PROGRESS: install reference data from github releases URL 
 RUN wget https://github.com/belowlab/compadre/releases/download/pre-release/compadre_data.zip && unzip compadre_data.zip && rm compadre_data.zip
 

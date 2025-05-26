@@ -59,18 +59,17 @@ Build the Docker image:
 docker build -t compadre .
 ```
 
-Run COMPADRE (interactive mode):
+Run (interactive mode):
 
 ```bash
 # Set entrypoint to bring you into the Docker image location
 docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 -it --entrypoint /bin/bash compadre:latest 
 
-# Run COMPADRE 
-# (replace inputs with your own from the input/ folder)
+# Run COMPADRE (replace inputs with your own from the input/ folder)
 perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt --genome --output ../output/eur_test --verbose 1 --run_padre
 ```
 
-Run COMPADRE (non-interactive mode):
+Run (non-interactive mode):
 
 ```bash
 docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1 --run_padre
@@ -80,8 +79,8 @@ docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 c
 ### Execution notes
 ---
 - In order to easily access COMPADRE results on your local machine, use the `-v` flag in the Docker entrypoint step to link your local COMPADRE repository folder path (specifically, the `output` folder). For example, on macOS, this might be `/Users/yourname/Downloads/compadre/output` if you cloned the repository into your Downloads folder. 
-- Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such  at runtime by using the `--port_number <INT>` COMPADRE flag and the `-p` Docker flag. 
-- Please use standard PRIMUS runtime flags as detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
+- Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such  with the `--port_number <INT>` COMPADRE flag AND the `-p` Docker flag. 
+- All other runtime flags are detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
 
 
 
@@ -92,6 +91,7 @@ The source code for generating family genetic data simulations can be found [her
 More documentation:
 - [Original PRIMUS docs](https://primus.gs.washington.edu/primusweb/res/documentation.html)
 - [Original ERSA docs](https://hufflab.org/software/ersa/)
+- [Original PADRE docs](https://hufflab.org/software/padre/)
 
 Please visit the [official COMPADRE website](https://compadre.dev/about) for publication updates and other details. 
 

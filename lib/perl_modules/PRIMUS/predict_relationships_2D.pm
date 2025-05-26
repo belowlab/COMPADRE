@@ -325,9 +325,36 @@ sub get_relationship_likelihood_vectors {
 
 				my $vector_str = join(',',@vector);
 				my $socket_data = "$name1|$name2|$vector_str|pairwise";
-				my $new_vector = send_to_compadre_helper($socket_data, $port_number); # NEW WAY TO SEND DATA
+				my $new_vector = send_to_compadre_helper($socket_data, $port_number);
 				chomp($new_vector);
+
+				# Get the original relationship before changing the vector
+        		my $rel_old = get_maximum_relationship(@vector);
+
 				@vector = split(',', $new_vector); # re-assign vector to use the new version from the python utility
+
+				my $rel_new = get_maximum_relationship(@vector);
+
+
+				# if (!(($rel_old eq "HAG" && $rel_new eq "CGH") || ($rel_old eq "CGH" && $rel_new eq "HAG"))) {
+				# 	# Revert to the original vector if the change wasn't HAG<->CGH
+				# 	@vector = @vector_copy;
+				# } else {
+				# 	print "RELATIONSHIP CHANGED ($name1 $name2): $rel_old -> $rel_new\n";
+				# }
+
+				# new version 
+
+				# if (!(
+				# 	($rel_old eq "HAG" && $rel_new eq "CGH") || 
+				# 	($rel_old eq "CGH" && $rel_new eq "HAG") ||
+            	# 	($rel_new eq "UN" && $rel_old ne "UN")
+				# )) {
+				# 	# Revert to the original vector if none of the acceptable changes
+				# 	@vector = @vector_copy;
+				# } else {
+				# 	print "RELATIONSHIP CHANGED ($name1 $name2): $rel_old -> $rel_new\n";
+				# }
 			}
 		}
 
