@@ -12,7 +12,7 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
 ## Updates
 
-1. Added support for shared segments-based relationship estimation. This requires a file with pairwise shared segment data provided as input via the `--segment_data <FILE>` flag. We used [GERMLINE2](https://github.com/gusevlab/germline2) in our benchmarking, but there are a large number of tools that can generate these data. File formatting examples for this input can be found in the `example_data` folder(s).
+1. COMPADRE integrates shared segments-based relationship estimation ahead of pedigree reconstruction. This requires a file with pairwise shared segment data provided as input via the `--segment_data <FILE>` flag. We used [GERMLINE2](https://github.com/gusevlab/germline2) in our benchmarking, but there are a large number of tools that can generate these data. File formatting examples for this input can be found in the `example_data` folder(s).
 
     ```bash
     --segment_data example_data/simulations/EUR/eur_size20_segments.txt
@@ -20,9 +20,10 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
     Note: COMPADRE does not require segment-specific IBD[1/2] status as part of the `--segment_data` input; however, inclusion of this information can improve the composite algorithm's performance. We have provided a generic script to identify IBD2 segments from a standard IBD detection output file here: `tools/determine_ibd.py`. COMPADRE will check for the presence of an `ibd` column containing values 1 or 2 at the last index of the `--segment_data` input file. 
 
-2. Added support for optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
+2. COMPADRE supports optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
 
-3. Added support for using 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm trained on pre-processed PLINK PCA results to predict ancestry ahead of IBD estimation and reconstruction.
+3. COMPADRE utilizes 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm trained on pre-processed PLINK PCA results to predict ancestry ahead of IBD estimation and reconstruction.
+
 
 
 ## Installation
@@ -67,17 +68,27 @@ Run (interactive mode):
 ```bash
 # Set entrypoint to bring you into the Docker image location
 
-docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 -it --entrypoint /bin/bash compadre:latest 
+docker run -v \
+    /local/path/to/compadre_repo/output:/usr/src/output \
+    -p 4000:4000 -it --entrypoint /bin/bash compadre:latest 
 
 # Run COMPADRE (replace inputs with your own from the input/ folder)
 
-perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt --genome --output ../output/eur_test --verbose 1 --run_padre --port_number 4000
+perl run_COMPADRE.pl \
+    --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 \
+    --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt \
+    --output ../output/eur_test \
+    --genome --verbose 1 --run_padre --port_number 4000
 ```
 
 Run (non-interactive mode):
 
 ```bash
-docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1 --run_padre --port_number 4000
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 compadre \
+    --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 \
+    --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt \
+    --output ../output/amr_test \
+    --genome --verbose 1 --run_padre --port_number 4000
 ```
 
 <u><strong>NOTE</strong></u>: The "Run" example above perform all steps of COMPADRE: (1) input data quality control, (2) identification of an unrelated set, and (3) pedigree reconstruction. While performing the first two of these steps is encouraged in most instances, if you already have PLINK *.genome formatted data (and performed quality control), you can skip to pedigree reconstruction by using both `--no_IMUS` and `--plink_ibd <yourfile.genome>` flags. Conversely, if you only want to generate IBD estimates per network and the overall unrelated set from your standard input data, you can use the `--no_PR` flag.
@@ -109,12 +120,13 @@ Please visit the [official COMPADRE website](https://compadre.dev/about) for pub
 
 Please email <strong><i>contact AT compadre DOT dev</strong></i> with the subject line "COMPADRE Help" or [submit an issue report/pull request on GitHub](https://github.com/belowlab/compadre/issues). 
 
-If you use COMPADRE in your research, please cite:
+If you use COMPADRE in your research, please cite the following:
 ```
-Evans GF, Baker JT, Petty LE, Petty AS, Polikowsky HG, Bohlender RJ, Chen HH, Chou CY, Viljoen KZ, 
-Beilby JM, Kraft SJ, Zhu W, Landman JM, Morrow AR, Bian D, Scartozzi AC, Huff CD, Below JE. 
-Combined Pedigree-aware Distant Relatedness Estimation (COMPADRE): improved pedigree reconstruction 
-using integrated relationship estimation approaches. [Publication details forthcoming]
+Evans GF, Baker JT, Petty LE, Petty AS, Polikowsky HG, Bohlender RJ, Chen HH, Chou CY, 
+Viljoen KZ, Beilby JM, Kraft SJ, Zhu W, Landman JM, Morrow AR, Bian D, Scartozzi AC, 
+Huff CD, Below JE. Combined Pedigree-aware Distant Relatedness Estimation (COMPADRE): 
+improved pedigree reconstruction using integrated relationship estimation approaches. 
+[Publication details forthcoming]
 ```
 
 

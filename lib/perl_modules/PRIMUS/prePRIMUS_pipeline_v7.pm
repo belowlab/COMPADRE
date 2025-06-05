@@ -42,12 +42,15 @@ sub send_to_compadre_helper {
     return $response;
 }
 
+# Get absolute location of this file and use that to define additional paths of interest
 my $preprimus_script_path = abs_path($0);
 my $pmloc = dirname(dirname($preprimus_script_path)); 
 
+# These match what is currently installed via the Dockerfile
 my $PLINK = "plink";
 my $PLINK2 = "plink2";
 my $R = "R";
+
 #my $HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
 my $lib_dir = "../lib";
 my $onekg = "$pmloc/lib/1KG";
