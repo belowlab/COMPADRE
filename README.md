@@ -22,7 +22,7 @@ and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
 
 2. Added support for optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
 
-3. Added support for using 1000 Genomes Project genetic reference data to generate pairwise IBD estimates.
+3. Added support for using 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm trained on pre-processed PLINK PCA results to predict ancestry ahead of IBD estimation and reconstruction.
 
 
 ## Installation
@@ -41,16 +41,19 @@ First, navigate into the `compadre` directory downloaded from Github:
 
 ```bash
 # Assuming you cloned the repository in your current directory path
+
 cd compadre
 ```
 
 Copy your input data into the `input` folder (to be subsequently copied into the Docker image):
 
-```
-cp /example/local/data/folder/test.bed input/
-cp /example/local/data/folder/test.bim input/
-cp /example/local/data/folder/test.fam input/
-cp /example/local/data/folder/segments.txt input/
+```bash
+# cd into the COMPADRE directory first
+
+cp /example/local/folder/test.bed input/
+cp /example/local/folder/test.bim input/
+cp /example/local/folder/test.fam input/
+cp /example/local/folder/segments.txt input/
 ```
 
 Build the Docker image:
@@ -63,24 +66,29 @@ Run (interactive mode):
 
 ```bash
 # Set entrypoint to bring you into the Docker image location
-docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 -it --entrypoint /bin/bash compadre:latest 
+
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 -it --entrypoint /bin/bash compadre:latest 
 
 # Run COMPADRE (replace inputs with your own from the input/ folder)
-perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt --genome --output ../output/eur_test --verbose 1 --run_padre
+
+perl run_COMPADRE.pl --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt --genome --output ../output/eur_test --verbose 1 --run_padre --port_number 4000
 ```
 
 Run (non-interactive mode):
 
 ```bash
-docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1 --run_padre
+docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 compadre --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt --genome --output ../output/amr_test --verbose 1 --run_padre --port_number 4000
 ```
+
+<u><strong>NOTE</strong></u>: The "Run" example above perform all steps of COMPADRE: (1) input data quality control, (2) identification of an unrelated set, and (3) pedigree reconstruction. While performing the first two of these steps is encouraged in most instances, if you already have PLINK *.genome formatted data (and performed quality control), you can skip to pedigree reconstruction by using both `--no_IMUS` and `--plink_ibd <yourfile.genome>` flags. Conversely, if you only want to generate IBD estimates per network and the overall unrelated set from your standard input data, you can use the `--no_PR` flag.
+
 
 
 ### Execution notes
 ---
 - In order to easily access COMPADRE results on your local machine, use the `-v` flag in the Docker entrypoint step to link your local COMPADRE repository folder path (specifically, the `output` folder). For example, on macOS, this might be `/Users/yourname/Downloads/compadre/output` if you cloned the repository into your Downloads folder. 
-- Additional computation now takes place over an open socket, set to use port 6000 as default. If you need to use a different port, please indicate as such  with the `--port_number <INT>` COMPADRE flag AND the `-p` Docker flag. 
-- All other runtime flags are detailed in the original [PRIMUS documentation](https://primus.gs.washington.edu/primusweb/res/documentation.html). 
+- Additional computation now takes place over an open socket. COMPADRE defaults to port 6000; if you need to use a different port, please indicate as such with the following COMPADRE flag `--port_number <INT>` AND Docker flag `--publish <INT>:<INT>`. See the "Run" examples for more details. 
+- All other runtime flags are detailed [here](https://compadre.dev/docs). 
 
 
 
@@ -88,21 +96,31 @@ docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 6000:6000 c
 
 The source code for generating family genetic data simulations can be found [here](https://github.com/belowlab/unified-simulations). 
 
-More documentation:
+More details on PRIMUS, ERSA, and PADRE can be found here:
 - [Original PRIMUS docs](https://primus.gs.washington.edu/primusweb/res/documentation.html)
 - [Original ERSA docs](https://hufflab.org/software/ersa/)
 - [Original PADRE docs](https://hufflab.org/software/padre/)
 
-Please visit the [official COMPADRE website](https://compadre.dev/about) for publication updates and other details. 
+Please visit the [official COMPADRE website](https://compadre.dev/about) for publication updates and other information. 
 
 
 
 ## Questions?
 
-Please email <strong><i>contact AT compadre DOT dev</strong></i> with the subject line "COMPADRE Help" or [submit an issue report](https://github.com/belowlab/compadre/issues). 
+Please email <strong><i>contact AT compadre DOT dev</strong></i> with the subject line "COMPADRE Help" or [submit an issue report/pull request on GitHub](https://github.com/belowlab/compadre/issues). 
+
+If you use COMPADRE in your research, please cite:
+```
+Evans GF, Baker JT, Petty LE, Petty AS, Polikowsky HG, Bohlender RJ, Chen HH, Chou CY, Viljoen KZ, 
+Beilby JM, Kraft SJ, Zhu W, Landman JM, Morrow AR, Bian D, Scartozzi AC, Huff CD, Below JE. 
+Combined Pedigree-aware Distant Relatedness Estimation (COMPADRE): improved pedigree reconstruction 
+using integrated relationship estimation approaches. [Publication details forthcoming]
+```
 
 
 
 ## License
 
-COMPADRE was developed by the [Below Lab](https://thebelowlab.com) in the Division of Genetic Medicine at Vanderbilt University School of Medicine. COMPADRE is distributed under the following APACHE 2.0 license: https://compadre.dev/licenses/compadre_license.txt
+COMPADRE was developed by the [Below Lab](https://thebelowlab.com) in the Division of Genetic Medicine at Vanderbilt University Medical Center, Nashville, TN, USA. 
+
+COMPADRE is distributed under the following APACHE 2.0 license: https://compadre.dev/licenses/compadre_license.txt

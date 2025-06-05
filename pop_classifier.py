@@ -543,6 +543,9 @@ if __name__ == '__main__':
 
     test1 = '/data100t1/home/grahame/projects/compadre/compadre-test/testing/amr_full3/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
 
+    # LD update 50 0.5 1
+    test1 = '/data100t1/home/grahame/projects/compadre/compadre-test/testing/full1_newfolder2_LD/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
+
     test2 = '/belowshare/vumcshare/data100t1/home/grahame/projects/compadre/compadre-test/lib/1KG/1KG_pop_classifier_ids.txt'
 
     run_new(test1, test2, verbose=True, linear=False)

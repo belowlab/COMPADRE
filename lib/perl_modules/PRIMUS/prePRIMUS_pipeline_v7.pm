@@ -10,6 +10,13 @@ use Cwd qw(abs_path);
 use File::Find;
 use File::Basename;
 
+###################################################################################
+
+# Eventual TODO: update the rest of the plink commands to plink2
+# Currently, only the PCA command ahead of Ryan's population classifier uses plink2
+
+###################################################################################
+
 sub send_to_compadre_helper {
 
     my ($data, $port) = @_;
@@ -39,6 +46,7 @@ my $preprimus_script_path = abs_path($0);
 my $pmloc = dirname(dirname($preprimus_script_path)); 
 
 my $PLINK = "plink";
+my $PLINK2 = "plink2";
 my $R = "R";
 #my $HM3_STEM = "$lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly";
 my $lib_dir = "../lib";
@@ -787,7 +795,7 @@ sub merge {
 sub flip
 {
 	my $data_stem = shift; ## Your data that you want to flip
-	my $ref_stem = shift; ## The reference data you want your data to be flipped to match $lib_dir/hapmap3/allhapmapUNREL_r2_b36_fwd.qc.poly
+	my $ref_stem = shift; ## The reference data you want your data to be flipped to match 
 	my $new_stem = shift; ## The stem name of your filed data. If left blank, the name will be $data_stem\_flipped.
 	$new_stem = "$data_stem\_flipped" if $new_stem eq "";
 	$ref_stem = "$onekg_STEM" if $ref_stem eq "";
@@ -1030,6 +1038,7 @@ sub get_allele_freqs
 ## INPUT3: You can force a run of pca even if the .eigenvec file already exists (optional)
 ## OUtPUT1: Path to the file that has the list of AIMs
 ## OUTPUT2: An array of the AIMs
+
 sub get_AIMs
 {
 	my $stem_name = shift;
@@ -1113,6 +1122,7 @@ sub get_AIMs
 ## Input2: If you want the points ot be color coded, provide a hash reference with the name=>color of the samples in the data/eigenvec file
 ## Input3: For the subroutine to rerun pca, if the stem_name.evev file already exists, then specify 1;
 ## Output: Path to the PFD for the plot.
+
 sub make_PCA_plot {
 
 	## Set file paths
@@ -1252,6 +1262,7 @@ sub run_pca
 	print $LOG "\nRunning LD pruning\n" if $verbose > 0;
 
 	my $temp = system("plink --bfile $stem_name --indep-pairwise 10 10 0.2 --out $stem_name\_pruned");
+	#my $temp = system("plink --bfile $stem_name --indep-pairwise 50 5 0.1 --out $stem_name\_pruned");
 
 	################################################################################################################
 
@@ -1265,12 +1276,12 @@ sub run_pca
 
 	# added --extract flag from LD pruning
 	#my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
-    my $temp = system("plink2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --memory 600000 --maf $MAF --geno $GENO --out $stem_name");
+    my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --memory 500000 --maf $MAF --geno $GENO --out $stem_name");
 
 
 	if($temp > 0)
 	{
-		die "ERROR!!! PLINK's PCA failed (pca approx step).\n";
+		die "ERROR!!! PLINK's PCA failed (plink2, pca approx step).\n";
 	}
 	$intermediate_files{"$stem_name.log"} = 1;
 	return "$stem_name.eigenvec";

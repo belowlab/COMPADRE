@@ -40,7 +40,7 @@ RUN pip3 install -r requirements.txt
 RUN conda install scikit-learn
 
 ## IN PROGRESS: install reference data from github releases URL 
-RUN wget https://github.com/belowlab/compadre/releases/download/pre-release/compadre_data.zip && unzip compadre_data.zip && rm compadre_data.zip
+RUN wget https://github.com/belowlab/compadre/releases/download/pre-release-0.2.0/compadre_data.zip && unzip compadre_data.zip && rm compadre_data.zip
 
 ## after downloading, move things according accordingly 
 RUN mv compadre_data/1KG /usr/src/lib && mv compadre_data/hapmap3 /usr/src/lib && mv compadre_data/KDE_data /usr/src/lib && mv compadre_data/example_data .
