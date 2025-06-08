@@ -34,7 +34,7 @@ use Cwd qw(abs_path);
 my $script_path = abs_path($0);
 my $project_root = dirname(dirname($script_path));
 
-my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
+#my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
 my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
 
 my $package = "PRIMUS";
@@ -47,7 +47,6 @@ my $pod2usage = sub {
         Pod::Usage->import;
         &pod2usage;
     };
-
 
 ################ Command line parameters ################
 
@@ -201,8 +200,12 @@ sub run_prePRIMUS
 	## Test that all these paths exists
 	my %paths = ("LIB",$lib_dir,"PLINK",$plink_path);
 	PRIMUS::prePRIMUS_pipeline_v7::set_paths(\%paths);
+
+	# Create the prePRIMUS directory with specific permissions
+	my $preprimus_dir = "$output_dir/$study_name\_prePRIMUS";
+	make_path($preprimus_dir, { mode => 0755 }) if !-d $preprimus_dir;
 	
-	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir","$output_dir/$study_name\_prePRIMUS","--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y);
+	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y);
 
 	## Run the PLINK IBD pipeline
 	my ($temp_genome_file,$temp_sex_file,$temp_mt_match_file,$temp_y_match_file) = PRIMUS::prePRIMUS_pipeline_v7::run_prePRIMUS_main(@IBD_commands);
@@ -375,19 +378,21 @@ sub run_PR
 	system("$bin_dir/make_dataset_summary.pl $output_dir $dataset_name");
 	system("./make_dataset_pairwise_summary.pl $output_dir $dataset_name");
 
-
-
 	print "done.\n" if $verbose > 0;
 	print $LOG "done.\n" if $verbose > 0;
 
 	# convert ps to pdf files 
 	find(\&process_file, $output_dir);
 
-	print "converted .ps to .pdf.\n" if $verbose > 0;
-	print $LOG "converted .ps to .pdf.\n" if $verbose > 0;
+	#print "converted .ps to .pdf.\n" if $verbose > 0;
+	#print $LOG "converted .ps to .pdf.\n" if $verbose > 0;
 
+	###############################################################################################
 
 	if ($run_padre) {
+
+		print "Initializing PADRE\n" if $verbose > 0;
+		print $LOG "Initializing PADRE\n" if $verbose > 0;
 
 		print "Requesting ERSA output path from COMPADRE helper...\n" if $verbose > 0;
 
@@ -403,10 +408,11 @@ sub run_PR
 
 		system($padre_command) == 0
 			or warn "Failed to run PADRE: $padre_command\n";
+
+		print "PADRE complete.\n" if $verbose > 0;
+		print $LOG "PADRE complete.\n" if $verbose > 0;
+
 	}
-
-
-	# This is the spot to kill the socket connection -- UPDATED to stop sending that error
 
 	my $shutdown_ack = PRIMUS::predict_relationships_2D::send_to_compadre_helper("close", $port_number);
 	print "COMPADRE socket shutdown message: $shutdown_ack\n" if $verbose > 0;	
@@ -416,6 +422,7 @@ sub run_PR
 	#PRIMUS::get_pairwise_summary::write_table("$output_dir/Summary_$dataset_name\_pairwise_table.txt",$rels_ref);
 }
 
+# Convert .ps from cranefoot to .pdf 
 sub process_file 
 {
     if (/\.(ps)$/i) {
@@ -458,32 +465,43 @@ sub print_files_and_settings
 	print "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
 	print $LOG "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
 
-	# Instantiate the socket here? 
-
-	if ($ersa_data ne "") # checking if an argument was actually passed for ersa data
-	{
+	# if ($ersa_data ne "") # checking if an argument was actually passed for ersa data
+	# {
 		#print "\nSegment file: $ersa_data\n";
-		print "\nOpening COMPADRE helper socket ...\n";
 
-		# get absolute path of compadre helper 
-		my $libpath = $lib_dir; 
-		$libpath =~ s{/$}{};
-		my $parent_dir = File::Spec->catdir(dirname($libpath));
-		my $helper_path = File::Spec->catfile($parent_dir, 'compadre.py');
+	# get absolute path of compadre helper 
+	my $libpath = $lib_dir;
+	$libpath =~ s{/$}{};
+	my $parent_dir = File::Spec->catdir(dirname($libpath));
+	my $helper_path = File::Spec->catfile($parent_dir, 'compadre.py');
 
-		# instantiate the new compadre helper using the filepath from $match_data
-		my ($reader, $writer);
-		my $pid = open2($reader, $writer, "python3 $helper_path $ersa_data $port_number");
+	my ($reader, $writer);
 
-		# Wait for the server to be ready
-		while (my $line = <$reader>) {
-			if ($line =~ /COMPADRE helper socket is ready/) {
-				chomp $line;  
-        		print "\n$line\n";
-				last;
-			}
+	# Check if ersa data is passed in at runtime. If it is, send that path, and if not, send 'NA'
+	my $ersa_arg = ($ersa_data ne "") ? $ersa_data : "NA";
+	if ($ersa_data ne "") {
+		print "\nLaunching COMPADRE helper (with segment data) ...\n";
+	}
+	else {
+		print "\nLaunching COMPADRE helper (no segment data) ...\n";
+	}
+
+	# Send command to open the socket
+	my $pid = open2($reader, $writer, "python3 $helper_path $ersa_arg $port_number");
+	if (!defined $pid) {
+		die "Failed to launch COMPADRE helper: $!\n";
+	}
+
+	# Wait for the server to be ready
+	while (my $line = <$reader>) {
+		if ($line =~ /COMPADRE helper is ready/) {
+			chomp $line;  
+			print "\n$line\n";
+			last;
 		}
 	}
+	
+	our $compadre_pid = $pid;
 
 
 
@@ -635,13 +653,13 @@ sub apply_options {
 			{
 				if($pop =~ /none/i){next}
 				
-				if(!grep ($_ eq $pop, @hm3_pops ))
+				if(!grep ($_ eq $pop, @onekg_pops ))
 				{
-					print "\n\nERROR!!! Invalid HapMap3 population: $pop\n";
-					print "Must be a comma seperated list these: @hm3_pops\n";
+					print "\n\nERROR!!! Invalid 1KG population: $pop\n";
+					print "Must be a comma seperated list these: @onekg_pops\n";
 					print "For example: --ref_pops CEU,TSI,YRI\n\n";
-					print $LOG "\n\nERROR!!! Invalid HapMap3 population: $pop\n";
-					print $LOG "Must be a comma seperated list these: @hm3_pops\n";
+					print $LOG "\n\nERROR!!! Invalid 1KG population: $pop\n";
+					print $LOG "Must be a comma seperated list these: @onekg_pops\n";
 					print $LOG "For example: --ref_pops CEU,TSI,YRI\n\n";
 					$pod2usage->(2);
 				}

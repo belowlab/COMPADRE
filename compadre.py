@@ -73,52 +73,55 @@ def main(segment_data_file, portnumber):
     ibd2_status = 'false'
     ibd2_counter = 0
 
-    with open (segment_data_file, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
+    if segment_data_file != 'NA':
 
-        # Check number of columns to determine if it has IBD1/2 data or not 
-        header_line = f.readline().strip()
-        num_columns = len(header_line.split())
+        with open (segment_data_file, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
 
-        if num_columns == 7: # File with segment-by-segment IBD status in 7th column (with header)
-            ibd2_status = 'true'
-            next(f) # skip header line in this file version
-            for line in f:
-                ls = line.strip().split('\t')
-                iid1, iid2, start, end, cmlen, chrom, ibd = ls[0], ls[1], int(ls[2]), int(ls[3]), round(float(ls[4]), 2), int(ls[5]), int(ls[6].strip())
-                key = f"{iid1}:{iid2}"
-                value = (chrom, start, end, cmlen, ibd)
+            # Check number of columns to determine if it has IBD1/2 data or not 
+            header_line = f.readline().strip()
+            num_columns = len(header_line.split())
 
-                # comment this out later
-                if ibd == 2:
-                    ibd2_counter += 1
+            if num_columns == 7: # File with segment-by-segment IBD status in 7th column (with header)
+                ibd2_status = 'true'
+                next(f) # skip header line in this file version
+                for line in f:
+                    ls = line.strip().split('\t')
+                    iid1, iid2, start, end, cmlen, chrom, ibd = ls[0], ls[1], int(ls[2]), int(ls[3]), round(float(ls[4]), 2), int(ls[5]), int(ls[6].strip())
+                    key = f"{iid1}:{iid2}"
+                    value = (chrom, start, end, cmlen, ibd)
 
-                if cmlen >= 5.0: 
-                    if key not in segment_dict:
-                        segment_dict[key] = [value,]
-                    else:
-                        segment_dict[key] += [value,]
+                    # comment this out later
+                    if ibd == 2:
+                        ibd2_counter += 1
 
-        elif num_columns == 6: # File without segment-by-segment IBD status (without header)
-            #next(f) # REMOVED -- no header anymore
-            for line in f:
-                ls = line.split('\t')
-                if len(ls) == 11: # germline1
-                    iid1, iid2, start, end, cmlen, chrom = ls[0].split(' ')[0], ls[1].split(' ')[0], int(ls[3].split(' ')[0]), int(ls[3].split(' ')[1]), round(float(ls[6]), 2), int(ls[2])
-                else: # germline2
-                    iid1, iid2, start, end, cmlen, chrom = ls[0], ls[1], int(ls[2]), int(ls[3]), round(float(ls[4]), 2), int(ls[5].strip())
-                key = f"{iid1}:{iid2}"
-                value = (chrom, start, end, cmlen, 'NA') # no ibd1/2 data in this input
+                    if cmlen >= 5.0: 
+                        if key not in segment_dict:
+                            segment_dict[key] = [value,]
+                        else:
+                            segment_dict[key] += [value,]
 
-                if cmlen >= 5.0:
-                    if key not in segment_dict:
-                        segment_dict[key] = [value,]
-                    else:
-                        segment_dict[key] += [value,]
+            elif num_columns == 6: # File without segment-by-segment IBD status (without header)
+                #next(f) # REMOVED -- no header anymore
+                for line in f:
+                    ls = line.split('\t')
+                    if len(ls) == 11: # germline1
+                        iid1, iid2, start, end, cmlen, chrom = ls[0].split(' ')[0], ls[1].split(' ')[0], int(ls[3].split(' ')[0]), int(ls[3].split(' ')[1]), round(float(ls[6]), 2), int(ls[2])
+                    else: # germline2
+                        iid1, iid2, start, end, cmlen, chrom = ls[0], ls[1], int(ls[2]), int(ls[3]), round(float(ls[4]), 2), int(ls[5].strip())
+                    key = f"{iid1}:{iid2}"
+                    value = (chrom, start, end, cmlen, 'NA') # no ibd1/2 data in this input
 
-        else:
-            safe_print('[COMPADRE] Unrecognized segment file format. Please refer to the README (https://github.com/belowlab/compadre) for formatting guidelines.')
-            sys.exit(1)
+                    if cmlen >= 5.0:
+                        if key not in segment_dict:
+                            segment_dict[key] = [value,]
+                        else:
+                            segment_dict[key] += [value,]
 
+            else:
+                safe_print('[COMPADRE] Unrecognized segment file format. Please refer to the README (https://github.com/belowlab/compadre) for formatting guidelines.')
+                sys.exit(1)
+
+    # else, no data provided, and the socket is only being set up for running the pop classifier
 
     ####################################################################################################
     # Everything above this is done ONCE -- when COMPADRE starts -- and kept in memory for easy access when new requests are made over the socket
@@ -128,26 +131,46 @@ def main(segment_data_file, portnumber):
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    # Trying to prevent timeouts
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    server_socket.settimeout(None)
+
     server_socket.bind((socket_host, portnumber))
     server_socket.listen(1)
-    safe_print(f"COMPADRE helper socket is ready. Total IBD2 pairs: {ibd2_counter}")
+    safe_print(f"COMPADRE helper is ready.")
     sys.stdout.flush()
 
     # At this point, the script executes a while loop as a way to wait for incoming messages
 
     while True:
 
-        conn, address = server_socket.accept()
-        #safe_print(f"Connection from: {address}")
-        msg = conn.recv(1024).decode()
-        #safe_print(f"Received data: {msg}")
-        
-        if msg == 'close':
-            conn.send("Closing server".encode())
-            conn.close()
-            break
+        try: # New try except for error handling socket issues 
 
-        ms = msg.strip().split('|')
+            conn, address = server_socket.accept()
+            #safe_print(f"Connection from: {address}")
+
+            # Set timeout to None for client connections too
+            conn.settimeout(None)
+
+            msg = conn.recv(1024).decode()
+            #safe_print(f"Received data: {msg}")
+            
+            if msg == 'close':
+                conn.send("Closing server".encode())
+                conn.close()
+                break
+
+            ms = msg.strip().split('|')
+
+        except socket.error as e:
+            safe_print(f"Socket error: {e}")
+            continue
+        except Exception as e:
+            safe_print(f"Error handling client: {e}")
+            if 'conn' in locals():
+                conn.close()
+            continue
 
         ########################################################
 
@@ -163,7 +186,7 @@ def main(segment_data_file, portnumber):
             conn.close() 
 
 
-        elif ms[-1] == 'padre':
+        elif ms[-1] == 'padre': # Run PADRE
             
             # object to pass to ersa is the WHOLE dictionary
             segment_obj = json.dumps(segment_dict)
@@ -256,7 +279,7 @@ def main(segment_data_file, portnumber):
 
 if __name__ == '__main__':
 
-    # This file isn't really meant to be ran on its own, but you could instantiate the socket connection on your own by running it this way then send it messages from another script using the appropriate port
+    # This file isn't really meant to be ran in isolation, but you could instantiate the socket connection on your own by running it this way then send it messages from another script using the appropriate port
 
     # Pass segment data file and port number via positional args 
     segment_data_file = sys.argv[1]

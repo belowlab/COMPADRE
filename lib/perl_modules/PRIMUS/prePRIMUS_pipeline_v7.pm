@@ -4,8 +4,8 @@ use strict;
 use Getopt::Long qw(GetOptionsFromArray);
 use PRIMUS::IMUS qw(run_IMUS);
 use File::Path qw(make_path);
-use IO::Socket::INET; # added for socket compadre helper connection
-use IPC::Open2; # also for new compadre helper
+use IO::Socket::INET; 
+use IPC::Open2; 
 use Cwd qw(abs_path);
 use File::Find;
 use File::Basename;
@@ -13,29 +13,66 @@ use File::Basename;
 ###################################################################################
 
 # Eventual TODO: update the rest of the plink commands to plink2
-# Currently, only the PCA command ahead of Ryan's population classifier uses plink2
+# Currently, only the PCA command uses plink2
 
 ###################################################################################
 
-sub send_to_compadre_helper {
+# sub send_to_compadre_helper {
 
+#     my ($data, $port) = @_;
+#     $port //= 6000;  
+# 	my $host = $ENV{COMPADRE_HOST} // 'localhost';
+
+#     my $socket = IO::Socket::INET->new(
+#         PeerAddr => $host,
+#         PeerPort => $port,
+#         Proto    => 'tcp',
+#     ) or die "Cannot connect to Python server: $!\n";
+
+#     $socket->print($data);
+    
+#     my $response = <$socket>;
+#     if (defined $response) {
+#         chomp $response;
+#     } else {
+#         $response = "No response";
+#     }
+    
+#     close($socket);
+#     return $response;
+# }
+
+sub send_to_compadre_helper {
     my ($data, $port) = @_;
     $port //= 6000;  
-	my $host = $ENV{COMPADRE_HOST} // 'localhost';
+    my $host = $ENV{COMPADRE_HOST} // 'localhost';
 
     my $socket = IO::Socket::INET->new(
         PeerAddr => $host,
         PeerPort => $port,
         Proto    => 'tcp',
+        Timeout  => 0,  # Set to 0 for no timeout (indefinite)
     ) or die "Cannot connect to Python server: $!\n";
 
-    $socket->print($data);
+    # Enable keep-alive on the socket
+    $socket->sockopt(SO_KEEPALIVE, 1) if $socket->can('sockopt');
+    $socket->blocking(1);
+
+    my $bytes_sent = $socket->print($data);
+    if (!defined $bytes_sent) {
+        close($socket);
+        die "Failed to send data to Python server: $!\n";
+    }
     
+    $socket->flush();
+    
+    # Read response with error checking
     my $response = <$socket>;
     if (defined $response) {
         chomp $response;
     } else {
         $response = "No response";
+        warn "No response received from Python server\n";
     }
     
     close($socket);

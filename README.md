@@ -2,11 +2,7 @@
 
 COMPADRE integrates genome-wide IBD sharing estimates from [PRIMUS](https://primus.gs.washington.edu/primusweb/index.html) 
 and shared segments length and distribution data from [ERSA](https://hufflab.org/software/ersa) to improve 
-relationship estimation accuracy in family networks ahead of pedigree generation. 
-We aim to extend the number and variety of constructed pedigrees derived from populations with increased data heterogeneity.
-
-You can read more about these individual methods in the original [PRIMUS](https://compadre.dev/publications/primus.pdf) 
-and [ERSA manuscripts](https://compadre.dev/publications/ersa.pdf).
+relationship estimation accuracy in family networks ahead of pedigree generation. COMPADRE aims to extend the number and variety of constructed pedigrees derived from populations with increased data heterogeneity.
 
 
 

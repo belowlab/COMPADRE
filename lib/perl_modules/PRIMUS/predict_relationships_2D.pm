@@ -21,25 +21,62 @@ my $curr_bw;
 my $curr_kde_type;
 #my $ersa_data;
 
-sub send_to_compadre_helper {
+# sub send_to_compadre_helper {
 
+#     my ($data, $port) = @_;
+#     $port //= 6000;  
+# 	my $host = $ENV{COMPADRE_HOST} // 'localhost';
+
+#     my $socket = IO::Socket::INET->new(
+#         PeerAddr => $host,
+#         PeerPort => $port,
+#         Proto    => 'tcp',
+#     ) or die "Cannot connect to Python server: $!\n";
+
+#     $socket->print($data);
+    
+#     my $response = <$socket>;
+#     if (defined $response) {
+#         chomp $response;
+#     } else {
+#         $response = "No response";
+#     }
+    
+#     close($socket);
+#     return $response;
+# }
+
+sub send_to_compadre_helper {
     my ($data, $port) = @_;
     $port //= 6000;  
-	my $host = $ENV{COMPADRE_HOST} // 'localhost';
+    my $host = $ENV{COMPADRE_HOST} // 'localhost';
 
     my $socket = IO::Socket::INET->new(
         PeerAddr => $host,
         PeerPort => $port,
         Proto    => 'tcp',
+        Timeout  => 0,  # Set to 0 for no timeout (indefinite)
     ) or die "Cannot connect to Python server: $!\n";
 
-    $socket->print($data);
+    # Enable keep-alive on the socket
+    $socket->sockopt(SO_KEEPALIVE, 1) if $socket->can('sockopt');
+    $socket->blocking(1);
+
+    my $bytes_sent = $socket->print($data);
+    if (!defined $bytes_sent) {
+        close($socket);
+        die "Failed to send data to Python server: $!\n";
+    }
     
+    $socket->flush();
+    
+    # Read response with error checking
     my $response = <$socket>;
     if (defined $response) {
         chomp $response;
     } else {
         $response = "No response";
+        warn "No response received from Python server\n";
     }
     
     close($socket);

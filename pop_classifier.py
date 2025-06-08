@@ -290,6 +290,8 @@ def run_new(pca_file, pop_file, verbose=False, linear=False):
     # Get prePRIMUS output directory to save figures 
     pca_file_bits = pca_file.split('/')[:-1]
     outpath = '/'.join(pca_file_bits)
+    if verbose == True:
+        print(f'Output folder: {outpath}')
 
     # Check if file has a header line (plink2 PCA output includes header, plink1.9 does not)
     # There's probably a more robust way to do this but for now it's fine
@@ -525,27 +527,10 @@ def run_new(pca_file, pop_file, verbose=False, linear=False):
 
 if __name__ == '__main__':
 
-    #pca_file, pop_file = sys.argv[1], sys.argv[2]
+    # JT's data
 
-    #pca_file_hm3 = '/data100t1/home/grahame/projects/compadre/unified-simulations/analysis-output/simulations_v3/EUR/uniform3_size20_sim100/uniform3_size20_sim100/primus/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
+    test1 = '/data100t1/share/BioVU/agd_163k/ibd/psuedo_mega_set/primus_v2/primus_output_05/agd163k_merged_common_variants_with_rsids_prePRIMUS/agd163k_merged_common_variants_with_rsids_noDups_autosomal_merged.eigenvec'
 
-    #pca_file_1kg = '/data100t1/home/grahame/projects/compadre/unified-simulations/analysis-output/simulations_v3/EUR/uniform3_size20_sim100/uniform3_size20_sim100/1kg_test/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
+    test2 = '/belowshare/vumcshare/data100t1/home/grahame/projects/compadre/old/compadre-test/lib/1KG/1KG_pop_classifier_ids.txt'
 
-    #pop_file = '/data100t1/home/grahame/projects/compadre/primus-ersa-v2/lib/1KG/1kg_phase3.id.txt'
-
-    ############################
-
-    #test1 = '/data100t1/home/grahame/projects/compadre/compadre-test/testing/full3/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
-
-    # AMR before and after LD pruning
-
-    #test1 = '/data100t1/home/grahame/projects/compadre/compadre-test/testing/amr_full1/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
-
-    test1 = '/data100t1/home/grahame/projects/compadre/compadre-test/testing/amr_full3/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
-
-    # LD update 50 0.5 1
-    test1 = '/data100t1/home/grahame/projects/compadre/compadre-test/testing/full1_newfolder2_LD/uniform3_size20_sim100_prePRIMUS/uniform3_size20_sim100_noDups_autosomal_merged.eigenvec'
-
-    test2 = '/belowshare/vumcshare/data100t1/home/grahame/projects/compadre/compadre-test/lib/1KG/1KG_pop_classifier_ids.txt'
-
-    run_new(test1, test2, verbose=True, linear=False)
+    run_new(test1, test2)
