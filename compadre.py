@@ -81,9 +81,12 @@ def main(segment_data_file, portnumber):
             header_line = f.readline().strip()
             num_columns = len(header_line.split())
 
-            if num_columns == 7: # File with segment-by-segment IBD status in 7th column (with header)
+            if num_columns == 7: # File with segment-by-segment IBD status in 7th column 
                 ibd2_status = 'true'
-                next(f) # skip header line in this file version
+
+                if 'chrom' in header_line: #skip header if it exists
+                    next(f) # skip header line in this file version
+
                 for line in f:
                     ls = line.strip().split('\t')
                     iid1, iid2, start, end, cmlen, chrom, ibd = ls[0], ls[1], int(ls[2]), int(ls[3]), round(float(ls[4]), 2), int(ls[5]), int(ls[6].strip())
@@ -100,8 +103,11 @@ def main(segment_data_file, portnumber):
                         else:
                             segment_dict[key] += [value,]
 
-            elif num_columns == 6: # File without segment-by-segment IBD status (without header)
-                #next(f) # REMOVED -- no header anymore
+            elif num_columns == 6: # File without segment-by-segment IBD status 
+                
+                if 'chrom' in header_line: #skip header if it exists
+                    next(f)
+
                 for line in f:
                     ls = line.split('\t')
                     if len(ls) == 11: # germline1

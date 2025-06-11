@@ -30,20 +30,25 @@ WORKDIR /usr/src
 
 COPY . .
 
-# symbolic link to 'old' plink that primus is expecting
+# symbolic link to 'old' plink 
 RUN ln -s /bin/plink1.9 /bin/plink
 
-# Install python packages 
+# Install python packages via pip
 RUN pip3 install -r requirements.txt
 
-# For some reason this has to be installed via conda, pip install doesn't work
+# Install scikit-learn via conda 
 RUN conda install scikit-learn
 
 ## IN PROGRESS: install reference data from github releases URL 
-RUN wget https://github.com/belowlab/compadre/releases/download/pre-release-0.2.0/compadre_data.zip && unzip compadre_data.zip && rm compadre_data.zip
+RUN wget https://github.com/belowlab/compadre/releases/download/pre-release-0.2.0/compadre_data.zip && \
+    unzip compadre_data.zip && \
+    rm compadre_data.zip
 
 ## after downloading, move things according accordingly 
-RUN mv compadre_data/1KG /usr/src/lib && mv compadre_data/hapmap3 /usr/src/lib && mv compadre_data/KDE_data /usr/src/lib && mv compadre_data/example_data .
+RUN mv compadre_data/1KG /usr/src/lib && \
+    mv compadre_data/hapmap3 /usr/src/lib && \
+    mv compadre_data/KDE_data /usr/src/lib && \
+    mv compadre_data/example_data .
 
 # clean up unzipped empty folders
 RUN rm -r __MACOSX && rm -r compadre_data
