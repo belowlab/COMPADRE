@@ -37,7 +37,7 @@ sub run_PRIMUS_plus_ERSA_project_summary
 
 	my %relatedness_network;
 
-	system("mkdir $output_dir") if !-d $output_dir;
+	system("mkdir -m 755 $output_dir") if !-d $output_dir;
 
 	## Update the min degree to consider based on what degree was used to reconstruct
 	$min_degree_to_consider = $max_degree_relationship_used_to_reconstruct_pedigrees+1 if $max_degree_relationship_used_to_reconstruct_pedigrees ne "";

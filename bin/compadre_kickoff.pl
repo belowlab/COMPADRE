@@ -104,6 +104,7 @@ my $keep_prePRIMUS_intermediate_files = 1;
 my $no_PCA_plot = 0;
 my @ref_pops;
 my $rerun = 0;
+my $min_pihat_threshold = 0.1;
 
 ## PADRE variables
 my $run_PRIMUS_plus_ERSA = 0;
@@ -205,7 +206,7 @@ sub run_prePRIMUS
 	my $preprimus_dir = "$output_dir/$study_name\_prePRIMUS";
 	make_path($preprimus_dir, { mode => 0755 }) if !-d $preprimus_dir;
 	
-	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y);
+	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y, "--min_pihat_threshold", $min_pihat_threshold);
 
 	## Run the PLINK IBD pipeline
 	my ($temp_genome_file,$temp_sex_file,$temp_mt_match_file,$temp_y_match_file) = PRIMUS::prePRIMUS_pipeline_v7::run_prePRIMUS_main(@IBD_commands);
@@ -645,6 +646,7 @@ sub apply_options {
 		"keep_inter_files" => \$keep_prePRIMUS_intermediate_files,
 		"no_PCA_plot" => \$no_PCA_plot,
 		"rerun" => \$rerun,
+		"min_pihat_threshold=f" => \$min_pihat_threshold,
 		"ref_pops=s" => sub 
 		{
 			@ref_pops = split(/,/,@_[1]);
@@ -1114,6 +1116,7 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --internal_ref	Use the dataset provided in --file to get reference allele frequencies
    --alt_ref_stem	Path to PLINK formatted data (no file extensions) used for allele frequencies
    --keep_inter_files	Keep intermediate files used to create the IBD estimates with prePRIMUS
+   --min_pihat_threshold set a minimum pi-hat threshold that will be used in the plink --genome calculation
 
  Identification of maximum unrelated set options:
    --no_IMUS		Don't identify a maximum unrelated set (runs IMUS by default)
