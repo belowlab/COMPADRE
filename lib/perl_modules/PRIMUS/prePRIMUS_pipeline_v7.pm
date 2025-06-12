@@ -1318,7 +1318,7 @@ sub run_pca
 
 	# added --extract flag from LD pruning
 	#my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
-    my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --memory 500000 --maf $MAF --geno $GENO --out $stem_name");
+    my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --maf $MAF --geno $GENO --out $stem_name");
 
 
 	if($temp > 0)
@@ -1343,7 +1343,7 @@ sub get_unrelateds
 	print "\nGet Unrelated set for $stem_name => $new_stem_name\n" if $verbose > 0;
 	print $LOG "\nGet Unrelated set for $stem_name => $new_stem_name\n" if $verbose > 0;
 
-    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --maf $MAF --geno $GENO --thin-count 10000 --rel-cutoff 0.09375 --memory 600000 --mind --out $stem_name");
+    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --maf $MAF --geno $GENO --thin-count 10000 --rel-cutoff 0.09375 --mind --out $stem_name");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK's rel-cutoff failed.\n";
@@ -1605,9 +1605,9 @@ sub keep_samples
 	print $LOG "\nKeep $samples_to_keep samples from $stem_name => $new_stem_name\n" if $verbose > 1;
 
 	## Make an unrelated version of the data
-	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --keep $samples_to_keep --memory 600000 --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --keep $samples_to_keep --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
 	if($temp > 0){die "ERROR!!! PLINK failed to do --keep; check log file: $new_stem_name.log\n";}
-	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --mind $MIND --memory 600000 --bfile $new_stem_name --make-bed $plink_silent --out $new_stem_name");
+	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --mind $MIND --bfile $new_stem_name --make-bed $plink_silent --out $new_stem_name");
 	if($temp > 0){die "ERROR!!! PLINK failed to do --keep; check log file: $new_stem_name.log\n";}
 	return $new_stem_name;
 }
@@ -1657,7 +1657,7 @@ sub remove_SNPs
 	close OUT;
 
 	## Run plink to generate the no_dups version of stem_file
-	system("$PLINK --allow-no-sex --memory 600000 --noweb --bfile $stem_name --extract $stem_name.SNPs_to_keep.txt --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+	system("$PLINK --allow-no-sex --noweb --bfile $stem_name --extract $stem_name.SNPs_to_keep.txt --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
 	system("rm $stem_name.SNPs_to_keep.txt") if $test == 0;
 	return ($new_stem_name);
 }
