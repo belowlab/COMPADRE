@@ -11,8 +11,16 @@ from pop_classifier import run_new as run_pop_classifier
 
 ########################################
 
+# def signal_handler(signum, frame):
+#     sys.exit(0)
+
 def signal_handler(signum, frame):
-    sys.exit(0)
+    try:
+        if 'server_socket' in globals():
+            server_socket.close()
+    except:
+        pass
+    os._exit(0)
 
 def safe_print(*args, **kwargs):
     try:
@@ -68,7 +76,13 @@ def calculate_ersa_props(model_df):
 
 def main(segment_data_file, portnumber):
 
-    signal.signal(signal.SIGPIPE, signal_handler)
+    #signal.signal(signal.SIGPIPE, signal_handler)
+
+    signal.signal(signal.SIGINT, signal_handler)   # CTRL+C
+    signal.signal(signal.SIGTERM, signal_handler)  # Termination
+    signal.signal(signal.SIGPIPE, signal_handler)  # Broken pipe
+    global server_socket
+
     segment_dict = {}
     ibd2_status = 'false'
     ibd2_counter = 0
@@ -137,151 +151,166 @@ def main(segment_data_file, portnumber):
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    # Trying to prevent timeouts
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
     server_socket.settimeout(None)
 
-    server_socket.bind((socket_host, portnumber))
-    server_socket.listen(1)
-    safe_print(f"COMPADRE helper is ready.")
-    sys.stdout.flush()
+    try:
+        server_socket.bind((socket_host, portnumber))
+        server_socket.listen(1)
+        safe_print(f"COMPADRE helper is ready.")
+        sys.stdout.flush()
 
-    # At this point, the script executes a while loop as a way to wait for incoming messages
+        # At this point, the script executes a while loop as a way to wait for incoming messages
 
-    while True:
+        while True:
 
-        try: # New try except for error handling socket issues 
+            try: # New try except for error handling socket issues 
 
-            conn, address = server_socket.accept()
-            #safe_print(f"Connection from: {address}")
+                conn, address = server_socket.accept()
+                #safe_print(f"Connection from: {address}")
 
-            # Set timeout to None for client connections too
-            conn.settimeout(None)
+                # Set timeout to None for client connections too
+                conn.settimeout(None)
 
-            msg = conn.recv(1024).decode()
-            #safe_print(f"Received data: {msg}")
-            
-            if msg == 'close':
-                conn.send("Closing server".encode())
-                conn.close()
-                break
+                msg = conn.recv(1024).decode()
+                #safe_print(f"Received data: {msg}")
+                
+                if msg == 'close':
+                    conn.send("Closing server".encode())
+                    conn.close()
+                    break
 
-            ms = msg.strip().split('|')
+                ms = msg.strip().split('|')
 
-        except socket.error as e:
-            safe_print(f"Socket error: {e}")
-            continue
-        except Exception as e:
-            safe_print(f"Error handling client: {e}")
-            if 'conn' in locals():
-                conn.close()
-            continue
+        # except socket.error as e:
+        #     safe_print(f"Socket error: {e}")
+        #     continue
+        # except Exception as e:
+        #     safe_print(f"Error handling client: {e}")
+        #     if 'conn' in locals():
+        #         conn.close()
+        #     continue
 
-        ########################################################
+                ########################################################
 
-        if ms[-1] == 'pop_classifier': # Run population classifier script and return success message
+                if ms[-1] == 'pop_classifier': # Run population classifier script and return success message
 
-            eigenvec_file = ms[0]
-            pop_file = ms[1]
+                    eigenvec_file = ms[0]
+                    pop_file = ms[1]
 
-            predictions = run_pop_classifier(eigenvec_file, pop_file)
-            predictions = "|".join(str(x) for x in predictions)
+                    predictions = run_pop_classifier(eigenvec_file, pop_file)
+                    predictions = "|".join(str(x) for x in predictions)
 
-            conn.send(predictions.encode())
-            conn.close() 
-
-
-        elif ms[-1] == 'padre': # Run PADRE
-            
-            # object to pass to ersa is the WHOLE dictionary
-            segment_obj = json.dumps(segment_dict)
-
-            # make output directory
-            ersa_dir = segment_data_file.split('/')[:-1]
-            ersa_dir = '/'.join(ersa_dir) + '/ersa'
-            if not os.path.exists(ersa_dir):
-                os.makedirs(ersa_dir, exist_ok=True)
-            ersa_outfile = f'{ersa_dir}/output_all_ersa'
-            
-            ersa_options = {
-                "segment_dict": segment_obj,
-                "segment_files": segment_data_file,
-                "model_output_file": f"{ersa_outfile}.model",
-                "output_file": f"{ersa_outfile}.out",
-                "return_output": False,
-                "write_output": True
-            }
-            ersa.runner(ersa_options)
-
-            conn.send(ersa_outfile.encode())
-            conn.close()
+                    conn.send(predictions.encode())
+                    conn.close() 
 
 
-        else: # "Pairwise" normal behavior
+                elif ms[-1] == 'padre': # Run PADRE
+                    
+                    # object to pass to ersa is the WHOLE dictionary
+                    segment_obj = json.dumps(segment_dict)
 
-            id1, id2, vector_str, analysis_type = ms
+                    # make output directory
+                    ersa_dir = segment_data_file.split('/')[:-1]
+                    ersa_dir = '/'.join(ersa_dir) + '/ersa'
+                    if not os.path.exists(ersa_dir):
+                        os.makedirs(ersa_dir, exist_ok=True)
+                    ersa_outfile = f'{ersa_dir}/output_all_ersa'
+                    
+                    ersa_options = {
+                        "segment_dict": segment_obj,
+                        "segment_files": segment_data_file,
+                        "model_output_file": f"{ersa_outfile}.model",
+                        "output_file": f"{ersa_outfile}.out",
+                        "return_output": False,
+                        "write_output": True
+                    }
+                    ersa.runner(ersa_options)
 
-            id1_temp = id1.split('_')[-1] # just in case
-            id2_temp = id2.split('_')[-1]
-            
-            idcombo = f"{id1_temp}:{id2_temp}"
-            idcombo2 = f"{id2_temp}:{id1_temp}"
+                    conn.send(ersa_outfile.encode())
+                    conn.close()
 
-            if idcombo not in segment_dict and idcombo2 not in segment_dict: # No segments with either id combo permutation
-                result = '0,0,0,0,0,1' 
-            
-            else:
 
-                if idcombo in segment_dict:
-                    key = idcombo
-                    segment_obj = {key : segment_dict[key]} 
-                    segment_obj = json.dumps(segment_obj)
+                else: # "Pairwise" normal behavior
 
-                else:
-                    key = idcombo2
-                    segment_obj = {key : segment_dict[key]} 
-                    segment_obj = json.dumps(segment_obj)
+                    id1, id2, vector_str, analysis_type = ms
 
-                ersa_dir = segment_data_file.split('/')[:-1]
-                ersa_dir = '/'.join(ersa_dir) + '/ersa'
-                if not os.path.exists(ersa_dir):
-                    os.makedirs(ersa_dir, exist_ok=True)
-                ersa_outfile = f'{ersa_dir}/output_new_{id1_temp}_{id2_temp}'
+                    id1_temp = id1.split('_')[-1] # just in case
+                    id2_temp = id2.split('_')[-1]
+                    
+                    idcombo = f"{id1_temp}:{id2_temp}"
+                    idcombo2 = f"{id2_temp}:{id1_temp}"
 
-                ersa_options = {
-                    "single_pair": key,
-                    "segment_dict": segment_obj,
-                    "segment_files": segment_data_file,
-                    "model_output_file": f"{ersa_outfile}.model",
-                    "output_file": f"{ersa_outfile}.out",
-                    "return_output": True,
-                    "write_output": False
-                }
-                output_model_df = ersa.runner(ersa_options) # run ersa function mode 
-
-                if output_model_df.empty: 
-                    result = '0,0,0,0,0,1' 
-
-                else:
-
-                    if output_model_df['maxlnl'].isna().all():
-                        result = '0,0,0,0,0,1'
+                    if idcombo not in segment_dict and idcombo2 not in segment_dict: # No segments with either id combo permutation
+                        result = '0,0,0,0,0,1' 
                     
                     else:
-                        ersa_props = calculate_ersa_props(output_model_df)
-                        vector_arr = [float(x) for x in vector_str.split(',')]
-                        prop02 = 1 - (vector_arr[0] + vector_arr[1])
-                        ersa_props_updated = tuple(x * prop02 for x in ersa_props) 
-                        updated_vector = f'{vector_arr[0]},{vector_arr[1]},{ersa_props_updated[0]},{ersa_props_updated[1]},{ersa_props_updated[2]},{ersa_props_updated[3]}'
-                        result = updated_vector
+
+                        if idcombo in segment_dict:
+                            key = idcombo
+                            segment_obj = {key : segment_dict[key]} 
+                            segment_obj = json.dumps(segment_obj)
+
+                        else:
+                            key = idcombo2
+                            segment_obj = {key : segment_dict[key]} 
+                            segment_obj = json.dumps(segment_obj)
+
+                        ersa_dir = segment_data_file.split('/')[:-1]
+                        ersa_dir = '/'.join(ersa_dir) + '/ersa'
+                        if not os.path.exists(ersa_dir):
+                            os.makedirs(ersa_dir, exist_ok=True)
+                        ersa_outfile = f'{ersa_dir}/output_new_{id1_temp}_{id2_temp}'
+
+                        ersa_options = {
+                            "single_pair": key,
+                            "segment_dict": segment_obj,
+                            "segment_files": segment_data_file,
+                            "model_output_file": f"{ersa_outfile}.model",
+                            "output_file": f"{ersa_outfile}.out",
+                            "return_output": True,
+                            "write_output": False
+                        }
+                        output_model_df = ersa.runner(ersa_options) # run ersa function mode 
+
+                        if output_model_df.empty: 
+                            result = '0,0,0,0,0,1' 
+
+                        else:
+
+                            if output_model_df['maxlnl'].isna().all():
+                                result = '0,0,0,0,0,1'
+                            
+                            else:
+                                ersa_props = calculate_ersa_props(output_model_df)
+                                vector_arr = [float(x) for x in vector_str.split(',')]
+                                prop02 = 1 - (vector_arr[0] + vector_arr[1])
+                                ersa_props_updated = tuple(x * prop02 for x in ersa_props) 
+                                updated_vector = f'{vector_arr[0]},{vector_arr[1]},{ersa_props_updated[0]},{ersa_props_updated[1]},{ersa_props_updated[2]},{ersa_props_updated[3]}'
+                                result = updated_vector
 
 
-            # send whatever 'result' is at the end of this logic back to Perl
-            conn.send(result.encode())
-            conn.close()
+                    # send whatever 'result' is at the end of this logic back to Perl
+                    conn.send(result.encode())
+                    conn.close()
+
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                safe_print(f"Error: {e}")
+                continue
 
     #large_file.close()
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            server_socket.close()
+        except:
+            pass
+        safe_print("COMPADRE helper shutdown complete.")
+
 
 if __name__ == '__main__':
 

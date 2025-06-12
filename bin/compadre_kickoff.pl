@@ -71,40 +71,55 @@ my $LOG;
 
 # Store PID globally for signal handlers
 our $compadre_pid;
+our $cleanup_called = 0; 
 
-# Signal handler for cleanup
 sub cleanup_compadre {
     my $sig = shift;
+    
+    # Prevent multiple cleanup calls
+    return if $cleanup_called;
+    $cleanup_called = 1;
+    
     print "\nReceived signal $sig, cleaning up COMPADRE helper...\n" if $verbose > 0;
     
     if (defined $compadre_pid) {
-        eval {
-            my $shutdown_ack = send_to_compadre_helper("close", $port_number);
-            print "COMPADRE graceful shutdown: $shutdown_ack\n" if $verbose > 0;
-        };
-        
-        sleep(1);
-        
-        # Force kill if still running
-        if (kill(0, $compadre_pid)) {
-            print "Force terminating COMPADRE helper (PID: $compadre_pid)\n" if $verbose > 0;
-            kill('TERM', $compadre_pid);
-            sleep(2);
-            
-            # Nuclear option if TERM didn't work
+        # Skip graceful shutdown for forced termination - just kill it
+        if ($sig eq 'INT' || $sig eq 'TERM' || $sig eq 'QUIT') {
             if (kill(0, $compadre_pid)) {
-                kill('KILL', $compadre_pid);
-                print "COMPADRE helper force killed\n" if $verbose > 0;
+                print "Force terminating COMPADRE helper (PID: $compadre_pid)\n" if $verbose > 0;
+                kill('KILL', $compadre_pid);  # Use KILL immediately for forced shutdown
+                sleep(1);
+            }
+        } else {
+            # For normal END cleanup, try graceful first
+            eval {
+                my $shutdown_ack = send_to_compadre_helper("close", $port_number);
+                print "COMPADRE graceful shutdown: $shutdown_ack\n" if $verbose > 0;
+            };
+            
+            sleep(1);
+            
+            if (kill(0, $compadre_pid)) {
+                print "Force terminating COMPADRE helper (PID: $compadre_pid)\n" if $verbose > 0;
+                kill('TERM', $compadre_pid);
+                sleep(1);
+                kill('KILL', $compadre_pid) if kill(0, $compadre_pid);
             }
         }
     }
-    exit(0);
+    
+    exit(0) unless $sig eq 'END';
 }
 
 # Set up signal handlers
 $SIG{INT}  = \&cleanup_compadre;  # CTRL+C
 $SIG{TERM} = \&cleanup_compadre;  # Termination
 $SIG{QUIT} = \&cleanup_compadre;  # CTRL+\
+
+END {
+    # This runs when the script exits for any reason
+    cleanup_compadre('END') if defined $compadre_pid;
+}
 
 #######################################################################################
 
@@ -533,6 +548,8 @@ sub print_files_and_settings
 		die "Failed to launch COMPADRE helper: $!\n";
 	}
 
+	$compadre_pid = $pid;
+
 	# Wait for the server to be ready
 	while (my $line = <$reader>) {
 		if ($line =~ /COMPADRE helper is ready/) {
@@ -913,7 +930,7 @@ sub apply_options {
 		}
 		$study_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($data_stem);
 		$output_dir = "$data_stem\_PRIMUS" if $output_dir eq ""; 
-		print "out_dir: $output_dir\n" if $verbose > 0;
+		#print "out_dir: $output_dir\n" if $verbose > 0;
 	}
 	
 	## Set output directory if not passed in
