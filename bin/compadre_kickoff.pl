@@ -69,6 +69,45 @@ my $reference_pop = "";
 my $log_file;
 my $LOG;
 
+# Store PID globally for signal handlers
+our $compadre_pid;
+
+# Signal handler for cleanup
+sub cleanup_compadre {
+    my $sig = shift;
+    print "\nReceived signal $sig, cleaning up COMPADRE helper...\n" if $verbose > 0;
+    
+    if (defined $compadre_pid) {
+        eval {
+            my $shutdown_ack = send_to_compadre_helper("close", $port_number);
+            print "COMPADRE graceful shutdown: $shutdown_ack\n" if $verbose > 0;
+        };
+        
+        sleep(1);
+        
+        # Force kill if still running
+        if (kill(0, $compadre_pid)) {
+            print "Force terminating COMPADRE helper (PID: $compadre_pid)\n" if $verbose > 0;
+            kill('TERM', $compadre_pid);
+            sleep(2);
+            
+            # Nuclear option if TERM didn't work
+            if (kill(0, $compadre_pid)) {
+                kill('KILL', $compadre_pid);
+                print "COMPADRE helper force killed\n" if $verbose > 0;
+            }
+        }
+    }
+    exit(0);
+}
+
+# Set up signal handlers
+$SIG{INT}  = \&cleanup_compadre;  # CTRL+C
+$SIG{TERM} = \&cleanup_compadre;  # Termination
+$SIG{QUIT} = \&cleanup_compadre;  # CTRL+\
+
+#######################################################################################
+
 ## PRIMUS variable
 my %sexes = ("FID",1,"IID",2,"SEX",3,"MALE",1,"FEMALE",2);
 my %affections = ("FID",1,"IID",2,"AFFECTION",3,"AFFECTION_VALUE",2);
@@ -77,6 +116,7 @@ my %traits;
 my @trait_order;
 my $relatedness_threshold = .09375; ## Values is halfway between the expected mean pi_hat for 3rd degree and 4th degree
 my $degree_rel_cutoff = 3;
+my $max_memory = 0;
 my $initial_likelihood_cutoff = 0.3; ## Arbitrary cutoff for the relationship likelihood vectors
 my $max_generations = "none"; ## The maximum number of generations in a pedigree allowed during reconstruction
 my $max_generation_gap = 0; ## What is maximum different in generations that 2 people can mate
@@ -205,7 +245,7 @@ sub run_prePRIMUS
 	my $preprimus_dir = "$output_dir/$study_name\_prePRIMUS";
 	make_path($preprimus_dir, { mode => 0755 }) if !-d $preprimus_dir;
 	
-	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y);
+	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y,"--max_memory",$max_memory);
 
 	## Run the PLINK IBD pipeline
 	my ($temp_genome_file,$temp_sex_file,$temp_mt_match_file,$temp_y_match_file) = PRIMUS::prePRIMUS_pipeline_v7::run_prePRIMUS_main(@IBD_commands);
@@ -623,6 +663,7 @@ sub apply_options {
 		"run_padre" => \$run_padre,
 		"rel_threshold|threshold|t=f" => \$relatedness_threshold, 
 		"degree_rel_cutoff|d=i" => \$degree_rel_cutoff,
+		"max_memory|m=i" => \$max_memory,
 		"max_gens=i" => \$max_generations,
 		"max_gen_gap=i" => \$max_generation_gap,
 		"int_likelihood_cutoff=f" => \$initial_likelihood_cutoff,

@@ -119,6 +119,7 @@ my $MIN_SAMPLES_WITHOUT_REF = 50;
 my $THRESHOLD = .1;
 my $EXCLUDE_VALUE = 0;
 
+my $memory_flag = "";
 
 ## Maybe make this local and pass them around
 my $INDIVIDUAL_ANCESTRY = 0;
@@ -188,6 +189,7 @@ sub run_prePRIMUS_main {
 	my $no_PCA_plot = 0;
 	my $IBD0_vs_IBD1_plot;
 	my $keep_intermediate_files = 1;
+	my $max_memory = 0;
 
 	GetOptionsFromArray(
 		\@_,
@@ -224,11 +226,19 @@ sub run_prePRIMUS_main {
 		"Y_error_rate=f" => \$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,
 		"no_mito=i" => \$NO_MITO,
 		"no_y=i" => \$NO_Y,
+		"max_memory=i" => \$max_memory,
 
 		# IMUS Settings
 		"rel_threshold=f" => \$THRESHOLD, 
 
 	) or die "Failed to parse options for Pedigree Reconstruction\n";
+
+	# Build PLINK --memory flag string if max_memory is greater than 0
+	if ($max_memory > 0) {
+		$memory_flag = "--memory $max_memory";
+	} else {
+		$memory_flag = "";
+	}
 	
 	
 	#### Check/set inputs
@@ -428,7 +438,7 @@ sub get_MT_estimates
 	print "\nCalculating MT estimates from $data_stem => $new_stem.txt\n" if $verbose > 0;
 	print $LOG "\nCalculating MT estimates from $data_stem => $new_stem.txt\n" if $verbose > 0;
 	
-	my $temp = system("$PLINK --noweb --bfile $data_stem --recode --mind 0.1 --geno 0.1 --chr 26 $plink_silent --out $data_stem\_chr26");
+	my $temp = system("$PLINK --noweb --bfile $data_stem --recode --mind 0.1 --geno 0.1 --chr 26 $plink_silent --out $data_stem\_chr26 $memory_flag");
 	$intermediate_files{"$data_stem\_chr26"} = 5;
 
 	return "" if !-e "$data_stem\_chr26.ped";
@@ -474,13 +484,13 @@ sub get_Y_estimates
 	
 	## NEED TO REMOVE SNPs UP TO 2.65M BP, BECAUSE THAT IS THE PSEUDOAUTOSOMAL REGION
 	#my $temp = system("$PLINK --noweb --bfile $data_stem --recode --mind 0.05 --geno 0.05 --chr 24 --from-bp 2650000 --to-bp 60000000 $plink_silent --out $data_stem\_chr24");
-	my $temp = system("$PLINK --noweb --bfile $data_stem --recode --mind 0.05 --chr 24 --from-bp 2650000 --to-bp 60000000 $plink_silent --out $data_stem\_chr24");
+	my $temp = system("$PLINK --noweb --bfile $data_stem --recode --mind 0.05 --chr 24 --from-bp 2650000 --to-bp 60000000 $plink_silent --out $data_stem\_chr24 $memory_flag");
 	$intermediate_files{"$data_stem\_chr24"} = 5;
 	return "" if !-e "$data_stem\_chr24.ped";
 
 	system("perl -pi -e 's/^24/22/g' $data_stem\_chr24.map");
 
-	my $temp = system("$PLINK --noweb --file $data_stem\_chr24 --recode --geno 0.05 $plink_silent --out $data_stem\_chr24");
+	my $temp = system("$PLINK --noweb --file $data_stem\_chr24 --recode --geno 0.05 $plink_silent --out $data_stem\_chr2 $memory_flag");
 	
 	system("perl -pi -e 's/^22/24/g' $data_stem\_chr24.map");
 
@@ -605,7 +615,7 @@ sub remove_homozygous_SNPs
 	print "\nRemoving homozugous SNPs from $data_stem => $new_stem\n" if $verbose > 0;
 	print $LOG "\nRemoving homozugous SNPs from $data_stem => $new_stem\n" if $verbose > 0;
 
-	my $temp = system("$PLINK --noweb --bfile $new_stem --maf 0.001 --make-bed --indiv-sort 0 $plink_silent --out $new_stem");
+	my $temp = system("$PLINK --noweb --bfile $new_stem --maf 0.001 --make-bed --indiv-sort 0 $plink_silent --out $new_stem $memory_flag");
 	$intermediate_files{"$new_stem.bed"} = 5;
 	$intermediate_files{"$new_stem.bim"} = 5;
 	$intermediate_files{"$new_stem.fam"} = 5;
@@ -815,11 +825,11 @@ sub merge {
 	my($flipped_stem,$flipped_SNP_arr_ref,$remove_SNP_arr_ref) = flip($data_stem,$ref_stem);
 	
 	## Merge the $data_stem and $ref_stem
-	my $temp = system("$PLINK --allow-no-sex --noweb --bfile $flipped_stem --bmerge $ref_stem --extract $flipped_stem.bim --geno $GENO --maf $MAF --make-bed --indiv-sort 0 $plink_silent --out $new_stem");
+	my $temp = system("$PLINK --allow-no-sex --noweb --bfile $flipped_stem --bmerge $ref_stem --extract $flipped_stem.bim --geno $GENO --maf $MAF --make-bed --indiv-sort 0 $plink_silent --out $new_stem $memory_flag");
 	if($temp > 0){die "ERROR!!! Plink failed to merge ped files; Check $new_stem.log\n";}
 	
 	## Finish selecting the intersection of SNPs between the two
-	my $temp = system("$PLINK --allow-no-sex --noweb --bfile $new_stem --extract $ref_stem.bim --make-bed --indiv-sort 0 $plink_silent --out $new_stem");
+	my $temp = system("$PLINK --allow-no-sex --noweb --bfile $new_stem --extract $ref_stem.bim --make-bed --indiv-sort 0 $plink_silent --out $new_stem $memory_flag");
 	$intermediate_files{"$new_stem.bed"} = 10;
 	$intermediate_files{"$new_stem.bim"} = 10;
 	$intermediate_files{"$new_stem.fam"} = 10;
@@ -1017,7 +1027,7 @@ sub flip_SNPs
 	$intermediate_files{$flip_file} = 10;
 
 	## Run plink to flip the strands of SNPs in $file_ped
-	my $temp = system("$PLINK --allow-no-sex --noweb --bfile $data_stem --flip $flip_file --make-bed $plink_silent --indiv-sort 0 --out $new_stem");
+	my $temp = system("$PLINK --allow-no-sex --noweb --bfile $data_stem --flip $flip_file --make-bed $plink_silent --indiv-sort 0 --out $new_stem $memory_flag");
 	$intermediate_files{"$new_stem.bed"} = 5;
 	$intermediate_files{"$new_stem.bim"} = 5;
 	$intermediate_files{"$new_stem.fam"} = 5;
@@ -1031,7 +1041,7 @@ sub call_callrate
 	print "\nCalling callrate for $stem_name\n" if $verbose > 0;
 	print $LOG "\nCalling callrate for $stem_name\n" if $verbose > 0;
 	make_binary_version($stem_name);
-	system("$PLINK --allow-no-sex --noweb --bfile $stem_name --maf $MAF --geno $GENO --missing $plink_silent --out $stem_name");
+	system("$PLINK --allow-no-sex --noweb --bfile $stem_name --maf $MAF --geno $GENO --missing $plink_silent --out $stem_name $memory_flag");
 	$intermediate_files{"$stem_name.log"} = 1;
 	return "$stem_name.imiss";
 }
@@ -1043,7 +1053,7 @@ sub call_het
 	print "\nCalling het rate for $data_stem\n" if $verbose > 0;
 	print $LOG "\nCalling het rate for $data_stem\n" if $verbose > 0;
 	make_binary_version($data_stem);
-	system("$PLINK --noweb --bfile $data_stem --maf $MAF --geno $GENO --read-freq $ref_freq_file --het $plink_silent --out $data_stem");
+	system("$PLINK --noweb --bfile $data_stem --maf $MAF --geno $GENO --read-freq $ref_freq_file --het $plink_silent --out $data_stem $memory_flag");
 	$intermediate_files{"$data_stem.log"} = 1;
 	return "$data_stem.het";
 }
@@ -1055,7 +1065,7 @@ sub call_sex
 	print "\nCalling sex for $data_stem\n" if $verbose > 0;
 	print $LOG "\nCalling sex for $data_stem\n" if $verbose > 0;
 	make_binary_version($data_stem);
-	system("$PLINK --noweb --bfile $data_stem --mind $MIND --maf $MAF --geno $GENO --read-freq $ref_freq_file --check-sex $plink_silent --out $data_stem");
+	system("$PLINK --noweb --bfile $data_stem --mind $MIND --maf $MAF --geno $GENO --read-freq $ref_freq_file --check-sex $plink_silent --out $data_stem $memory_flag");
 	$intermediate_files{"$data_stem.log"} = 1;
 	return "$data_stem.sexcheck";
 }
@@ -1066,7 +1076,7 @@ sub get_allele_freqs
 	print "\nGetting allele frequencies for $stem_name\n" if $verbose > 0;
 	print $LOG "\nGetting allele frequencies for $stem_name\n" if $verbose > 0;
 	make_binary_version($stem_name);
-	system("$PLINK --noweb --bfile $stem_name --nonfounders --freq $plink_silent --out $stem_name");
+	system("$PLINK --noweb --bfile $stem_name --nonfounders --freq $plink_silent --out $stem_name $memory_flag");
 	$intermediate_files{"$stem_name.frq"} = 10;
 	$intermediate_files{"$stem_name.log"} = 1;
 	return "$stem_name.frq";
@@ -1114,10 +1124,10 @@ sub get_AIMs
 	$intermediate_files{"$eigenvec_file\_temp"} = 1;
 
 	## Run Association test for eavh PCV
-	system("$PLINK --noweb --bfile $stem_name --pheno $eigenvec_file\_temp --allow-no-sex --mpheno 1 --assoc $plink_silent --out $stem_name\_PCV1");
+	system("$PLINK --noweb --bfile $stem_name --pheno $eigenvec_file\_temp --allow-no-sex --mpheno 1 --assoc $plink_silent --out $stem_name\_PCV1 $memory_flag");
 	$intermediate_files{"$stem_name\_PCV1.log"} = 1;
 	$intermediate_files{"$stem_name\_PCV1.qassoc"} = 1;
-	system("$PLINK --noweb --bfile $stem_name --pheno $eigenvec_file\_temp --allow-no-sex --mpheno 2 --assoc $plink_silent --out $stem_name\_PCV2");
+	system("$PLINK --noweb --bfile $stem_name --pheno $eigenvec_file\_temp --allow-no-sex --mpheno 2 --assoc $plink_silent --out $stem_name\_PCV2 $memory_flag");
 	$intermediate_files{"$stem_name\_PCV2.log"} = 1;
 	$intermediate_files{"$stem_name\_PCV2.qassoc"} = 1;
 	
@@ -1301,7 +1311,7 @@ sub run_pca
 	print "\nRunning LD pruning\n" if $verbose > 0;
 	print $LOG "\nRunning LD pruning\n" if $verbose > 0;
 
-	my $temp = system("plink --bfile $stem_name --indep-pairwise 10 10 0.2 --out $stem_name\_pruned");
+	my $temp = system("$PLINK --bfile $stem_name --indep-pairwise 10 10 0.2 --out $stem_name\_pruned $memory_flag");
 	#my $temp = system("plink --bfile $stem_name --indep-pairwise 50 5 0.1 --out $stem_name\_pruned");
 
 	################################################################################################################
@@ -1316,7 +1326,7 @@ sub run_pca
 
 	# added --extract flag from LD pruning
 	#my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
-    my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --maf $MAF --geno $GENO --out $stem_name");
+    my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --maf $MAF --geno $GENO --out $stem_name $memory_flag");
 
 
 	if($temp > 0)
@@ -1341,7 +1351,7 @@ sub get_unrelateds
 	print "\nGet Unrelated set for $stem_name => $new_stem_name\n" if $verbose > 0;
 	print $LOG "\nGet Unrelated set for $stem_name => $new_stem_name\n" if $verbose > 0;
 
-    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --maf $MAF --geno $GENO --thin-count 10000 --rel-cutoff 0.09375 --mind --out $stem_name");
+    my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --maf $MAF --geno $GENO --thin-count 10000 --rel-cutoff 0.09375 --mind --out $stem_name $memory_flag");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK's rel-cutoff failed.\n";
@@ -1406,8 +1416,8 @@ sub calculate_IBD_estimates {
 
 	# Maybe roll back this change? 
 	
-	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp");
-	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0");
+	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp $memory_flag");
+	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0 $memory_flag");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK failed to calculate IBD estimates; check log file: $new_stem_name.log\n";
@@ -1602,9 +1612,9 @@ sub keep_samples
 	print $LOG "\nKeep $samples_to_keep samples from $stem_name => $new_stem_name\n" if $verbose > 1;
 
 	## Make an unrelated version of the data
-	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --keep $samples_to_keep --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --keep $samples_to_keep --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name $memory_flag");
 	if($temp > 0){die "ERROR!!! PLINK failed to do --keep; check log file: $new_stem_name.log\n";}
-	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --mind $MIND --bfile $new_stem_name --make-bed $plink_silent --out $new_stem_name");
+	my $temp = system("$PLINK --allow-no-sex --noweb --geno $GENO --mind $MIND --bfile $new_stem_name --make-bed $plink_silent --out $new_stem_name $memory_flag");
 	if($temp > 0){die "ERROR!!! PLINK failed to do --keep; check log file: $new_stem_name.log\n";}
 	return $new_stem_name;
 }
@@ -1654,7 +1664,7 @@ sub remove_SNPs
 	close OUT;
 
 	## Run plink to generate the no_dups version of stem_file
-	system("$PLINK --allow-no-sex --noweb --bfile $stem_name --extract $stem_name.SNPs_to_keep.txt --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+	system("$PLINK --allow-no-sex --noweb --bfile $stem_name --extract $stem_name.SNPs_to_keep.txt --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name $memory_flag");
 	system("rm $stem_name.SNPs_to_keep.txt") if $test == 0;
 	return ($new_stem_name);
 }
@@ -1671,11 +1681,11 @@ sub make_non_binary_version
 		print "\nMake_non_binary_version $stem_name => $new_stem_name\n" if $verbose > 1;
 		print $LOG "\nMake_non_binary_version $stem_name => $new_stem_name\n" if $verbose > 1;
 		if(-e "$stem_name.map" && -e "$stem_name.ped"){
-			system("$PLINK --file $stem_name --recode $plink_silent --out $new_stem_name");
+			system("$PLINK --file $stem_name --recode $plink_silent --out $new_stem_name $memory_flag");
 		}
 		elsif(-e "$stem_name.bed" && -e "$stem_name.bim" && -e "$stem_name.fam"){
-			print "here: $PLINK --bfile $stem_name --recode $plink_silent --out $new_stem_name\n";
-			system("$PLINK --bfile $stem_name --recode $plink_silent --out $new_stem_name");
+			print "here: $PLINK --bfile $stem_name --recode $plink_silent --out $new_stem_name $memory_flag\n";
+			system("$PLINK --bfile $stem_name --recode $plink_silent --out $new_stem_name $memory_flag");
 		}
 		else
 		{
@@ -1701,10 +1711,10 @@ sub make_binary_version
 		print "\nMake binary version of $stem_name => $new_stem_name\n" if $test == 1;
 		print $LOG "\nMake binary version of $stem_name => $new_stem_name\n" if $test == 1;
 		if(-e "$stem_name.bed" && -e "$stem_name.bim" && -e "$stem_name.fam"){
-			system("$PLINK --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+			system("$PLINK --bfile $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name $memory_flag");
 		}
 		elsif(-e "$stem_name.map" && -e "$stem_name.ped"){
-			system("$PLINK --file $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name");
+			system("$PLINK --file $stem_name --indiv-sort 0 --make-bed $plink_silent --out $new_stem_name $memory_flag");
 		}
 		else
 		{
