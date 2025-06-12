@@ -190,6 +190,7 @@ sub run_prePRIMUS_main {
 	my $IBD0_vs_IBD1_plot;
 	my $keep_intermediate_files = 1;
 	my $max_memory = 0;
+	my $min_pihat_threshold;
 
 	GetOptionsFromArray(
 		\@_,
@@ -227,6 +228,7 @@ sub run_prePRIMUS_main {
 		"no_mito=i" => \$NO_MITO,
 		"no_y=i" => \$NO_Y,
 		"max_memory=i" => \$max_memory,
+		"min_pihat_threshold=f" => \$min_pihat_threshold,
 
 		# IMUS Settings
 		"rel_threshold=f" => \$THRESHOLD, 
@@ -240,7 +242,7 @@ sub run_prePRIMUS_main {
 		$memory_flag = "";
 	}
 	
-	
+	print "Using a relatedness threshold of $min_pihat_threshold";
 	#### Check/set inputs
 	test_paths();
 
@@ -406,7 +408,7 @@ sub run_prePRIMUS_main {
 
 		# calculate_IBD_estimates subroutine must take the stem with the reference people merged in 
 
-		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs);
+		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs, $min_pihat_threshold);
 		$IBD0_vs_IBD1_plot = make_IBD0_vs_IBD1_plot($genome_file,$study_name);
 
 
@@ -1404,6 +1406,7 @@ sub calculate_IBD_estimates {
 	my $stem_name = shift;
 	my $new_stem_name = shift;
 	my $freq_file = shift;
+	my $min_pihat_threshold = shift;
 
 	$new_stem_name = "$stem_name" if $new_stem_name eq "";
 	print "\nCalculating IBDs for $stem_name (.frq = $freq_file) => $new_stem_name.genome\n" if $verbose > 0;
@@ -1414,10 +1417,11 @@ sub calculate_IBD_estimates {
 	my $read_freq = "--read-freq $freq_file";
 	$read_freq = "" if $freq_file eq "";
 
-	# Maybe roll back this change? 
 	
 	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp $memory_flag");
-	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0 $memory_flag");
+	#my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0 $memory_flag");
+	#system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp");
+	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND --memory 600000 $plink_silent --out $new_stem_name --min $min_pihat_threshold $memory_flag");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK failed to calculate IBD estimates; check log file: $new_stem_name.log\n";

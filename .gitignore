@@ -9,3 +9,12 @@ input/*/
 alyssa/*
 example_data/
 compadre_testing.ipynb
+
+#vscode specific folders
+.vscode/
+
+#mac specific folders
+__MACOSX/
+
+#test output folders
+*test_output*/
