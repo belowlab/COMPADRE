@@ -1175,7 +1175,7 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --alt_ref_stem	Path to PLINK formatted data (no file extensions) used for allele frequencies
    --keep_inter_files	Keep intermediate files used to create the IBD estimates with prePRIMUS
    --min_pihat_threshold set a minimum pi-hat threshold that will be used in the plink --genome calculation
-
+   --max_memory		Specify amount of memory to be used in PLINK prePRIMUS commands (in MB)
  Identification of maximum unrelated set options:
    --no_IMUS		Don't identify a maximum unrelated set (runs IMUS by default)
    --missing_val	Set value that denotes missing data in IBD file

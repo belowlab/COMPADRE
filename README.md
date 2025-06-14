@@ -18,7 +18,7 @@ relationship estimation accuracy in family networks ahead of pedigree generation
 
 2. COMPADRE supports optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
 
-3. COMPADRE utilizes 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm trained on pre-processed PLINK PCA results to predict ancestry ahead of IBD estimation and reconstruction.
+3. COMPADRE utilizes 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm dynamically trained on PCA results to predict ancestry ahead of IBD estimation and reconstruction.
 
 
 
@@ -108,10 +108,8 @@ The source code for generating family genetic data simulations can be found [her
 
 More details on PRIMUS, ERSA, and PADRE can be found in their respective documentation:
 - [PRIMUS](https://primus.gs.washington.edu/primusweb/res/documentation.html)
-- [ERSA](https://hufflab.org/software/ersa/)
-- [PADRE](https://hufflab.org/software/padre/)
-
-Please visit the [official COMPADRE website](https://compadre.dev/about) for publication updates and other information. 
+- [ERSA](https://hufflab.org/software/ersa)
+- [PADRE](https://hufflab.org/software/padre)
 
 
 

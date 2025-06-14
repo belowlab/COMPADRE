@@ -1421,7 +1421,7 @@ sub calculate_IBD_estimates {
 	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp $memory_flag");
 	#my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0 $memory_flag");
 	#system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp");
-	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND --memory 600000 $plink_silent --out $new_stem_name --min $min_pihat_threshold $memory_flag");
+	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min $min_pihat_threshold $memory_flag");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK failed to calculate IBD estimates; check log file: $new_stem_name.log\n";
