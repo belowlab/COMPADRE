@@ -1,7 +1,8 @@
-
+from xopen import xopen
 import os, math, sys, json, signal, socket
 import pandas as pd
 import warnings
+
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
 
 # COMPADRE imports -- ersa function and the SVM population classifier
@@ -89,7 +90,7 @@ def main(segment_data_file, portnumber):
 
     if segment_data_file != 'NA':
 
-        with open (segment_data_file, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
+        with xopen(segment_data_file, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
 
             # Check number of columns to determine if it has IBD1/2 data or not 
             header_line = f.readline().strip()
