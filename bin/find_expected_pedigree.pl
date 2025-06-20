@@ -73,7 +73,7 @@ print "Family network of interest: @networks\n";
 ## Find the intersection of non-missing samples between ref-fam and the network
 my @intersection = get_intersection(\%ref_hash,\%network_names);
 my %intersection = map{$_,1}@intersection;
-if(@ref_names < @intersection){die "ERROR!!! ref_names (@ref_names) has more samples than intersection (@intersection).\n";}
+if(@ref_names < @intersection){die "[COMPADRE] Error: ref_names (@ref_names) has more samples than intersection (@intersection).\n";}
 print "\n\nintersection: @intersection\n";
 
 

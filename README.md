@@ -8,10 +8,10 @@ relationship estimation accuracy in family networks ahead of pedigree generation
 
 ## Updates
 
-1. COMPADRE integrates shared segments-based relationship estimation ahead of pedigree reconstruction. We used [GERMLINE2](https://github.com/gusevlab/germline2) to identify shared segments for our benchmarking, but there are many other tools that can generate these data. Specifically, COMPADRE expects a file with the following columns: `id1 id2 start end length chrom`. A file formatting example for this input can be found in the `example_data` folder.
+1. COMPADRE integrates shared segments-based relationship estimation ahead of pedigree reconstruction. We used [GERMLINE2](https://github.com/gusevlab/germline2) to identify shared segments for our benchmarking, but there are many other tools that can generate these data. Specifically, COMPADRE expects a file with the following columns: `id1 id2 start end length chrom`. A file formatting example for this input can be found in the `example_data` folder. COMPADRE can also read a .gz or zstd compressed segment file in this step. 
 
     ```bash
-    --segment_data example_data/simulations/EUR/eur_size20_segments.txt
+    --segment_data ./example_data/simulations/EUR/eur_size20_segments.txt
     ```
 
     Note: COMPADRE does not <i>require</i> segment-specific IBD status ('half'/1 or 'full'/2) as part of this input; however, inclusion of this information can improve the composite algorithm's performance. COMPADRE will check for the presence of an `ibd` column containing values 1 or 2 at the last index of the `--segment_data` input file. We have provided a generic script to identify IBD2 segments from standard IBD detection output here: `tools/determine_ibd.py`. It is also possible to run COMPADRE without shared segments input if desired.

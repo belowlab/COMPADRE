@@ -145,7 +145,8 @@ def main(segment_data_file, portnumber):
     # else, no data provided, and the socket is only being set up for running the pop classifier
 
     ####################################################################################################
-    # Everything above this is done ONCE -- when COMPADRE starts -- and kept in memory for easy access when new requests are made over the socket
+    # Everything above this is done ONCE when COMPADRE starts 
+    # and kept in memory for easy access when new requests are made over the socket
 
     # Check for $COMPADRE_HOST ENV variable 
     socket_host = os.environ['COMPADRE_HOST'] if 'COMPADRE_HOST' in os.environ else 'localhost'
@@ -310,14 +311,13 @@ def main(segment_data_file, portnumber):
             server_socket.close()
         except:
             pass
-        safe_print("COMPADRE helper shutdown complete.")
+        safe_print("[COMPADRE] COMPADRE helper shutdown complete.")
 
 
 if __name__ == '__main__':
 
     # This file isn't really meant to be ran in isolation, but you could instantiate the socket connection on your own by running it this way then send it messages from another script using the appropriate port
 
-    # Pass segment data file and port number via positional args 
     segment_data_file = sys.argv[1]
     portnumber = int(sys.argv[2])
 

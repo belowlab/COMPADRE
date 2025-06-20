@@ -302,4 +302,3 @@ dependencies:
     - xyzservices==2024.9.0
     - yarl==1.15.2
     - xopen==2.0.2
-prefix: /data100t1/home/grahame/.conda/envs/py311

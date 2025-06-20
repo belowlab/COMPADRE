@@ -20,7 +20,6 @@ use IPC::Open2; # also for new compadre helper
 
 my @commandline_options = @ARGV;
 
-
 #use lib '../lib/perl_modules';
 use Getopt::Long 2.13;
 use PRIMUS::IMUS qw(run_IMUS);
@@ -42,11 +41,11 @@ my $lib_dir;
 my $bin_dir; 
 
 my $pod2usage = sub {
-        # Load Pod::Usage only if needed.
-        require Pod::Usage;
-        Pod::Usage->import;
-        &pod2usage;
-    };
+	# Load Pod::Usage only if needed.
+	require Pod::Usage;
+	Pod::Usage->import;
+	&pod2usage;
+};
 
 ################ Command line parameters ################
 
@@ -715,10 +714,10 @@ sub apply_options {
 				
 				if(!grep ($_ eq $pop, @onekg_pops ))
 				{
-					print "\n\nERROR!!! Invalid 1KG population: $pop\n";
+					print "\n\n[COMPADRE] Error: Invalid 1KG population: $pop\n";
 					print "Must be a comma seperated list these: @onekg_pops\n";
 					print "For example: --ref_pops CEU,TSI,YRI\n\n";
-					print $LOG "\n\nERROR!!! Invalid 1KG population: $pop\n";
+					print $LOG "\n\n[COMPADRE] Error: Invalid 1KG population: $pop\n";
 					print $LOG "Must be a comma seperated list these: @onekg_pops\n";
 					print $LOG "For example: --ref_pops CEU,TSI,YRI\n\n";
 					$pod2usage->(2);
@@ -766,8 +765,8 @@ sub apply_options {
 			}
 			else
 			{
-				print "\n\nERROR!!! Invalid key before \"=\" for --@_[0] option: @_[1]\n";
-				print $LOG "\n\nERROR!!! Invalid key before \"=\" for --@_[0] option: @_[1]\n";
+				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0] option: @_[1]\n";
+				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0] option: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
 				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
@@ -784,9 +783,9 @@ sub apply_options {
 			}
 			else
 			{
-				print "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
@@ -802,9 +801,9 @@ sub apply_options {
 			}
 			else
 			{
-				print "\n\nERROR!!! Invalid key before \"=\" for --affections option: @_[1]\n";
+				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --affections option: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\nERROR!!! Invalid key before \"=\" for --affections option: @_[1]\n";
+				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --affections option: @_[1]\n";
 				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
@@ -820,9 +819,9 @@ sub apply_options {
 			}
 			else
 			{
-				print "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
@@ -838,9 +837,9 @@ sub apply_options {
 			}
 			else
 			{
-				print "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
@@ -856,9 +855,9 @@ sub apply_options {
 			}
 			else
 			{
-				print "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\nERROR!!! Invalid key before \"=\" for --@_[0]: @_[1]\n";
+				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
@@ -926,7 +925,7 @@ sub apply_options {
 	{
 		if(exists $ibd_estimates{'FILE'})
 		{
-			die "ERROR!!! If you already have IBD estimates, then you don't need to calculate new ones with --genome option. If you do need to calculate IBD estimates, don't input anything for the IBD estimates.\n";
+			die "[COMPADRE] Error: If you already have IBD estimates, then you don't need to calculate new ones with --genome option. If you do need to calculate IBD estimates, don't input anything for the IBD estimates.\n";
 		}
 		$study_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($data_stem);
 		$output_dir = "$data_stem\_PRIMUS" if $output_dir eq ""; 
@@ -942,7 +941,7 @@ sub apply_options {
 	{
 		if(!$run_PRIMUS_plus_ERSA)
 		{
-			print "\n\nERROR!!! IBD INPUT FILE REQUIRED\n\n";
+			print "\n[COMPADRE] No arguments provided. Please run with the --help flag for details.\n\n";
 			$pod2usage->(2);
 		}
 		else
@@ -955,7 +954,7 @@ sub apply_options {
 	{
 		if(!$run_prePRIMUS && !$run_PRIMUS_plus_ERSA)
 		{
-			print "ERROR!!! IBD INPUT FILE DOES NOT EXISTS: $ibd_estimates{'FILE'}\n";
+			print "[COMPADRE] Error: IBD INPUT FILE DOES NOT EXIST: $ibd_estimates{'FILE'}\n";
 			$pod2usage->(2);
 		}
 	}
@@ -1146,10 +1145,8 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
 
  For usage and documentation:
    -h, --help		Brief help message
-   --man                Full documentation
  
- 
- Required for prePRIMUS, IMUS, and PR (one of the following):
+ Required options (one of the following):
    -p, --plink_ibd	Specify path to a .genome IBD estimates file produced by PLINK
    -i, --input		Specify path to an IBD estimates file and additional column information
    
@@ -1157,26 +1154,32 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --file 		Path to PLINK formatted data without the file extensions; behaves the same as in PLINK (requires --genome)
    --genome		Read in --file and calculate IBD estimates using PLINK
 
+ COMPADRE options (new):
+   --segment_data       Shared segments data in format readable by ERSA (see full documentation)
+   --port_number        Port number for additional Python computation (default: 6000)
+   --run_padre		Run PADRE after standard pedigree reconstruction is complete
+
  General options:
    -t, --rel_threshold	Set the minimum level of relatedness for two people to be considered related (default=0.1)
    --degree_rel_cutoff	Set the maximum degree of relatedness for two people to be considered related (default=3; i.e. 3rd degree relatives)
    -o, --output_dir	Specify path to the output directory for all results(default=[PATH_TO_IBD_FILE]_PRIMUS/)
    -v, --verbose	Set verbosity level (0=none; 1=default; 2=more; 3=max)
 
- prePRIMUS IBD estimation using PLINK (not included in lite version)
+ prePRIMUS IBD estimation options:
    --file 		Path to PLINK formatted data without the file extensions; behaves the same as in PLINK (requires --genome)
    --genome		Read in the specified PLINK formatted data file and calculate IBD estimates using PLINK
    --plink_ex		Path to the plink executable file (searches environment variables by default)
-   --ref_pops		Comma separated list of HapMap3 populations used for reference allele freqs (overrides default method) 
+   --ref_pops		Comma separated list of 1000 Genomes populations used for reference allele freqs (overrides default method) 
    --no_automatic	Turn off automatic selection of the HapMap3 populations for reference allele freqs (On by default)
    --remove_AIMs	Automatically remove ancestry informative markers (off by default)
    --keep_AIMs		Do not remove ancestry informative markers(off by default)
    --internal_ref	Use the dataset provided in --file to get reference allele frequencies
    --alt_ref_stem	Path to PLINK formatted data (no file extensions) used for allele frequencies
    --keep_inter_files	Keep intermediate files used to create the IBD estimates with prePRIMUS
-   --min_pihat_threshold set a minimum pi-hat threshold that will be used in the plink --genome calculation
+   --min_pihat_threshold Set a minimum pi-hat threshold that will be used in the plink --genome calculation
    --max_memory		Specify amount of memory to be used in PLINK prePRIMUS commands (in MB)
- Identification of maximum unrelated set options:
+
+ Identification of maximum unrelated set (IMUS) options:
    --no_IMUS		Don't identify a maximum unrelated set (runs IMUS by default)
    --missing_val	Set value that denotes missing data in IBD file
    -s, --size		Specify to weight on set size (Default unless a binary trait is specified first)
@@ -1187,7 +1190,7 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --mean_qtrait	File with FID, IID, and quantitative trait to weight towards the mean value
    --tails_qtrait	File with FID, IID, and quantitative trait to weight against the middle values
 
- Pedigree reconstruction options:
+ Pedigree reconstruction (PR) options:
    --no_PR		Don't reconstruct pedigrees (runs pedigree reconstruction by default)
    --max_gens		Max number of generations sampled in reconstructed pedigree (default = no limit)
    --max_gen_gap	Max number of generations between two people that have a child (default = 0)
@@ -1202,12 +1205,6 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --affection_file	Specify path to the file containing the affection status of each sample
    --affections		Like --affection_file; need FILE=[file], optional specification of file columns
    --int_likelihood_cutoff	Initial minimum likelihood for a relationship to reconstruction (default = 0.1)
-
- PRIMUS+ERSA options:
-   --ersa_model_output	Path to the model_output_file generated by ERSA
-   --ersa_results	Path to the standard ERSA results file
-   --project_summary	Path to the PRIMUS generated project level summary file (usualy in *_PRIMUS/ dir)
-   --degree_rel_cutoff	Specify the minimum degree of relatedness used to generated pedigrees (default = 3)
 
 
 =head1 DOCUMENTATION
