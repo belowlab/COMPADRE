@@ -59,7 +59,7 @@ RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')
 # Add perl path to where primus is expecting it 
 CMD ["mkdir", '-p', "/usr/src/perl"]
 ENV PERL_PATH=/usr/src/perl
-ENV PERL5LIB=$PERL_PATH:$PERL_PATH/lib/perl5:/usr/src/lib/perl_modules/:/usr/src/lib/perl_modules/PRIMUS/:$PERL5LIB
+ENV PERL5LIB=$PERL_PATH:$PERL_PATH/lib/perl5:/usr/src/lib/perl_modules/:/usr/src/lib/perl_modules/PRIMUS/:/usr/src/padre/lib/perl_modules/PADRE:$PERL5LIB
 
 # Change this if you need to use a different port
 EXPOSE 6000
