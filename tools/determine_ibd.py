@@ -69,16 +69,16 @@ def find_shared_segments_new(pair_df):
     result_df = pd.DataFrame(results)
     return result_df
 
-def run_transform(simdir, write_output=True):
+def run_transform(standard_segment_file, haploid_segment_file, write_output=True):
 
     # Initialize an empty DF to concat pairwise chrom results 
     result_columns = {'id1': str,'id2': str,'chrom': int,'start': int,'end': int,'length': float,'ibd': int}
     result_df = pd.DataFrame(columns=result_columns.keys()).astype(result_columns)
 
-    working_dir = f'{simdir}/ss/files' 
-    output_file = f'{working_dir}/../ersa_input_final_haploid.txt'
+    #working_dir = f'{simdir}/ss/files' 
+    #output_file = f'{working_dir}/../ersa_input_final_haploid.txt'
 
-    df = pd.read_csv(output_file, sep='\t', header=None, names=['id1', 'id2', 'start', 'end', 'length', 'chrom'])
+    df = pd.read_csv(haploid_segment_file, sep='\t', header=None, names=['id1', 'id2', 'start', 'end', 'length', 'chrom'])
 
     df['id1_clean'] = df['id1'].apply(remove_haplotype)
     df['id2_clean'] = df['id2'].apply(remove_haplotype)
@@ -102,23 +102,12 @@ def run_transform(simdir, write_output=True):
                 shared_segments = find_shared_segments_new(pair_chrom_df)
                 result_df = pd.concat([result_df, shared_segments], ignore_index=True)
 
-    # When done, filter to only segments >5cM, and to IBD2
+    # When done, filter to only segments > 5 cM, and to IBD2
     result_df = result_df[(result_df['length'] >= 5.0) & (result_df['ibd'] == 2)]
     result_df = result_df[['id1','id2','chrom','start','end','length','ibd']]
 
-
-    '''
-    NEW: 
-    - Read the baseline ersa input final in as a DF and set ibd equal to 1
-    - Concat these 2 dfs 
-    - Save as a new one 
-
-    id1	id2	chrom	start	end	length	ibd
-
-    '''
-
     # Read in normal germline output file
-    original_df = pd.read_csv(f'{working_dir}/../ersa_input_final.txt', sep='\t', header=None, names=['id1', 'id2', 'start', 'end', 'length', 'chrom'])
+    original_df = pd.read_csv(standard_segment_file, sep='\t', header=None, names=['id1', 'id2', 'start', 'end', 'length', 'chrom'])
     original_df = original_df[original_df['length'] >= 5.0]
     original_df['ibd'] = 1
 
@@ -132,12 +121,22 @@ def run_transform(simdir, write_output=True):
 
 
     if write_output == True:
-        df_filtered.to_csv(f'{working_dir}/../ersa_input_final_haploid_ibd_NEWEST.txt', sep='\t', index=None) # Formerly *_haploid_ibd.txt
+        working_dir = os.path.dirname(haploid_segment_file)
+        df_filtered.to_csv(f'{working_dir}/determine_ibd_results.txt', sep='\t', index=None) # Formerly *_haploid_ibd.txt
+
     else:
         return df_filtered
 
 
 if __name__ == "__main__":
+
+    '''
     
-    simdir = sys.argv[1] # /data100t1/home/grahame/projects/compadre/unified-simulations/analysis-output/simulations/EUR/uniform3_size20_sim200/uniform3_size20_sim200-4
-    run_transform(simdir)
+    Provide the standard segment detection output (in expected format of id1 id2 start end length chrom) as the first argument and the haploid segment detection output as the second argument
+
+    '''
+
+    standard_segment_file = sys.argv[1]
+    haploid_segment_file = sys.argv[2]
+    
+    run_transform(standard_segment_file, haploid_segment_file)
