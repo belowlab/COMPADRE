@@ -36,8 +36,8 @@ RUN ln -s /bin/plink1.9 /bin/plink
 # Install python packages via pip
 RUN pip3 install -r requirements.txt
 
-# Install scikit-learn via conda 
-RUN conda install scikit-learn
+# Install some via conda 
+RUN conda install -y scikit-learn xopen
 
 ## IN PROGRESS: install reference data from github releases URL 
 RUN wget https://github.com/belowlab/compadre/releases/download/pre-release-0.2.0/compadre_data.zip && \

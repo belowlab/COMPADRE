@@ -6,15 +6,17 @@ testing/*
 __pycache__/
 output/*/
 input/*/
-alyssa/*
 example_data/
-compadre_testing.ipynb
 
-#vscode specific folders
+# vscode specific folders
 .vscode/
 
-#mac specific folders
+# mac specific folders
 __MACOSX/
 
-#test output folders
+# test output folders
 *test_output*/
+
+# test files 
+test.py 
+testing.ipynb

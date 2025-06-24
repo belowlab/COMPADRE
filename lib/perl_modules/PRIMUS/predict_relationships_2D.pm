@@ -19,37 +19,15 @@ my $UN;
 my $verbose = 1;
 my $curr_bw;
 my $curr_kde_type;
-#my $ersa_data;
 
-# sub send_to_compadre_helper {
-
-#     my ($data, $port) = @_;
-#     $port //= 6000;  
-# 	my $host = $ENV{COMPADRE_HOST} // 'localhost';
-
-#     my $socket = IO::Socket::INET->new(
-#         PeerAddr => $host,
-#         PeerPort => $port,
-#         Proto    => 'tcp',
-#     ) or die "Cannot connect to Python server: $!\n";
-
-#     $socket->print($data);
-    
-#     my $response = <$socket>;
-#     if (defined $response) {
-#         chomp $response;
-#     } else {
-#         $response = "No response";
-#     }
-    
-#     close($socket);
-#     return $response;
-# }
+######################################################################
 
 sub send_to_compadre_helper {
     my ($data, $port) = @_;
     $port //= 6000;  
     my $host = $ENV{COMPADRE_HOST} // 'localhost';
+
+	#print "DEBUG: Attempting to connect to $host:$port with data: '$data'\n" if $verbose > 1;
 
     my $socket = IO::Socket::INET->new(
         PeerAddr => $host,
@@ -62,11 +40,15 @@ sub send_to_compadre_helper {
     $socket->sockopt(SO_KEEPALIVE, 1) if $socket->can('sockopt');
     $socket->blocking(1);
 
+	#print "DEBUG: Connected successfully, sending data...\n" if $verbose > 1;
+
     my $bytes_sent = $socket->print($data);
     if (!defined $bytes_sent) {
         close($socket);
         die "Failed to send data to Python server: $!\n";
     }
+
+	#print "DEBUG: Sent $bytes_sent bytes, waiting for response...\n" if $verbose > 1;
     
     $socket->flush();
     
@@ -89,7 +71,6 @@ sub close_socket {
     send_to_compadre_helper('close', $port);
 }
 
-# THIS IS WHAT WE ARE INTERESTED IN REPLACING
 sub get_relationship_likelihood_vectors {
 	
 	my $IBD_file_ref = shift;
@@ -102,10 +83,8 @@ sub get_relationship_likelihood_vectors {
 	$verbose = shift;
 	my $lib_dir = shift;
 	my $output_dir = shift;
-
 	my $bw = shift;
 	my $kde_type = shift;
-
 	my %relationships;
 	my %raw_relationship_densities;
 	my %fallback_relationships;
@@ -116,56 +95,16 @@ sub get_relationship_likelihood_vectors {
 	my $total_possibilities = 0;
 	#my $outfile = "$IBD_file\_KDE_likelihood_vectors_prop$MIN_LIKELIHOOD\_bw$bw\_$kde_type.txt\n";
 	my $outfile = "$IBD_file\_KDE_likelihood_vectors\n";
-	#print "[NEW LOG] OUTFILE : $outfile\n";
-	#print "[NEW LOG] IBDFILE : $IBD_file\n";
 	#my $outfile = "$output_dir/KDE_likelihood_vectors.txt";
 	my %possibility_counts;
+
+	# Open socket connection to compadre helper at the beginning of this subroutine
+	my $match_data = $main::ersa_data_glob;
+	my $port_number = $main::port_number_glob;
 
 	if (!defined($MIN_LIKELIHOOD) || $MIN_LIKELIHOOD eq "") {
 		$MIN_LIKELIHOOD = 0.3;
 	}
-
-	###############################################################################################
-	###############################################################################################
-	###############################################################################################
-
-	# NEW: open socket connection to compadre helper at the beginning of this subroutine
-
-	# adding in ersa match file here --ersa_data
-	my $match_data = $main::ersa_data_glob;
-	my $port_number = $main::port_number_glob;
-	
-
-	# if ($match_data ne "") # checking if an argument was actually passed for ersa data
-	# {
-	# 	print "\nSegment file: $match_data\n";
-	# 	print "\nOpening COMPADRE helper socket ...\n";
-
-	# 	# get absolute path of compadre helper 
-	# 	my $libpath = $lib_dir; 
-	# 	$libpath =~ s{/$}{};
-	# 	my $parent_dir = File::Spec->catdir(dirname($libpath));
-	# 	my $helper_path = File::Spec->catfile($parent_dir, 'compadre_helper_new.py');
-
-	# 	# instantiate the new compadre helper using the filepath from $match_data
-	# 	my ($reader, $writer);
-	# 	my $pid = open2($reader, $writer, "python3 $helper_path $match_data");
-
-	# 	# Wait for the server to be ready
-	# 	while (my $line = <$reader>) {
-	# 		if ($line =~ /COMPADRE helper socket is ready/) {
-	# 			print "\nCOMPADRE helper socket is ready\n";
-	# 			last;
-	# 		}
-	# 	}
-	# }
-
-	### Now, we can make socket requests using send_to_compadre_helper() subroutine
-
-	###############################################################################################
-	###############################################################################################
-	###############################################################################################
-
 	
   	open(PROB_OUT,">$outfile") or die "Can't open likelihood vector output file ($outfile): $!\n";
 	open(MZ_OUT,">$output_dir/mz_twins") or die "Can't open mz twin output file ($output_dir/mz_twins): $!\n";
@@ -348,13 +287,12 @@ sub get_relationship_likelihood_vectors {
 		
 		###################################
 
-		if ($match_data ne "") # checking if an argument was actually passed for ersa data
-		{
-			
-			## fallback
+		# checking if an argument was actually passed for ersa data
+		if ($match_data ne "") {
+
+			## instantiate fallback
 			$fallback_relationships{$name1}{$name2} = [@vector_copy];
             $fallback_raw_densities{$name1}{$name2} = [@density_vector];
-
 
 			# Check vector to see if we even need to run ersa
 			my $sum01 = $vector[0] + $vector[1];
@@ -364,7 +302,7 @@ sub get_relationship_likelihood_vectors {
 				my $socket_data = "$name1|$name2|$vector_str|pairwise";
 				my $new_vector = send_to_compadre_helper($socket_data, $port_number);
 				chomp($new_vector);
-
+				
 				# Get the original relationship before changing the vector
         		my $rel_old = get_maximum_relationship(@vector);
 
@@ -447,15 +385,14 @@ sub get_relationship_likelihood_vectors {
 		my $rel_old = get_maximum_relationship(@vector_copy);
 
 		if ($rel ne $rel_old) {
-			print "NEW relationship prediction ( $name1 $name2 ) : $rel (previously $rel_old)\n";
+			if ($verbose > 2) {
+				print "NEW relationship prediction ( $name1 $name2 ) : $rel (previously $rel_old)\n";
+			}
 		}
 
 		my $ibd0 = $k0/$KDE_density_resolution;
 		my $ibd1 = $k1/$KDE_density_resolution;
 		my $ibd2 = $k2/$KDE_density_resolution;
-
-		### 2/22/24
-		### This is where the entire likelihood vector line gets put together and written to outfile 
 
 		print PROB_OUT "$FID1\t$IID1\t$FID2\t$IID2\t$rel\t".join(',',@vector)."\t$ibd0\t$ibd1\t$ibd2\t$PI_HAT\t-1\t".join(',',@possibilities)."\t$MIN_LIKELIHOOD\n";
 		
@@ -503,20 +440,20 @@ sub get_relationship_likelihood_vectors {
 
 sub load_likelihood_vectors_from_file {
 
-  my $file = shift;
-  my $raw_relationships_ref = shift;
-  my $relationships_ref = shift;
+	my $file = shift;
+	my $raw_relationships_ref = shift;
+	my $relationships_ref = shift;
 
-  my $total_possibilities = 0;
+	my $total_possibilities = 0;
 
-  open(IN,$file) or die "can't open likelihood_vectors_file ($file): $!\n";
-  my $header = <IN>; ## remove header
+	open(IN,$file) or die "Can't open likelihood_vectors file ($file): $!\n";
+	my $header = <IN>; ## remove header
 
-  while (my $line = <IN>) {
-    my ($FID1,$IID1,$FID2,$IID2,$REL,$vector,$ibd0,$ibd1,$ibd2,$PI_HAT,@rest) = split(/\s+/,$line);
-    my @vector = split(/,/,$vector);
-    #my $name1 = "$FID1\__$IID1";
-    #my $name2 = "$FID2\__$IID2";
+  	while (my $line = <IN>) {
+    	my ($FID1,$IID1,$FID2,$IID2,$REL,$vector,$ibd0,$ibd1,$ibd2,$PI_HAT,@rest) = split(/\s+/,$line);
+    	my @vector = split(/,/,$vector);
+		#my $name1 = "$FID1\__$IID1";
+		#my $name2 = "$FID2\__$IID2";
 		my $name1 = "$IID1";
 		my $name2 = "$IID2";
 

@@ -575,8 +575,8 @@ sub load_data
 		#if($IID1 eq "."){$IID1 = $FID1;}
 		#if($IID2 eq "."){$IID2 = $FID2;}
 
-    #my $name1 = "$FID1**$IID1";
-    #my $name2 = "$FID2**$IID2";
+		#my $name1 = "$FID1**$IID1";
+		#my $name2 = "$FID2**$IID2";
 		my $name1 = "$IID1";
 		my $name2 = "$IID2";
 
@@ -636,7 +636,7 @@ sub load_trait_data
 			my $IID_COLUMN = $TRAIT_ID_COLUMNS{$file};
 			my $FID = @temp[$FID_COLUMN];
 			my $IID = @temp[$IID_COLUMN];
-      #my $ID = "$FID**$IID";
+      		#my $ID = "$FID**$IID";
 			my $ID = "$IID";
 			my $DATA_COLUMN = $TRAIT_DATA_COLUMNS{$file};
 			my $trait_val = @temp[$DATA_COLUMN];

@@ -738,21 +738,21 @@ def runner(options_arg, additional_args=None):
 
             # instantiate default options
             parser = optparse.OptionParser()
-            parser.add_option('--return_output', action="store_true",default=False, help="Return model output data in pandas df format for use with PRIMUS/COMPADRE.")      
-            parser.add_option('--write_output', action="store_true",default=True, help="Write output to .out (and/or .model) file(s).")      
+            parser.add_option('--return_output', action="store_true",default=False, help="Return model output data in pandas df format for use with PRIMUS/COMPADRE.")
+            parser.add_option('--write_output', action="store_true",default=True, help="Write output to .out (and/or .model) file(s).")
             parser.add_option("--segment_files",type="string",default="*.match",help="Germline2 or Beagle fibd output file(s), [default: %default]")
             parser.add_option("--segment_dict",type="string", default=None, help="Dictionary of id1:id2 keys and tuple cM length values. [COMPADRE]")
 
-            parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default].    If min_cm is modified, then the control_files parameter should be specified")
+            parser.add_option("--min_cm",type="float",default=2.5,help="minimum segment size to consider [default: %default]. If min_cm is modified, then the control_files parameter should be specified")
             parser.add_option("--max_cm",type="float",default=10.0,help="maximum segment size to consider for estimating the exponential distribution of segment sizes in the population [default: %default]")
             parser.add_option("--max_meioses",type="float",default=40,help="maximum number of meioses to consider [default: %default]")
             parser.add_option("--rec_per_meioses",type="float",default=35.2548101,help="expected number of recombination events per meioses [default: %default] from McVean et al., 2005")
             parser.add_option("--ascertained_chromosome",type="string",default="no_ascertainment",help="chromosome of ascertained disease locus")
             parser.add_option("--ascertained_position",type="int",default=-1,help="chromosomal position of ascertained disease locus")
             parser.add_option("--control_files",type="string",help="Germline or Beagle fibd output file(s) for population controls")
-            parser.add_option("--control_sample_size",type="float",default=None,help="Sample size of control population.    Used only when the control_files parameter is specified, default assumes all individuals are included in the files.")
-            parser.add_option("--exp_mean",type="float",default=3.197036753,help="Mean of the exponential distribution of shared segment size in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
-            parser.add_option("--pois_mean",type="float",default=13.73,help="Mean of the Poisson distribution of the number of segments shared between a pair of individuals in the population [default: %default] from HapMap 2.0 CEU.    This parameter is ignored if mask_common_shared_regions is specified.")
+            parser.add_option("--control_sample_size",type="float",default=None,help="Sample size of control population. Used only when the control_files parameter is specified; default assumes all individuals are included in the files.")
+            parser.add_option("--exp_mean",type="float",default=3.197036753,help="Mean of the exponential distribution of shared segment size in the population [default: %default] from HapMap 2.0 CEU. This parameter is ignored if mask_common_shared_regions is specified.")
+            parser.add_option("--pois_mean",type="float",default=13.73,help="Mean of the Poisson distribution of the number of segments shared between a pair of individuals in the population [default: %default] from HapMap 2.0 CEU. This parameter is ignored if mask_common_shared_regions is specified.")
 
             ######################
             # OLD 
@@ -761,25 +761,25 @@ def runner(options_arg, additional_args=None):
             parser.add_option("--single_pair",type="string",help="Restrict pairwise comparisons to the pairs specified in this flag")
             ######################
 
-            parser.add_option("--number_of_ancestors",type="int",help="Restrict relationships to [1] one parent (half-sibs/cousins), [2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild).    Default considers all possibilities") 
+            parser.add_option("--number_of_ancestors",type="int",help="Restrict relationships to [1] one parent (half-sibs/cousins), [2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild). Default considers all possibilities") 
             parser.add_option("--number_of_chromosomes",type="int",default=22,help="Number of chromosomes [default: %default]")
-            parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
-            parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
-            parser.add_option("--use_ibd2_siblings",type="string",default="false",help="If IBD2 data is present in the segment_file, this option will use IBD2 to detect sibling relationships.    [default: %default]")
-            parser.add_option("--parent_offspring_option",type="string",default="true",help="Option to evaluate potential parent-offspring and sibling relationships based on total proportion of the genome that is shared ibd1 [default: %default]")
-            parser.add_option("--parent_offspring_zscore",type="float",default=2.33,help="Zscore for rejecting a sibling relationship in favor of a parent-offspring relationship [default: %default, alpha=0.01]    Used only in combination with parent_offspring_option")
+            # parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
+            # parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
+            parser.add_option("--use_ibd2_siblings",type="string",default="false",help="If IBD2 data is present in the segment_file, this option will use IBD2 to detect sibling relationships. [default: %default]")
+            parser.add_option("--parent_offspring_option",type="string",default="true",help="Option to evaluate potential parent-offspring and sibling relationships based on total proportion of the genome that is shared IBD1 [default: %default]")
+            parser.add_option("--parent_offspring_zscore",type="float",default=2.33,help="Z-score for rejecting a sibling relationship in favor of a parent-offspring relationship [default: %default, alpha=0.01] Used only in combination with parent_offspring_option")
             parser.add_option("--adjust_pop_dist",type="string",default="false",help="Option to adjust the population distribution of shared segments downward for segments that could not be detected due to recent ancestry [default: %default]")
-            parser.add_option("--confidence_level",type="float",default=0.95,help="Confidence level for confidence interval around the estimated degree of relationship.    If the confidence interval includes no relationship, then no_sig_rel will be reported for the estimated_degree_of_relationship [default: %default]")
+            parser.add_option("--confidence_level",type="float",default=0.95,help="Confidence level for confidence interval around the estimated degree of relationship. If the confidence interval includes no relationship, then no_sig_rel will be reported for the estimated_degree_of_relationship [default: %default]")
             parser.add_option("--output_file",type="string",default="output/ersa.out",help="ERSA output file [default: %default]")
-            parser.add_option("--mask_common_shared_regions",type="string",default="false",help="excludes chromosomal regions that are commonly shared from evaluation.    Used only when the control_files or mask_region_file parameter is specified [default: %default].")
-            parser.add_option("--mask_region_cross_length",type="int",default=1000000,help="length in base pairs that a shared segment must extend past a masked segment in order to avoid truncation.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
-            parser.add_option("--mask_region_file",type="string",help="file containing chromosomal regions to exclude from from evaluation.    Used only when mask_common_shared_regions parameter is specified.")
-            parser.add_option("--mask_region_threshold",type="float",default=4.0,help="Threshold for the ratio of observed vs. expected segment sharing in controls before a region will be masked.    Used only in conjunction with control_files and mask_common_shared_regions parameters when mask_region_file is not specified [default: %default].")
-            parser.add_option("--mask_region_simulation_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim.    The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
-            parser.add_option("--recombination_files",type="string",help="file containing genetic distances for all chromosomes.    This parameter must be specified with Beagle fibd input files")
-            parser.add_option("--beagle_markers_files",type="string",help="Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker).    Each filename must begin with the chromosome name followed by a period.    This parameter must be specified with Beagle fibd input files")
+            parser.add_option("--mask_common_shared_regions",type="string",default="false",help="excludes chromosomal regions that are commonly shared from evaluation. Used only when the control_files or mask_region_file parameter is specified [default: %default].")
+            parser.add_option("--mask_region_cross_length",type="int",default=1000000,help="length in base pairs that a shared segment must extend past a masked segment in order to avoid truncation. Used only when mask_common_shared_regions parameter is specified [default: %default].")
+            parser.add_option("--mask_region_file",type="string",help="file containing chromosomal regions to exclude from from evaluation. Used only when mask_common_shared_regions parameter is specified.")
+            parser.add_option("--mask_region_threshold",type="float",default=4.0,help="Threshold for the ratio of observed vs. expected segment sharing in controls before a region will be masked. Used only in conjunction with control_files and mask_common_shared_regions parameters when mask_region_file is not specified [default: %default].")
+            parser.add_option("--mask_region_sim_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim. The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset. Used only when mask_common_shared_regions parameter is specified [default: %default].")
+            parser.add_option("--recombination_files",type="string",help="file containing genetic distances for all chromosomes. This parameter must be specified with Beagle fibd input files")
+            parser.add_option("--beagle_markers_files",type="string",help="Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker). Each filename must begin with the chromosome name followed by a period. This parameter must be specified with Beagle fibd input files")
             parser.add_option("--model_output_file",type="string",default=None,help="Specifies an output file to report likelihoods for all models [default: %default].")
-            parser.add_option('--verbose', action="store_true", default=None, help="Determines whether or not you want to log console output print statements.")      
+            parser.add_option('--verbose', action="store_true", default=None, help="Determines whether or not you want to log console output print statements.")
 
             options, args = parser.parse_args()
 
@@ -970,7 +970,7 @@ def runner(options_arg, additional_args=None):
         if options.write_output == True:
             output_file.write("#Mean shared segment size in the control file(s): " + str(exp_mean) + '\n')
         emp_lambda=1/(exp_mean-options.min_cm)
-        if options.mask_common_shared_regions!='false' and (options.mask_region_file is None or options.mask_region_simulation_count>0):
+        if options.mask_common_shared_regions!='false' and (options.mask_region_file is None or options.mask_region_sim_count>0):
             if options.verbose:
                 print ("Identifying common shared regions to mask")
             mask_region_segments={}
@@ -1007,7 +1007,7 @@ def runner(options_arg, additional_args=None):
             if options.verbose:
                 print ("Masked regions written to "+options.output_file+'.msk')
 
-            if options.mask_region_simulation_count>0:
+            if options.mask_region_sim_count>0:
                 if options.verbose:
                     print ("Simulating null distribution of overlapping segments")
                 
@@ -1393,8 +1393,8 @@ if __name__ == "__main__":
 
     parser.add_option("--number_of_ancestors",type="int",help="Restrict relationships to [1] one parent (half-sibs/cousins), [2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild).    Default considers all possibilities") 
     parser.add_option("--number_of_chromosomes",type="int",default=22,help="Number of chromosomes [default: %default]")
-    parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
-    parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
+    # parser.add_option("--sibling_option",type="string",default="true",help="This option was deprecated in version 1.7")
+    # parser.add_option("--sibling_segment_length",type="string",default="true",help="This option was deprecated in version 1.7")
     parser.add_option("--use_ibd2_siblings",type="string",default="false",help="If IBD2 data is present in the segment_file, this option will use IBD2 to detect sibling relationships.    [default: %default]")
     parser.add_option("--parent_offspring_option",type="string",default="true",help="Option to evaluate potential parent-offspring and sibling relationships based on total proportion of the genome that is shared ibd1 [default: %default]")
     parser.add_option("--parent_offspring_zscore",type="float",default=2.33,help="Zscore for rejecting a sibling relationship in favor of a parent-offspring relationship [default: %default, alpha=0.01]    Used only in combination with parent_offspring_option")
@@ -1405,7 +1405,7 @@ if __name__ == "__main__":
     parser.add_option("--mask_region_cross_length",type="int",default=1000000,help="length in base pairs that a shared segment must extend past a masked segment in order to avoid truncation.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
     parser.add_option("--mask_region_file",type="string",help="file containing chromosomal regions to exclude from from evaluation.    Used only when mask_common_shared_regions parameter is specified.")
     parser.add_option("--mask_region_threshold",type="float",default=4.0,help="Threshold for the ratio of observed vs. expected segment sharing in controls before a region will be masked.    Used only in conjunction with control_files and mask_common_shared_regions parameters when mask_region_file is not specified [default: %default].")
-    parser.add_option("--mask_region_simulation_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim.    The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
+    parser.add_option("--mask_region_sim_count",type="int",default=0,help="This option will perform simulations of the null distribution of shared segment locations in controls and will write the results of the simulations to output_file.sim.    The simulations are very slow and are not used directly in estimating relationships but allow the user to determine the max_region_threshold that meets a particular significance threshold for a given control dataset.    Used only when mask_common_shared_regions parameter is specified [default: %default].")
     parser.add_option("--recombination_files",type="string",help="file containing genetic distances for all chromosomes.    This parameter must be specified with Beagle fibd input files")
     parser.add_option("--beagle_markers_files",type="string",help="Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker).    Each filename must begin with the chromosome name followed by a period.    This parameter must be specified with Beagle fibd input files")
     parser.add_option("--model_output_file",type="string",default=None,help="Specifies an output file to report likelihoods for all models [default: %default].")

@@ -1,19 +1,15 @@
 from xopen import xopen
 import os, math, sys, json, signal, socket
 import pandas as pd
-import warnings
 
+import warnings
 warnings.filterwarnings('ignore', category=FutureWarning, module='pandas')
 
-# COMPADRE imports -- ersa function and the SVM population classifier
-
+# COMPADRE imports
 import ersa
 from pop_classifier import run_new as run_pop_classifier
 
 ########################################
-
-# def signal_handler(signum, frame):
-#     sys.exit(0)
 
 def signal_handler(signum, frame):
     try:
@@ -32,6 +28,28 @@ def safe_print(*args, **kwargs):
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
         sys.exit(0)  # Python exits with error code 1 on EPIPE
+
+def convert_value(value):
+
+    """Convert string values of ERSA options to appropriate Python types"""
+    # Try int first
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    
+    # Try float
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    
+    # Handle empty string as None for file paths
+    if value == "None":
+        return None
+        
+    # Return as string
+    return value
 
 def calculate_ersa_props(model_df):
 
@@ -75,9 +93,7 @@ def calculate_ersa_props(model_df):
 
 ########################################
 
-def main(segment_data_file, portnumber):
-
-    #signal.signal(signal.SIGPIPE, signal_handler)
+def main(segment_data_file, portnumber, ersa_flag_str):
 
     signal.signal(signal.SIGINT, signal_handler)   # CTRL+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination
@@ -85,10 +101,19 @@ def main(segment_data_file, portnumber):
     global server_socket
 
     segment_dict = {}
+    additional_options = {}
     ibd2_status = 'false'
     ibd2_counter = 0
 
     if segment_data_file != 'NA':
+
+        # First step -- read in ERSA options from COMPADRE runtime flags
+        ersa_flags = ersa_flag_str.strip('"').split('|')
+        flag_names = ersa_flags[::2]
+        flag_values = ersa_flags[1::2]
+        
+        for flag, value in zip(flag_names, flag_values):
+            additional_options[flag] = convert_value(value)
 
         with xopen(segment_data_file, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
 
@@ -142,7 +167,7 @@ def main(segment_data_file, portnumber):
                 safe_print('[COMPADRE] Unrecognized segment file format. Please refer to the README (https://github.com/belowlab/compadre) for formatting guidelines.')
                 sys.exit(1)
 
-    # else, no data provided, and the socket is only being set up for running the pop classifier
+    # else: no data provided, and the socket is only being set up for running the pop classifier
 
     ####################################################################################################
     # Everything above this is done ONCE when COMPADRE starts 
@@ -169,13 +194,11 @@ def main(segment_data_file, portnumber):
             try: # New try except for error handling socket issues 
 
                 conn, address = server_socket.accept()
-                #safe_print(f"Connection from: {address}")
 
                 # Set timeout to None for client connections too
                 conn.settimeout(None)
 
                 msg = conn.recv(1024).decode()
-                #safe_print(f"Received data: {msg}")
                 
                 if msg == 'close':
                     conn.send("Closing server".encode())
@@ -183,15 +206,6 @@ def main(segment_data_file, portnumber):
                     break
 
                 ms = msg.strip().split('|')
-
-        # except socket.error as e:
-        #     safe_print(f"Socket error: {e}")
-        #     continue
-        # except Exception as e:
-        #     safe_print(f"Error handling client: {e}")
-        #     if 'conn' in locals():
-        #         conn.close()
-        #     continue
 
                 ########################################################
 
@@ -225,18 +239,23 @@ def main(segment_data_file, portnumber):
                         "model_output_file": f"{ersa_outfile}.model",
                         "output_file": f"{ersa_outfile}.out",
                         "return_output": False,
-                        "write_output": True
+                        "write_output": True,
+                        "use_ibd2_siblings": ibd2_status 
                     }
-                    ersa.runner(ersa_options)
 
-                    conn.send(ersa_outfile.encode())
+                    # merge with additional options
+                    ersa_options.update(additional_options)
+
+                    ersa.runner(ersa_options) # output written to file, not returned
+
+                    conn.send(ersa_outfile.encode()) # return filepath it was written to
                     conn.close()
 
 
                 else: # "Pairwise" normal behavior
 
                     id1, id2, vector_str, analysis_type = ms
-
+    
                     id1_temp = id1.split('_')[-1] # just in case
                     id2_temp = id2.split('_')[-1]
                     
@@ -271,9 +290,14 @@ def main(segment_data_file, portnumber):
                             "model_output_file": f"{ersa_outfile}.model",
                             "output_file": f"{ersa_outfile}.out",
                             "return_output": True,
-                            "write_output": False
+                            "write_output": False,
+                            "use_ibd2_siblings": ibd2_status,
                         }
-                        output_model_df = ersa.runner(ersa_options) # run ersa function mode 
+
+                        # merge with additional options
+                        ersa_options.update(additional_options)
+
+                        output_model_df = ersa.runner(ersa_options)
 
                         if output_model_df.empty: 
                             result = '0,0,0,0,0,1' 
@@ -316,9 +340,10 @@ def main(segment_data_file, portnumber):
 
 if __name__ == '__main__':
 
-    # This file isn't really meant to be ran in isolation, but you could instantiate the socket connection on your own by running it this way then send it messages from another script using the appropriate port
+    # This is how the script is called from lib/perl_modules/PRIMUS/predict_relationships_2d.pm
 
     segment_data_file = sys.argv[1]
     portnumber = int(sys.argv[2])
+    ersa_flag_str = sys.argv[3]
 
-    main(segment_data_file, portnumber)
+    main(segment_data_file, portnumber, ersa_flag_str)

@@ -33,7 +33,6 @@ use Cwd qw(abs_path);
 my $script_path = abs_path($0);
 my $project_root = dirname(dirname($script_path));
 
-#my @hm3_pops = ("ASW","CEU","CHB","CHD","GIH","JPT","LWK","MEX","MKK","TSI","YRI");
 my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
 
 my $package = "PRIMUS";
@@ -57,7 +56,7 @@ my %mito_matches = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"MATCH",5,"MATCH_VAL",1)
 my %y_matches = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"MATCH",5,"MATCH_VAL",1);
 my $dataset_name;
 
-## Command line options.
+## Command line options
 my $verbose = 1; 
 my $study_name = "";
 my $output_dir = "";
@@ -122,7 +121,7 @@ END {
 
 #######################################################################################
 
-## PRIMUS variable
+## PRIMUS variables
 my %sexes = ("FID",1,"IID",2,"SEX",3,"MALE",1,"FEMALE",2);
 my %affections = ("FID",1,"IID",2,"AFFECTION",3,"AFFECTION_VALUE",2);
 my %ages = ("FID",1,"IID",2,"AGE",3);
@@ -139,7 +138,7 @@ my $get_max_unrelated_set = 1; ## Defaults to determining the maximum unrelated 
 my $reconstruct_pedigrees = 1; ## Defaults to reconstructing pedigrees
 my $generate_likelihood_vectors_only = 0; ## Defaults to reconstructing pedigrees
 
-## prePRIMUS variable
+## prePRIMUS variables
 my $run_prePRIMUS = 0;
 my $data_stem = "";
 my $plink_path = "plink";
@@ -167,14 +166,41 @@ my $ersa_results;
 my $project_summary_file;
 my $PADRE_multiple_test_correct = 0;
 
-## Development options (not shown with -help).
+## Development options (not shown with -help)
 my $debug = 0;			# debugging
 my $test = 0;			# test mode.
 my $cluster = 0;		# run on cluster
 my $public_html_dir = "";
 
+## ERSA options (new)
+my %ersa_settings = (
+	'min_cm' => 2.5,
+	'max_cm' => 10,
+	'max_meioses' => 40,
+	'rec_per_meioses' => 35.2548101,
+	'ascertained_chromosome' => 'no_ascertainment',
+	'ascertained_position' => -1,
+	'control_sample_size' => 'None',
+	'exp_mean' => 3.197036753,
+	'pois_mean' => 13.73,
+	'number_of_ancestors' => 'None',
+	'number_of_chromosomes' => 22,
+	'parent_offspring_option' => 'true',
+	'parent_offspring_zscore' => 2.33,
+	'adjust_pop_dist' => 'false',
+	'confidence_level' => 0.95,
+	'mask_common_shared_regions' => 'false',
+	'mask_region_cross_length' => 1000000,
+	'mask_region_threshold' => 4.0,
+	'mask_region_sim_count' => 0,
+	'control_files' => 'None',
+	'mask_region_file' => 'None',
+	'recombination_files' => 'None',
+	'beagle_markers_files' => 'None',
+);
 
-## Process command line options.
+
+## Process command line options
 apply_options();
 
 if(-d $output_dir) # The output directory exist we are going to rename
@@ -217,7 +243,7 @@ if($reconstruct_pedigrees || $get_max_unrelated_set)
 	my @IMUS_commands = ("--do_IMUS",$get_max_unrelated_set,"--do_PR",$reconstruct_pedigrees,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--trait_order",\@trait_order,"--traits",\%traits,"--output_dir",$output_dir,"--rel_threshold",$relatedness_threshold,"--lib",$lib_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--log_file_handle",$LOG);
 	print "IMUS_commands: @IMUS_commands\n" if $verbose > 1;
 	print $LOG "IMUS_commands: @IMUS_commands\n" if $verbose > 1;
-	if(!PRIMUS::IMUS::run_IMUS(@IMUS_commands)){die "IMUS FAILED TO COMPLETE\n"}
+	if(!PRIMUS::IMUS::run_IMUS(@IMUS_commands)){die "IMUS FAILED TO COMPLETE\n\n"}
 }
 
 ## Run pedigree reconstruction
@@ -240,6 +266,7 @@ exit 0;
 ##################################################################################
 ########################## Subroutines ###########################################
 ##################################################################################
+
 sub generate_likelihood_vectors_only
 {
   print "Generating likelihood vector file...\n";
@@ -289,7 +316,7 @@ sub run_PR
 {
 	## Load networks
 	my %networks;
-	open(IN,"$output_dir/$dataset_name\_networks") or die "can't open $output_dir/$dataset_name\_networks; $!\n";
+	open(IN,"$output_dir/$dataset_name\_networks") or die "can't open $output_dir/$dataset_name\_networks; $!\n\n";
 	<IN>; ## get rid of header
 	while(my $line = <IN>)
 	{
@@ -386,7 +413,7 @@ sub run_PR
 			my $file = "$network_dir/run_dataset_cluster_$network_name.sh";
 			print "writing $file\n" if $verbose > 0;
 			print $LOG "writing $file\n" if $verbose > 0;
-			open(OUT,">$file") or die "Can't open $file;$!\n";
+			open(OUT,">$file") or die "Can't open $file;$!\n\n";
 			print OUT "\#\$ -S /bin/bash\n";
 			print OUT "\#\$ -l h_vmem=8G -l mem_requested=8G\n";
 			#print OUT "\#\$ -l mem_requested=12G\n";
@@ -428,8 +455,8 @@ sub run_PR
 		}
 	}
 	
-	if($verbose > 0){print "Writing dataset Summary file $output_dir/Summary_$dataset_name.txt\n"}
-	if($verbose > 0){print $LOG "Writing dataset Summary file $output_dir/Summary_$dataset_name.txt\n"}
+	if($verbose > 0){print "Writing dataset summary file $output_dir/Summary_$dataset_name.txt\n"}
+	if($verbose > 0){print $LOG "Writing dataset summary file $output_dir/Summary_$dataset_name.txt\n"}
 	system("$bin_dir/make_dataset_summary.pl $output_dir $dataset_name");
 	system("./make_dataset_pairwise_summary.pl $output_dir $dataset_name");
 
@@ -488,8 +515,8 @@ sub process_file
     }
 }
 
-sub print_files_and_settings
-{
+sub print_files_and_settings {
+
 	print "\nFILES AND COLUMNS\n";
 	print $LOG "\nFILES AND COLUMNS\n";
 	
@@ -514,11 +541,11 @@ sub print_files_and_settings
 	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){print $LOG "Sex file: $sexes{'FILE'} does not exists\n"; $pod2usage->(2)}
 	else{print $LOG "Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n";}
 
-	print "\nSegment data file: $ersa_data\n\n" if $ersa_data ne "";
-	print $LOG "Segment data file: $ersa_data\n\n" if $ersa_data ne "";
+	print "\nSegment data file: $ersa_data\n" if $ersa_data ne "";
+	print $LOG "Segment data file: $ersa_data\n" if $ersa_data ne "";
 
-	print "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
-	print $LOG "\nPort number: $port_number\n\n" if $port_number ne "" && $port_number != 6000;
+	print "\nPort number: $port_number\n" if $port_number ne "" && $port_number != 6000;
+	print $LOG "\nPort number: $port_number\n" if $port_number ne "" && $port_number != 6000;
 
 	# if ($ersa_data ne "") # checking if an argument was actually passed for ersa data
 	# {
@@ -541,12 +568,20 @@ sub print_files_and_settings
 		print "\nLaunching COMPADRE helper (no segment data) ...\n";
 	}
 
-	# Send command to open the socket
-	my $pid = open2($reader, $writer, "python3 $helper_path $ersa_arg $port_number");
-	if (!defined $pid) {
-		die "Failed to launch COMPADRE helper: $!\n";
+	my $ersa_flags = "";
+	foreach my $key (keys %ersa_settings) {
+		my $value = $ersa_settings{$key};
+		# Only include non-empty string values and non-zero numeric defaults where appropriate
+		if ($value ne "") {
+			$ersa_flags .= "$key|$value|";
+		}
 	}
 
+	# Open socket
+	my $pid = open2($reader, $writer, "python3 $helper_path $ersa_arg $port_number \"$ersa_flags\"");
+	if (!defined $pid) {
+		die "Failed to launch COMPADRE helper: $!\n\n";
+	}
 	$compadre_pid = $pid;
 
 	# Wait for the server to be ready
@@ -565,10 +600,17 @@ sub print_files_and_settings
 	print "\nReference file specification: $reference_pop\n\n" if $reference_pop ne "";
 	print $LOG "Reference file specification: $reference_pop\n\n" if $reference_pop ne "";
 
+	# Standard arguments 
+
 	our $ersa_data_glob = $ersa_data;
 	our $port_number_glob = $port_number;
 	our $reference_pop_glob = $reference_pop;
 
+	# ERSA additional arguments 
+
+	our %ersa_settings_glob = %ersa_settings;
+
+	#############################################################################
 
 	if(!exists $affections{'FILE'}){print "Affection file: none\n";}
 	elsif(!-e $affections{'FILE'}){print "Affection file: $affections{'FILE'} does not exists\n"; $pod2usage->(2)}
@@ -667,6 +709,7 @@ sub apply_options {
     if ( @ARGV > 0 ) 
     {
 	GetOptions(
+
 		# Diagnostic options
 		'verbose|v=i' => \$verbose,
 		'test' => \$test,
@@ -869,6 +912,31 @@ sub apply_options {
 		"project_summary_file=s" => \$project_summary_file,
 		"PADRE_multiple_test_correct" => \$PADRE_multiple_test_correct,		
 
+		## ERSA options (new)
+		"min_cm=f" => \$ersa_settings{'min_cm'}, # 2.5
+		"max_cm=f" => \$ersa_settings{"max_cm"}, # 10
+		"max_meioses=i" => \$ersa_settings{"max_meioses"}, # 40
+		"rec_per_meioses=f" => \$ersa_settings{"rec_per_meioses"}, # 35.2548101
+		"ascertained_chromosome=s" => \$ersa_settings{"ascertained_chromosome"}, # 'no_ascertainment' (string)
+		"ascertained_position=i" => \$ersa_settings{"ascertained_position"}, # -1
+		"control_files=s" => \$ersa_settings{"control_files"}, # file specified or not 
+		"control_sample_size=i" => \$ersa_settings{"control_sample_size"}, # none -- only used with ersa_control_files
+		"exp_mean=f" => \$ersa_settings{"exp_mean"}, # 3.197036753
+		"pois_mean=f" => \$ersa_settings{"pois_mean"}, # 13.73
+		"number_of_ancestors=i" => \$ersa_settings{"number_of_ancestors"}, # default none
+		"number_of_chromosomes=i" => \$ersa_settings{"number_of_chromosomes"}, # 22
+		"parent_offspring_option=s" => \$ersa_settings{"parent_offspring_option"}, # true
+		"parent_offspring_zscore=f" => \$ersa_settings{"parent_offspring_zscore"}, # 2.33
+		"adjust_pop_dist=s" => \$ersa_settings{"adjust_pop_dist"}, # false
+		"confidence_level=f" => \$ersa_settings{"confidence_level"}, # 0.95
+		"mask_common_shared_regions=s" => \$ersa_settings{"mask_common_shared_regions"}, # false
+		"mask_region_cross_length=i" => \$ersa_settings{"mask_region_cross_length"}, # 1000000
+		"mask_region_file=s" => \$ersa_settings{"mask_region_file"}, # file specified or not
+		"mask_region_threshold=f" => \$ersa_settings{"mask_region_threshold"}, # 4.0
+		"mask_region_sim_count=i" => \$ersa_settings{"mask_region_sim_count"}, # 0
+		"recombination_files=s" => \$ersa_settings{"recombination_files"}, # file specified or not
+		"beagle_markers_files=s" => \$ersa_settings{"beagle_markers_files"}, # file specified or not
+
 		## IMUS options
 		"size:s" => sub{ push(@trait_order,"size");$traits{'size'} = "-size";},
 		"high_btrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
@@ -894,7 +962,12 @@ sub apply_options {
 	
 	if($data_stem ne "" && $run_prePRIMUS != 1)
 	{
-		die "INVALID INPUT OPTIONS: --file requires --genome to run.\n";
+		die "INVALID INPUT OPTIONS: --file input also requires the --genome flag to run.\n\n";
+	}
+
+	if($run_padre && $ersa_data eq "")
+	{
+		die "\n[COMPADRE] Error: --run_padre requires --segment_data to be specified.\n\n";
 	}
 
 	## PRIMUS + ERSA requires ERSA likelihood file and results file as well as a PRIMUS summary file.
@@ -908,7 +981,7 @@ sub apply_options {
 			}
 			elsif(!exists $ibd_estimates{'FILE'} && $data_stem eq "")
 			{
-				die "INVALID INPUTS: PRIMUS+ERSA requires a PRIMUS project summary file; either provide one on the commandline or generate one by running PRIMUS.\n";
+				die "INVALID INPUTS: PRIMUS+ERSA requires a PRIMUS project summary file; either provide one on the commandline or generate one by running PRIMUS.\n\n";
 			}
 			else
 			{
@@ -917,7 +990,7 @@ sub apply_options {
 		}
 		else
 		{
-			die "INVALID INPUTS: PRIMUS+ERSA requires but the model_output_fule and the results files output by ERSA.\n";
+			die "INVALID INPUTS: PRIMUS+ERSA requires but the model_output_fule and the results files output by ERSA.\n\n";
 		}
 	}
 
@@ -925,7 +998,7 @@ sub apply_options {
 	{
 		if(exists $ibd_estimates{'FILE'})
 		{
-			die "[COMPADRE] Error: If you already have IBD estimates, then you don't need to calculate new ones with --genome option. If you do need to calculate IBD estimates, don't input anything for the IBD estimates.\n";
+			die "[COMPADRE] Error: If you already have IBD estimates, then you don't need to calculate new ones with --genome option. If you do need to calculate IBD estimates, don't input anything for the IBD estimates.\n\n";
 		}
 		$study_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($data_stem);
 		$output_dir = "$data_stem\_PRIMUS" if $output_dir eq ""; 
@@ -1001,7 +1074,7 @@ sub apply_options {
 		}
 		else
 		{
-			die "INVALID value for -d|--degree_rel_cutoff; Valid options are are integers from 1 to 3, representing 1st through 3rd degree relatives\n";  
+			die "INVALID value for -d|--degree_rel_cutoff; Valid options are are integers from 1 to 3, representing 1st through 3rd degree relatives\n\n";  
 		}
 	}
 
@@ -1205,6 +1278,48 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --affection_file	Specify path to the file containing the affection status of each sample
    --affections		Like --affection_file; need FILE=[file], optional specification of file columns
    --int_likelihood_cutoff	Initial minimum likelihood for a relationship to reconstruction (default = 0.1)
+
+ ERSA options:
+   --min_cm			minimum segment size to consider [default: 2.5]
+   --max_cm			maximum segment size to consider for estimating the exponential distribution of 
+   				segment sizes in the population [default: 10.0]
+   --max_meioses		maximum number of meioses to consider [default: 40]
+   --rec_per_meioses		expected number of recombination events per meioses [default: 35.2548101]	
+   --ascertained_chromosome	chromosome number of ascertained disease locus (int)
+   --ascertained_position	chromosomal position of ascertained disease locus (int)
+   --control_files		GERMLINE or Beagle fibd output file(s) for population control
+   --control_sample_size	Sample size of control population. Used with --control_files
+   --exp_mean			Mean of exp distribution of shared segment size in population [default: 3.197036753]
+   --pois_mean			Mean of the Poisson distribution of the number of segments shared between 
+				a pair of individuals in the population [default: 13.73]
+   --pair_file			Restrict pairwise comparisons to the ID pairs specified in this file
+   --single_pair		Restrict pairwise comparisons to the pairs specified in this flag (id1:id2)
+   --number_of_ancestors	Restrict relationships to [1] one parent (half-sibs/cousins), 
+   				[2] two parents (full-sibs/cousins), or [0] (parent-offspring/grandparent-granchild).
+   --number_of_chromosomes	Number of chromosomes [default: 22]
+   --parent_offspring_option	Option to evaluate potential parent-offspring and sibling relationships 
+   				based on total proportion of the genome that is shared ibd1 [default: true]
+   --parent_offspring_zscore	Z-score for rejecting a sibling relationship in favor of a parent-offspring 
+   				relationship [default: 2.33, alpha=0.01] 
+   --adjust_pop_dist		Option to adjust the population distribution of shared segments downward 
+   				for segments that could not be detected due to recent ancestry [default: false]
+   --confidence_level		Confidence level for confidence interval around the estimated degree 
+   				of relationship. [default: 0.95]
+   --mask_common_shared_regions	excludes chromosomal regions that are commonly shared from evaluation.
+   				Used only when the control_files or mask_region_file parameter is specified [default: false].
+   --mask_region_cross_length	length in base pairs that a shared segment must extend past a masked segment 
+   				in order to avoid truncation. Used only when mask_common_shared_regions parameter is specified 
+				[default: 1000000].
+   --mask_region_file		file containing chromosomal regions to exclude from evaluation.
+   --mask_region_threshold	Threshold for the ratio of observed vs. expected segment sharing in controls 
+   				before a region will be masked.
+   --mask_region_sim_count	number of simulations performed of the null distribution of shared 
+   				segment locations in controls; results written to output_file.sim
+   --recombination_files	file containing genetic distances for all chromosomes. This parameter must be 
+   				specified with Beagle fibd input files
+   --beagle_markers_files	Beagle marker files (one file required for each chromosome, wildcards required, 
+   				ex: chr*beagle.marker). Each filename must begin with the chromosome name followed by a period.
+				This parameter must be specified with Beagle fibd input files
 
 
 =head1 DOCUMENTATION
