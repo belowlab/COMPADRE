@@ -14,11 +14,13 @@ relationship estimation accuracy in family networks ahead of pedigree generation
     --segment_data ./example_data/simulations/EUR/eur_size20_segments.txt
     ```
 
+    All standard ERSA runtime options are customizable during this step; simply use the applicable flag(s) when initially running COMPADRE. Descriptions of each ERSA flag can be found using the `--help` message as well as on the [COMPADRE website](https://compadre.dev/docs).
+
     Note: COMPADRE does not <i>require</i> segment-specific IBD status ('half'/1 or 'full'/2) as part of this input; however, inclusion of this information can improve the composite algorithm's performance. COMPADRE will check for the presence of an `ibd` column containing values 1 or 2 at the last index of the `--segment_data` input file. We have provided a generic script to identify IBD2 segments from standard IBD detection output here: `tools/determine_ibd.py`. It is also possible to run COMPADRE without shared segments input if desired.
 
-2. COMPADRE supports optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
+1. COMPADRE supports optional PADRE computation after completion of standard network reconstruction. Use the `--run_padre` flag at runtime. 
 
-3. COMPADRE utilizes 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm dynamically trained on PCA results to predict ancestry ahead of IBD estimation and reconstruction.
+2. COMPADRE utilizes 1000 Genomes Project genetic reference data to generate pairwise IBD estimates. This update also leverages a support vector machine (SVM) algorithm dynamically trained on PCA results to predict ancestry ahead of IBD estimation and reconstruction.
 
 
 
