@@ -20,3 +20,6 @@ __MACOSX/
 # test files 
 test.py 
 testing.ipynb
+
+# Singularity test images
+*.sif

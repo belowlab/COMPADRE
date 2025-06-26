@@ -1,6 +1,6 @@
 FROM ubuntu:20.04
 
-# Download and install dependencies
+# Download and install general dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     perl \
     r-cran-devtools \
@@ -11,15 +11,25 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     r-base \
     build-essential \
     zlib1g-dev \
-    git
+    git \
+    locales
 
-# Download and install PLINK 1.9
+# Configure locale
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US:en
+ENV LC_ALL=en_US.UTF-8
+
+# Download and install PLINK 1.9 and 2 
+## NOTE: The PLINK2 AWS resource URL is subject to change; it looks like they remove old versions
+##       once a year or so. Check the bucket URL(s) if either link doesn't work: 
+##       https://s3.amazonaws.com/plink1-assets or https://s3.amazonaws.com/plink2-assets
+
 RUN wget https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20230116.zip && \
     unzip plink_linux_x86_64_20230116.zip && \
     mv plink /bin/plink1.9 && \
     rm plink_linux_x86_64_20230116.zip
 
-# Download and install PLINK 2
 RUN wget https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20250609.zip && \
     unzip plink2_linux_x86_64_20250609.zip && \
     mv plink2 /bin/plink2 && \
@@ -37,13 +47,30 @@ RUN git clone https://github.com/belowlab/compadre.git temp_repo && \
 # symbolic link to 'old' plink expected by PRIMUS
 RUN ln -s /bin/plink1.9 /bin/plink
 
-# Install python packages via pip
-RUN pip3 install -r requirements.txt
+# Install Miniconda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh && \
+    bash miniconda.sh -b -p /opt/conda && \
+    rm miniconda.sh
+    
+# Add conda to PATH
+ENV PATH="/opt/conda/bin:${PATH}"
 
-# Install via conda 
-RUN conda install -y scikit-learn xopen
+# Create env with compatible python version
+RUN conda create -n compadre python=3.11 -y
 
-## IN PROGRESS: install reference data from github releases URL 
+# Activate the environment and install packages
+RUN conda install -n compadre -y -c conda-forge \
+    pandas \
+    numpy \
+    scipy \
+    matplotlib \
+    scikit-learn \
+    xopen
+
+# Make sure the compadre environment is activated by default
+ENV PATH="/opt/conda/envs/compadre/bin:${PATH}"
+
+## Install reference data from github releases URL 
 RUN wget https://github.com/belowlab/compadre/releases/download/pre-release-0.2.0/compadre_data.zip && \
     unzip compadre_data.zip && \
     rm compadre_data.zip
@@ -61,7 +88,7 @@ RUN rm -r __MACOSX && rm -r compadre_data
 RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')"
 
 # Add perl path to where primus is expecting it 
-CMD ["mkdir", '-p', "/usr/src/perl"]
+RUN mkdir -p /usr/src/perl
 ENV PERL_PATH=/usr/src/perl
 ENV PERL5LIB=$PERL_PATH:$PERL_PATH/lib/perl5:/usr/src/lib/perl_modules/:/usr/src/lib/perl_modules/PRIMUS/:/usr/src/padre/lib/perl_modules/PADRE:$PERL5LIB
 
@@ -71,4 +98,5 @@ ENV COMPADRE_HOST=0.0.0.0
 
 # Set primus executable entrypoint
 WORKDIR /usr/src/bin
-ENTRYPOINT ["perl", "./run_COMPADRE.pl"]
+# This is slightly redundant because singularity doesn't work otherwise
+ENTRYPOINT ["perl", "/usr/src/bin/run_COMPADRE.pl"] 

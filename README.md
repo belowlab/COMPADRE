@@ -34,7 +34,7 @@ Direct download: https://github.com/belowlab/compadre/archive/refs/heads/main.zi
 
 ## Execution
 
-### Docker
+### Option 1: Docker
 
 We have provided a Dockerfile to help install dependencies and reference data ahead of running COMPADRE. First, however, you must install and launch the Docker client on your machine. Instructions to install Docker Engine on your system can be found [here](https://docs.docker.com/engine/install/).
 
@@ -60,23 +60,21 @@ cp /example/local/folder/segments.txt ./input/
 Build the Docker image:
 
 ```bash
-docker build -t compadre .
+docker build -f Dockerfile.github -t compadre .
 ```
 
 Run (interactive mode):
 
 ```bash
-# Set entrypoint to bring you into the Docker image location
-
+# Step 1: Set entrypoint to bring you into the Docker image location
 docker run -v \
     /local/path/to/compadre_repo/output:/usr/src/output \
     -p 4000:4000 -it --entrypoint /bin/bash compadre:latest 
 
-# Run COMPADRE (replace inputs with your own from the /usr/src/input/ folder)
-
+# Step 2: Run COMPADRE (replace inputs with your own from the /usr/src/input/ folder)
 perl run_COMPADRE.pl \
-    --file ../example_data/simulations/EUR/size20_0missing/eur_20_0 \
-    --segment_data ../example_data/simulations/EUR/eur_size20_segments.txt \
+    --file ../example_data/input \
+    --segment_data ../example_data/segments.txt \
     --output ../output/eur_test \
     --genome --verbose 1 --run_padre --port_number 4000
 
@@ -88,18 +86,18 @@ Run (non-interactive mode):
 
 ```bash
 docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 compadre \
-    --file ../example_data/simulations/AMR/size20_0missing/amr_20_0 \
-    --segment_data ../example_data/simulations/AMR/amr_size20_segments.txt \
+    --file ../example_data/input \
+    --segment_data ../example_data/segments.txt \
     --output ../output/amr_test \
     --genome --verbose 1 --run_padre --port_number 4000
 ```
 
-<u><strong>NOTE</strong></u>: The "Run" examples above perform all steps of COMPADRE: (1) input data quality control, (2) identification of an unrelated set, and (3) pedigree reconstruction. While performing the first two of these steps is encouraged in most instances, if you already have PLINK *.genome formatted data (and performed quality control), you can skip to pedigree reconstruction by using both `--no_IMUS` and `--plink_ibd <yourfile.genome>` flags. Conversely, if you only want to generate IBD estimates per network and the overall unrelated set from your standard input data, you can use the `--no_PR` flag.
+<u><strong>NOTE</strong></u>: The "Run" examples above perform all steps of COMPADRE: (1) input data quality control, (2) identification of an unrelated set, and (3) pedigree reconstruction. While performing the first two of these steps is encouraged in most instances, if you already have PLINK *.genome formatted data (and performed quality control), you can skip to pedigree reconstruction by using both `--no_IMUS` and `--plink_ibd <yourfile.genome>` flags. Conversely, if you only want to generate IBD estimates per network (step 1) and the overall unrelated set (step 2) from your standard input data, you can use the `--no_PR` flag to stop execution before pedigree reconstruction.
 
 
-### Singularity
+### Option 2: Singularity
 
-COMPADRE can also be built and ran from a Singularity image.
+COMPADRE can also be built and ran using Singularity. This option is recommended for use in HPC environments without Docker permissions. 
 
 ```bash
 
@@ -108,10 +106,10 @@ singularity pull compadre.sif docker://grahamebelowlab/compadre:latest
 
 # Run the pulled image with bind mounts
 singularity run \
-    --bind /local/path/for/data:/data \
-    --bind /local/path/for/output:/output \
+    --bind /local/path/for/your/input/data:/data \
+    --bind /local/path/for/your/output:/output \
     compadre.sif \
-    --file /data/plinkfile \
+    --file /data/your_plink_fileset \
     --segment_data /data/segments.txt \
     --genome \
     --output /output/results
