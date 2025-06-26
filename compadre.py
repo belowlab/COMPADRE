@@ -91,6 +91,31 @@ def calculate_ersa_props(model_df):
 
     return model_df_2d_prop, model_df_3d_prop, model_df_4d_prop, model_df_un_prop
 
+def clean_ersa_options(ersa_option_dict):
+
+    # Check data types and revert to default values if they're not correct
+
+    int_options = {
+        'ascertained_position': -1,
+        'mask_region_sim_count': 0,
+        'mask_region_cross_length': 1000000,
+        'mask_region_threshold': 4,
+        'number_of_chromosomes': 22,
+        'max_meioses': 40,
+    }
+    float_options = {
+        'parent_offspring_zscore': 2.33,
+        'pois_mean': 13.73,
+        'exp_mean': 3.197036753,
+        'rec_per_meioses': 35.2548101,
+        'min_cm': 2.5,
+        'confidence_level': 0.9,
+        'max_cm': 10
+    }
+
+    return {k: v if isinstance(v, (int, float)) else (int_options.get(k, v) if k in int_options else float_options.get(k, v)) for k, v in ersa_option_dict.items()}
+
+
 ########################################
 
 def main(segment_data_file, portnumber, ersa_flag_str):
@@ -114,6 +139,8 @@ def main(segment_data_file, portnumber, ersa_flag_str):
         
         for flag, value in zip(flag_names, flag_values):
             additional_options[flag] = convert_value(value)
+
+        additional_options = clean_ersa_options(additional_options)  
 
         with xopen(segment_data_file, 'r') as f: # Open the large file here and populate dictionary that stays in system memory
 

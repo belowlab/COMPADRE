@@ -32,6 +32,8 @@ Direct download: https://github.com/belowlab/compadre/archive/refs/heads/main.zi
 
 ## Execution
 
+### Docker
+
 We have provided a Dockerfile to help install dependencies and reference data ahead of running COMPADRE. First, however, you must install and launch the Docker client on your machine. Instructions to install Docker Engine on your system can be found [here](https://docs.docker.com/engine/install/).
 
 Navigate into the `compadre` directory downloaded from GitHub:
@@ -91,6 +93,27 @@ docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 c
 ```
 
 <u><strong>NOTE</strong></u>: The "Run" examples above perform all steps of COMPADRE: (1) input data quality control, (2) identification of an unrelated set, and (3) pedigree reconstruction. While performing the first two of these steps is encouraged in most instances, if you already have PLINK *.genome formatted data (and performed quality control), you can skip to pedigree reconstruction by using both `--no_IMUS` and `--plink_ibd <yourfile.genome>` flags. Conversely, if you only want to generate IBD estimates per network and the overall unrelated set from your standard input data, you can use the `--no_PR` flag.
+
+
+### Singularity
+
+COMPADRE can also be built and ran from a Singularity image.
+
+```bash
+
+# Build image file using Docker Hub link
+singularity pull compadre.sif docker://grahamebelowlab/compadre:latest
+
+# Run the pulled image with bind mounts
+singularity run \
+    --bind /local/path/for/data:/data \
+    --bind /local/path/for/output:/output \
+    compadre.sif \
+    --file /data/plinkfile \
+    --segment_data /data/segments.txt \
+    --genome \
+    --output /output/results
+```
 
 
 

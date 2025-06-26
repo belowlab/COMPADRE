@@ -19,10 +19,10 @@ RUN wget https://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20230116.zip 
     rm plink_linux_x86_64_20230116.zip
 
 # Download and install PLINK 2
-RUN wget https://s3.amazonaws.com/plink2-assets/plink2_linux_x86_64_20230914.zip && \
-    unzip plink2_linux_x86_64_20230914.zip && \
+RUN wget https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20250609.zip && \
+    unzip plink2_linux_x86_64_20250609.zip && \
     mv plink2 /bin/plink2 && \
-    rm plink2_linux_x86_64_20230914.zip
+    rm plink2_linux_x86_64_20250609.zip
 
 # Install Ghostscript -- TBD
 
