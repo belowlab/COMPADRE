@@ -46,24 +46,24 @@ Navigate into the `compadre` directory downloaded from GitHub:
 cd compadre
 ```
 
-Copy your input data into the `input` folder (to be automatically copied into the Docker image):
+First, copy your input data into the `input` folder (to be automatically copied into the Docker image):
 
 ```bash
-# cd into the COMPADRE directory first
+# (cd into the COMPADRE directory first)
 
-cp /example/local/folder/test.bed ./input/
-cp /example/local/folder/test.bim ./input/
-cp /example/local/folder/test.fam ./input/
-cp /example/local/folder/segments.txt ./input/
+cp /example/local/folder/fileset.bed input/
+cp /example/local/folder/fileset.bim input/
+cp /example/local/folder/fileset.fam input/
+cp /example/local/folder/segments.txt input/
 ```
 
-Build the Docker image:
+Next, build the Docker image:
 
 ```bash
 docker build -f Dockerfile.github -t compadre .
 ```
 
-Run (interactive mode):
+Finally, run (in interactive mode):
 
 ```bash
 # Step 1: Set entrypoint to bring you into the Docker image location
@@ -80,11 +80,14 @@ perl run_COMPADRE.pl \
 
 ## NOTE: This example uses a non-default port, hence the --port_number flag.
 ## ALL ports, however, require the docker '-p PORT:PORT' flag in the first command.
+
+# Step 3: Once complete, press CTRL+A+D to exit the image.
 ```
 
-Run (non-interactive mode):
+... or run in non-interactive mode:
 
 ```bash
+# This example also uses a non-default port
 docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 compadre \
     --file ../example_data/input \
     --segment_data ../example_data/segments.txt \
@@ -97,22 +100,21 @@ docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 c
 
 ### Option 2: Singularity
 
-COMPADRE can also be built and ran using Singularity. This option is recommended for use in HPC environments without Docker permissions. 
+COMPADRE can also be built and ran using Singularity. This option is recommended for use in HPC environments without Docker permissions.
 
 ```bash
-
 # Build image file using Docker Hub link
 singularity pull compadre.sif docker://grahamebelowlab/compadre:latest
 
-# Run the pulled image with bind mounts
+# Run with bind mounts to connect the image to your local data and output folders
 singularity run \
-    --bind /local/path/for/your/input/data:/data \
-    --bind /local/path/for/your/output:/output \
+    --bind /local/path/for/your/input/data:/compadre_data \
+    --bind /local/path/for/your/output/folder:/compadre_output \
     compadre.sif \
     --file /data/your_plink_fileset \
-    --segment_data /data/segments.txt \
+    --segment_data /compadre_data/your_segments.txt \
     --genome \
-    --output /output/results
+    --output /compadre_output/results
 ```
 
 
