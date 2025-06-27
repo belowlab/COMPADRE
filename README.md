@@ -6,7 +6,7 @@ relationship estimation accuracy in family networks ahead of pedigree generation
 
 
 
-## Updates
+## What's new? 
 
 1. COMPADRE integrates shared segments-based relationship estimation ahead of pedigree reconstruction. We used [GERMLINE2](https://github.com/gusevlab/germline2) to identify shared segments for our benchmarking, but there are many other tools that can generate these data. Specifically, COMPADRE expects a file with the following columns: `id1 id2 start end length chrom`. A file formatting example for this input can be found in the `example_data` folder. COMPADRE can also read a .gz or zstd compressed segment file in this step. 
 
@@ -26,10 +26,7 @@ relationship estimation accuracy in family networks ahead of pedigree generation
 
 ## Installation
 
-Git: Click the green `Code` button at the top of this page and select a download option
-
-Direct download: https://github.com/belowlab/compadre/archive/refs/heads/main.zip
-
+Git: Click the green `Code` button at the top of this page and select a cloning option.
 
 
 ## Execution
@@ -71,12 +68,14 @@ docker run -v \
     /local/path/to/compadre_repo/output:/usr/src/output \
     -p 4000:4000 -it --entrypoint /bin/bash compadre:latest 
 
+## NOTE: Add the flag --platform linux/amd64 for execution on ARM chip Macs
+
 # Step 2: Run COMPADRE (replace inputs with your own from the /usr/src/input/ folder)
 perl run_COMPADRE.pl \
     --file ../example_data/input \
     --segment_data ../example_data/segments.txt \
-    --output ../output/eur_test \
-    --genome --verbose 1 --run_padre --port_number 4000
+    --output ../output/compadre_test \
+    --genome --verbose 1 --port_number 4000
 
 ## NOTE: This example uses a non-default port, hence the --port_number flag.
 ## ALL ports, however, require the docker '-p PORT:PORT' flag in the first command.
@@ -91,8 +90,8 @@ perl run_COMPADRE.pl \
 docker run -v /local/path/to/compadre_repo/output:/usr/src/output -p 4000:4000 compadre \
     --file ../example_data/input \
     --segment_data ../example_data/segments.txt \
-    --output ../output/amr_test \
-    --genome --verbose 1 --run_padre --port_number 4000
+    --output ../output/compadre_test \
+    --genome --verbose 1 --port_number 4000
 ```
 
 <u><strong>NOTE</strong></u>: The "Run" examples above perform all steps of COMPADRE: (1) input data quality control, (2) identification of an unrelated set, and (3) pedigree reconstruction. While performing the first two of these steps is encouraged in most instances, if you already have PLINK *.genome formatted data (and performed quality control), you can skip to pedigree reconstruction by using both `--no_IMUS` and `--plink_ibd <yourfile.genome>` flags. Conversely, if you only want to generate IBD estimates per network (step 1) and the overall unrelated set (step 2) from your standard input data, you can use the `--no_PR` flag to stop execution before pedigree reconstruction.
@@ -120,7 +119,7 @@ singularity run \
 
 
 ### Execution notes
----
+
 - In order to easily access COMPADRE results on your local machine, use the `-v` flag in the Docker entrypoint step to link your local COMPADRE repository folder path (specifically, the `output` folder). For example, on macOS, this might be `/Users/yourname/Downloads/compadre/output` if you cloned this repository into your Downloads folder. 
 - Additional computation now takes place over an open socket. COMPADRE defaults to port 6000; if you need to use a different port, please indicate as such with the following COMPADRE flag `--port_number <INT>` AND Docker flag `--publish <INT>:<INT>`. See the "Run" examples for more details.
 - All other runtime options are detailed [here](https://compadre.dev/docs). 

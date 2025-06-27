@@ -118,7 +118,7 @@ def clean_ersa_options(ersa_option_dict):
 
 ########################################
 
-def main(segment_data_file, portnumber, ersa_flag_str):
+def main(segment_data_file, portnumber, ersa_flag_str, output_directory):
 
     signal.signal(signal.SIGINT, signal_handler)   # CTRL+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination
@@ -131,7 +131,7 @@ def main(segment_data_file, portnumber, ersa_flag_str):
     ibd2_counter = 0
 
     if segment_data_file != 'NA':
-
+        
         # First step -- read in ERSA options from COMPADRE runtime flags
         ersa_flags = ersa_flag_str.strip('"').split('|')
         flag_names = ersa_flags[::2]
@@ -254,8 +254,7 @@ def main(segment_data_file, portnumber, ersa_flag_str):
                     segment_obj = json.dumps(segment_dict)
 
                     # make output directory
-                    ersa_dir = segment_data_file.split('/')[:-1]
-                    ersa_dir = '/'.join(ersa_dir) + '/ersa'
+                    ersa_dir = f'{output_directory}/ersa'
                     if not os.path.exists(ersa_dir):
                         os.makedirs(ersa_dir, exist_ok=True)
                     ersa_outfile = f'{ersa_dir}/output_all_ersa'
@@ -304,11 +303,10 @@ def main(segment_data_file, portnumber, ersa_flag_str):
                             segment_obj = {key : segment_dict[key]} 
                             segment_obj = json.dumps(segment_obj)
 
-                        ersa_dir = segment_data_file.split('/')[:-1]
-                        ersa_dir = '/'.join(ersa_dir) + '/ersa'
+                        ersa_dir = f'{output_directory}/ersa'
                         if not os.path.exists(ersa_dir):
                             os.makedirs(ersa_dir, exist_ok=True)
-                        ersa_outfile = f'{ersa_dir}/output_new_{id1_temp}_{id2_temp}'
+                        ersa_outfile = f'{ersa_dir}/output_all_ersa'
 
                         ersa_options = {
                             "single_pair": key,
@@ -372,5 +370,6 @@ if __name__ == '__main__':
     segment_data_file = sys.argv[1]
     portnumber = int(sys.argv[2])
     ersa_flag_str = sys.argv[3]
+    output_directory = sys.argv[4]
 
-    main(segment_data_file, portnumber, ersa_flag_str)
+    main(segment_data_file, portnumber, ersa_flag_str, output_directory)

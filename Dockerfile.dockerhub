@@ -7,12 +7,12 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     wget \
     unzip \
     python3 \
-    python3-pip \
     r-base \
     build-essential \
     zlib1g-dev \
     git \
-    locales
+    locales \
+    ghostscript
 
 # Configure locale
 RUN locale-gen en_US.UTF-8
@@ -34,8 +34,6 @@ RUN wget https://s3.amazonaws.com/plink2-assets/alpha5/plink2_linux_x86_64_20250
     unzip plink2_linux_x86_64_20250609.zip && \
     mv plink2 /bin/plink2 && \
     rm plink2_linux_x86_64_20250609.zip
-
-# Install Ghostscript -- TBD
 
 # Clone repo into temp folder then move to /usr/src 
 WORKDIR /usr/src
@@ -87,16 +85,20 @@ RUN rm -r __MACOSX && rm -r compadre_data
 # Install the KernSmooth R package
 RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')"
 
-# Add perl path to where primus is expecting it 
+# Add perl path to where primus/padre is expecting it 
 RUN mkdir -p /usr/src/perl
 ENV PERL_PATH=/usr/src/perl
 ENV PERL5LIB=$PERL_PATH:$PERL_PATH/lib/perl5:/usr/src/lib/perl_modules/:/usr/src/lib/perl_modules/PRIMUS/:/usr/src/padre/lib/perl_modules/PADRE:$PERL5LIB
 
+ENV PATH=/usr/src/bin:$PATH
+RUN chmod +x /usr/src/bin/run_COMPADRE.pl
+
 # Change this if you need to use a different port
 EXPOSE 6000
+
 ENV COMPADRE_HOST=0.0.0.0
 
-# Set primus executable entrypoint
+# Set compadre executable entrypoint
 WORKDIR /usr/src/bin
-# This is slightly redundant because singularity doesn't work otherwise
+# This is slightly redundant, but singularity doesn't work otherwise
 ENTRYPOINT ["perl", "/usr/src/bin/run_COMPADRE.pl"] 

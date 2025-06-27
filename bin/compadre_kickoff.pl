@@ -578,7 +578,7 @@ sub print_files_and_settings {
 	}
 
 	# Open socket
-	my $pid = open2($reader, $writer, "python3 $helper_path $ersa_arg $port_number \"$ersa_flags\"");
+	my $pid = open2($reader, $writer, "python3 $helper_path $ersa_arg $port_number \"$ersa_flags\" $output_dir");
 	if (!defined $pid) {
 		die "Failed to launch COMPADRE helper: $!\n\n";
 	}
