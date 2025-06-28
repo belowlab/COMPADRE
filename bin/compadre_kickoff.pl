@@ -219,10 +219,11 @@ print $LOG "Commandline options used: @commandline_options\n";
 print_files_and_settings() if $verbose > 0;
 
 if($max_generations eq 'none'){$max_generations = 1000}
-if(-d $output_dir)
-{
-	system("mv $output_dir $output_dir\_OLD");
-}
+
+# if(-d $output_dir)
+# {
+# 	system("mv $output_dir $output_dir\_OLD");
+# }
 
 
 #################### RUN PROGRAMS ###########################
@@ -1077,7 +1078,7 @@ sub apply_options {
 		}
 	}
 
-	$log_file = "$output_dir/PRIMUS_output.log";
+	$log_file = "$output_dir/COMPADRE_output.log";
 }
 
 sub do_arrays_match
