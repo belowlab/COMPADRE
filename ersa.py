@@ -592,6 +592,8 @@ def add_segments(beagle_marker_dict,rec_dict,chromosome_positions,sharing_dict,s
                         end_position=int(line_list[3])
                         cm=float(line_list[4])
 
+                        IBD2="no" # 6 column GERMLINE input has no IBD2 information
+
                         process_segment(chromosome,ascertained_dict,sharing_dict,ibd2_dict,ind_id,cm,controls,begin_position,end_position,recombination_rates,IBD2,control_segments,masked_segments_dict,masked_sum)
 
             elif line_list[11] != 'cM': # handling for old germline input

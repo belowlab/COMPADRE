@@ -343,7 +343,7 @@ sub is_network_to_network_connection_significant
 }
 
 
-sub get_non_missing_decendants ## bredth first search, better
+sub get_non_missing_decendants ## breadth first search, better
 {
 	my ($parent,$network_ref,$depth) = @_;
 
@@ -1243,7 +1243,7 @@ sub build_network_from_ped_file
 		my $dad = $PID;
 		my $mom = $MID;
 		
-		## If the name is seperated with a '__' from PRIMUS output then change it to just the part after the '__'
+		## If the name is separated with a '__' from PRIMUS output then change it to just the part after the '__'
 		if($IID =~ /__/){$child = (split(/__/,$IID))[1];} # "$FID\__$IID";}
 		if($MID =~ /__/){$mom =(split(/__/,$MID))[1];} # "$FID\__$MID";}
 		if($PID =~ /__/){$dad =(split(/__/,$PID))[1];} # "$FID\__$MID";}

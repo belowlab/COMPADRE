@@ -132,8 +132,8 @@ The source code for generating family genetic data simulations can be found [her
 
 More details on PRIMUS, ERSA, and PADRE can be found in their respective documentation:
 - [PRIMUS](https://primus.gs.washington.edu/primusweb/res/documentation.html)
-- [ERSA](https://hufflab.org/software/ersa)
-- [PADRE](https://hufflab.org/software/padre)
+- [ERSA](https://hufflab.org/software/ersa) (under maintenance)
+- [PADRE](https://hufflab.org/software/padre) (under maintenance)
 
 
 

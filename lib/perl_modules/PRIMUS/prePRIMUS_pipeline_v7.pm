@@ -120,6 +120,7 @@ my $THRESHOLD = .1;
 my $EXCLUDE_VALUE = 0;
 
 my $memory_flag = "";
+my $sample_count = 0;  
 
 ## Maybe make this local and pass them around
 my $INDIVIDUAL_ANCESTRY = 0;
@@ -190,7 +191,7 @@ sub run_prePRIMUS_main {
 	my $IBD0_vs_IBD1_plot;
 	my $keep_intermediate_files = 1;
 	my $max_memory = 0;
-	my $min_pihat_threshold;
+	my $min_pihat_threshold = 0;
 
 	GetOptionsFromArray(
 		\@_,
@@ -248,6 +249,7 @@ sub run_prePRIMUS_main {
 
 	if($alt_ref_stem ne "" && @ref_pops > 0){die "can't use --alt_ref and --ref_pops_ref at the same time\n";}
 	if($remove_AIMs == 1 && $keep_AIMs == 1){die "can't use --remove_AIMs and --keep_AIMs at the same time\n";}
+
 	$study_name = get_file_name_from_stem($data_stem) if $study_name eq "";
 	$plink_silent = "--silent" if $verbose < 2;
 	make_path($output_dir) if !-d $output_dir;
@@ -261,16 +263,18 @@ sub run_prePRIMUS_main {
 	$data_stem = make_binary_version($data_stem,"$output_dir/$study_name");
 	
 	## Set PID and MID to 0 so it doesn't mess up the founder allele frequency stuff 
-        system("cp $data_stem.fam $data_stem.fam_temp"); 
-        open(IN,"$data_stem.fam_temp"); 
-        open(OUT,">$data_stem.fam"); 
-        while(my $line = <IN>) 
-        {       
-                my ($FID, $IID, $PID,$MID,$SEX,$AFF) = split(/\s+/,$line); 
-                print OUT "$FID\t$IID\t0\t0\t$SEX\t$AFF\n"; 
-        } 
-        close(OUT); 
-        close(IN); 
+	system("cp $data_stem.fam $data_stem.fam_temp"); 
+	open(IN,"$data_stem.fam_temp"); 
+	open(OUT,">$data_stem.fam"); 
+
+	while(my $line = <IN>) 
+	{       
+		my ($FID, $IID, $PID,$MID,$SEX,$AFF) = split(/\s+/,$line); 
+		print OUT "$FID\t$IID\t0\t0\t$SEX\t$AFF\n"; 
+		$sample_count++;
+	} 
+	close(OUT); 
+	close(IN); 
 	
 	$mt_file = get_MT_estimates($data_stem) if !$NO_MITO;
 	$y_file = get_Y_estimates($data_stem) if !$NO_Y;
@@ -422,7 +426,7 @@ sub run_prePRIMUS_main {
 	print $LOG "IBD estimates are in $genome_file\n" if $verbose > 0;
 	print "IBD0 vs IBD1 plot: $IBD0_vs_IBD1_plot\n" if $verbose > 0;
 	print $LOG "IBD0 vs IBD1 plot: $IBD0_vs_IBD1_plot\n" if $verbose > 0;
-	print "\n\nPREPRIMUS 1KG POPCLASSIFIER VERSION DONE!\n\n";
+	#print "\n\nPREPRIMUS 1KG POPCLASSIFIER VERSION DONE!\n\n";
 	return ($genome_file,$sex_file,$mt_file,$y_file);
 }
 
@@ -1325,11 +1329,17 @@ sub run_pca
         $cluster_names = "--pca-cluster-names ACB ASW BEB CDX CEU CHB CHS CLM ESN FIN GBR GIH GWD IBS ITU JPT KHV LWK MSL MXL PEL PJL PUR STU TSI YRI";
     }
 
+	######
+	# Maybe add a feature to pass in --read_freq <EXTERNAL ALLELE FREQUENCIES> for primates etc. 
+	# pca-cluster-names got replaced in plink2 so you would need to specify these populations using weights instead	
 
-	# added --extract flag from LD pruning
-	#my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --maf $MAF --geno $GENO --out $stem_name");
-    my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --maf $MAF --geno $GENO --out $stem_name $memory_flag");
 
+	if ($sample_count > 5000) {
+		my $temp = system("$PLINK2 --allow-no-sex --bfile $stem_name --pca approx --extract $stem_name\_pruned.prune.in --maf $MAF --geno $GENO --out $stem_name $memory_flag");
+	}
+	else {
+		my $temp = system("$PLINK --allow-no-sex --bfile $stem_name --family --pca $cluster_names --extract $stem_name\_pruned.prune.in --maf $MAF --geno $GENO --out $stem_name $memory_flag");
+	}
 
 	if($temp > 0)
 	{
@@ -1421,6 +1431,14 @@ sub calculate_IBD_estimates {
 	system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp $memory_flag");
 	#my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min 0 $memory_flag");
 	#system("$PLINK --noweb --bfile $stem_name $read_freq --maf $MAF --geno $GENO $plink_silent --make-bed --out $stem_name\_temp");
+
+	# Error checking for edge case where this variable is not passed correctly
+	if (!defined $min_pihat_threshold || $min_pihat_threshold <= 0) {
+		print "\nMinimum pi-hat threshold was not propagated to IBD estimation, setting to 0\n" if $verbose > 2;
+		print $LOG "\nMinimum pi-hat threshold was not propagated to IBD estimation, setting to 0\n" if $verbose > 0;
+		$min_pihat_threshold = 0;
+	}
+
 	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min $min_pihat_threshold $memory_flag");
 	if($temp > 0)
 	{

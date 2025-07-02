@@ -157,7 +157,7 @@ my $keep_prePRIMUS_intermediate_files = 1;
 my $no_PCA_plot = 0;
 my @ref_pops;
 my $rerun = 0;
-my $min_pihat_threshold = 0.1;
+my $min_pihat_threshold = 0;
 
 ## PADRE variables
 my $run_PRIMUS_plus_ERSA = 0;
@@ -474,7 +474,7 @@ sub run_PR
 
 	if ($run_padre) {
 
-		print "Initializing PADRE\n" if $verbose > 0;
+		print "\nInitializing PADRE\n" if $verbose > 0;
 		print $LOG "Initializing PADRE\n" if $verbose > 0;
 
 		print "Requesting ERSA output path from COMPADRE helper...\n" if $verbose > 0;
@@ -542,7 +542,7 @@ sub print_files_and_settings {
 	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){print $LOG "Sex file: $sexes{'FILE'} does not exists\n"; $pod2usage->(2)}
 	else{print $LOG "Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n";}
 
-	print "\nSegment data file: $ersa_data\n" if $ersa_data ne "";
+	print "Segment data file: $ersa_data\n" if $ersa_data ne "";
 	print $LOG "Segment data file: $ersa_data\n" if $ersa_data ne "";
 
 	print "\nPort number: $port_number\n" if $port_number ne "" && $port_number != 6000;
