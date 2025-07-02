@@ -1,4 +1,5 @@
-FROM ubuntu:22.04
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=${TARGETPLATFORM} ubuntu:22.04
 
 # Download and install general dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -88,6 +89,7 @@ RUN Rscript -e "install.packages('KernSmooth', repos='http://cran.rstudio.com/')
 # Add perl path to where primus/padre is expecting it 
 RUN mkdir -p /usr/src/perl
 ENV PERL_PATH=/usr/src/perl
+ENV PERL5LIB=""
 ENV PERL5LIB=$PERL_PATH:$PERL_PATH/lib/perl5:/usr/src/lib/perl_modules/:/usr/src/lib/perl_modules/PRIMUS/:/usr/src/padre/lib/perl_modules/PADRE:$PERL5LIB
 
 ENV PATH=/usr/src/bin:$PATH

@@ -68,8 +68,6 @@ docker run -v \
     /local/path/to/compadre_repo/output:/usr/src/output \
     -p 4000:4000 -it --entrypoint /bin/bash compadre:latest 
 
-## NOTE: Add the flag --platform linux/amd64 for execution on ARM chip Macs
-
 # Step 2: Run COMPADRE (replace inputs with your own from the /usr/src/input/ folder)
 perl run_COMPADRE.pl \
     --file ../example_data/input \
