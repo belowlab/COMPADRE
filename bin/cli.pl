@@ -2,6 +2,8 @@ package CLI;
 
 use strict;
 use GetOpt::Long::Descriptive;
+use FindBin;
+use Pod::Usage;
 
 sub new_cli {
     my ($cli) = @_;
@@ -94,11 +96,25 @@ sub new_cli {
       ["mask_region_sim_count", "number of simulations performed of the null distribution of shared sgemnet locations in controls; results written to output_file.sim"],
       ["recombination_files", "file containing genetic distances for all chromsomes. This parameter must be specified with Beagle fibd input files."],
       ["beagle_markers_files", "Beagle marker files (one file required for each chromosome, wildcards required, ex: chr*beagle.marker). Each filename must begin with the chromosome numae followed by a period. This parameter must be specified with Beagle fibd input files."]
+      ["show_docs=s", "Show the complete documentation file", {default="false"}]
     )
 
     if ($opt->help) {
         print $usage->text;
         exit 0;
+    }
+
+    # If the user passes the flags to view the documentation then we need to invoke the pod2usage function for teh docs.pod
+    if ($opt->show_docs == "true") {
+      my $docs_path = $FindBin::Bin/docs.pod
+      if (! -e $docs_path) {
+        die "The documentation file was not found"
+      } 
+      pod2usage(
+        -input   => $docs_path,  # <--- The key parameter
+        -exitval => 0,
+        -verbose => 2
+    );
     }
 }
 
