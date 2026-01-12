@@ -17,6 +17,9 @@ my @commandline_options = @ARGV;
 use Getopt::Long 2.13;
 use PADRE;
 use File::Path qw(make_path);
+use Log::Log4perl;
+use LogConfig::configure qw(configure_logger get_logger_level);
+
 
 my $package = "PADRE";
 my $lib_dir; 
@@ -42,7 +45,6 @@ my $verbose = 1;
 my $study_name = "";
 my $output_dir = "";
 my $log_file;
-my $LOG;
 
 ## PADRE variables
 my $run_PADRE = 0;
@@ -60,9 +62,16 @@ my $cluster = 0;		# run on cluster
 
 ## Process command line options.
 apply_options();
-open($LOG,">$log_file") if($LOG eq "");
 
-print $LOG "Commandline options used: @commandline_options\n";
+# now we can config the log file appender and the appender that writes to 
+# the console
+my $loglevel = get_logger_level($verbose);
+configure_logger($log_file, $loglevel);
+
+# Generate the $LOG object used throughout the script
+my $LOG = Log::Log4perl->get_logger();
+
+$LOG->proginfo("Commandline options used: @commandline_options");
 
 ################ Print all files and settings ################
 
@@ -70,7 +79,7 @@ print_files_and_settings() if $verbose > 0;
 
 #################### RUN PROGRAMS ###########################
 	my $results = PADRE::run_PADRE_project_summary($project_summary_file,$ersa_model_output,$ersa_results,$degree_rel_cutoff,$output_dir,$PADRE_multiple_test_correct);
-	print "PADRE results: $results\n";
+	$LOG->proginfo("PADRE results: $results");
 
 exit 0;
 
@@ -79,13 +88,12 @@ exit 0;
 ##################################################################################
 sub print_files_and_settings
 {
-	print "\nFILES AND COLUMNS\n";
-	print $LOG "\nFILES AND COLUMNS\n";
+	$LOG->proginfo("\nFILES AND COLUMNS\n");
 	
 
-	print "\nSETTINGS\n";
-	print "Verbose: $verbose\n";
-	print "Relatedness threshold: $relatedness_threshold\n";
+	$LOG->proginfo("\nSETTINGS\n");
+	$LOG->proginfo("Verbose: $verbose\n");
+	$LOG->proginfo("Relatedness threshold: $relatedness_threshold\n");
 }
 
 sub apply_options 
@@ -110,6 +118,7 @@ sub apply_options
 		"degree_rel_cutoff|d=i" => \$degree_rel_cutoff,
     "rel_threshold|threshold|t=f" => \$relatedness_threshold,
 		"output_dir|o=s" => \$output_dir,
+		"log_file=s" => \$log_file,
 
 		# Files and directories
 		"bin=s" => \$bin_dir,
@@ -175,8 +184,6 @@ sub apply_options
 			die "INVALID value for -d|--degree_rel_cutoff; Valid options are are integers from 1 to 3, representing 1st through 3rd degree relatives\n";  
 		}
 	}
-
-	$log_file = "$output_dir/PRIMUS_output.log";
 }
 
 

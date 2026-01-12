@@ -24,7 +24,7 @@ else
 
 ## Set environmental variables
 #print "env: $ENV{'PERL5LIB'}\n";
-$ENV{'PERL5LIB'} = "$ENV{'PERL5LIB'}:$lib_dir/perl_modules:$lib_dir/perl_modules/PADRE";
+$ENV{'PERL5LIB'} = "$ENV{'PERL5LIB'}:$lib_dir/perl_modules:$lib_dir/perl_modules/PADRE:$1/../lib/perl_modules";
 #print "env: $ENV{'PERL5LIB'}\n";
 
 $ENV{'PERL5LIB'} =~ s/5\.14\.2/5\.10\.1/g;

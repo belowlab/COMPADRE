@@ -5,7 +5,8 @@ use Data::Dumper;
 use File::Basename;
 use File::Spec;
 use IO::Socket::INET; # added for socket compadre helper connection
-use IPC::Open2; # also for new compadre helper
+use Socket::socket_helper qw(send_to_compadre_helper);
+use Log::Log4perl;
 
 my $KDE_density_resolution = 1000; 
 my $MIN_LIKELIHOOD = 0.1;
@@ -20,68 +21,10 @@ my $verbose = 1;
 my $curr_bw;
 my $curr_kde_type;
 
+# lets get the logger
+my $LOG = Log::Log4perl->get_logger(__PACKAGE__);
+
 ######################################################################
-
-sub send_to_compadre_helper {
-    my ($data, $port) = @_;
-    $port //= 6000;  
-    my $host = $ENV{COMPADRE_HOST} // 'localhost';
-
-    #print "DEBUG: Attempting to connect to $host:$port with data: '$data'\n" if $verbose > 1;
-
-    my $socket = IO::Socket::INET->new(
-        PeerAddr => $host,
-        PeerPort => $port,
-        Proto    => 'tcp',
-        Timeout  => 30,  # Increase timeout for debugging
-    );
-    
-    if (!$socket) {
-        die "Cannot connect to Python server at $host:$port: $!\n";
-    }
-
-    # Enable keep-alive on the socket
-    $socket->sockopt(SO_KEEPALIVE, 1) if $socket->can('sockopt');
-    $socket->blocking(1);
-
-    #print "DEBUG: Connected successfully, sending data...\n" if $verbose > 1;
-
-    my $bytes_sent = $socket->print($data);
-    if (!defined $bytes_sent) {
-        close($socket);
-        die "Failed to send data to Python server: $!\n";
-    }
-
-    #print "DEBUG: Sent $bytes_sent bytes, waiting for response...\n" if $verbose > 1;
-    
-    $socket->flush();
-    
-    # Read response with error checking
-    my $response = <$socket>;
-    if (defined $response) {
-        chomp $response;
-        
-        # Check if response indicates an error
-        if ($response =~ /^ERROR:\s*(.*)$/s) {
-            close($socket);
-            my $error_details = $1;
-            die "Python COMPADRE helper error: $error_details\n";
-        }
-        elsif ($response =~ /^(ERSA_ERROR|PADRE_ERROR|SOCKET_ERROR):\s*(.*)$/s) {
-            close($socket);
-            my $error_type = $1;
-            my $error_details = $2;
-            die "Python $error_type: $error_details\n";
-        }
-        
-    } else {
-        $response = "No response";
-        warn "No response received from Python server\n";
-    }
-    
-    close($socket);
-    return $response;
-}
 
 # Closes the python socket when the Perl requests to it are done (PR done)
 sub close_socket {
@@ -95,7 +38,7 @@ sub get_relationship_likelihood_vectors {
 	my $IBD_file = $$IBD_file_ref{'FILE'};
 	# read in from the reference previously in the program
 
-	print "\nGETTING RELATIONSHIP LIKELIHOOD VECTOR\n\n.genome file: $IBD_file\n";
+	$LOG->proginfo("\nGETTING RELATIONSHIP LIKELIHOOD VECTOR\n\n.genome file: $IBD_file\n");
 
 	$MIN_LIKELIHOOD = shift;
 	$verbose = shift;
@@ -112,7 +55,7 @@ sub get_relationship_likelihood_vectors {
 	my $total = 0;
 	my $total_possibilities = 0;
 	#my $outfile = "$IBD_file\_KDE_likelihood_vectors_prop$MIN_LIKELIHOOD\_bw$bw\_$kde_type.txt\n";
-	my $outfile = "$IBD_file\_KDE_likelihood_vectors\n";
+	my $outfile = "$IBD_file\_KDE_likelihood_vectors";
 	#my $outfile = "$output_dir/KDE_likelihood_vectors.txt";
 	my %possibility_counts;
 
@@ -131,7 +74,7 @@ sub get_relationship_likelihood_vectors {
 
   	##################### If likelihood vectors were read in as an input file, then bypass looking [at] reference data to save on runtime
   	if (exists $$IBD_file_ref{'likelihood_vectors'} && $$IBD_file_ref{'likelihood_vectors'} == 1) {
-		print "LOAD file: $$IBD_file_ref{'FILE'}\n";
+		$LOG->proginfo("LOAD file: $$IBD_file_ref{'FILE'}\n");
 		$total_possibilities = load_likelihood_vectors_from_file($$IBD_file_ref{'FILE'},\%raw_relationship_densities,\%relationships);
 		close(PROB_OUT);
 		close(MZ_OUT);
@@ -256,7 +199,6 @@ sub get_relationship_likelihood_vectors {
 		}
 		
 		my @density_vector = ($PC->[$k0][$k1],$FS->[$k0][$k1],$HAG->[$k0][$k1],$CGH->[$k0][$k1],$DR->[$k0][$k1],$UN->[$k0][$k1]);
-		#print "density_vactor: @density_vector\n";
 		## Hard coded cutoffs to try to catch poor IBD estimates that fall outside the trained KDE regions.
         if ($k1 > .8 * $KDE_density_resolution) { ## Corrects the 2nd degree splash up near PO
             @density_vector[0] += 1
@@ -270,8 +212,8 @@ sub get_relationship_likelihood_vectors {
 				@density_vector[6] = 100;
 			}
 			elsif ($verbose > 0) {
-				warn "WARNING!!! Probability vector confidence too low. This is likely due to messy IBD estinates. Applying hard relationship cuttoffs to relationship prediction of $line.\n";
-				print "density vector: @density_vector\n";
+				$LOG->warn("WARNING!!! Probability vector confidence too low. This is likely due to messy IBD estinates. Applying hard relationship cuttoffs to relationship prediction of $line.\n");
+				$LOG->info("density vector: @density_vector\n");
 			
                 if ($k1 > .8 * $KDE_density_resolution) {
                     if ($k2 < .01 * $KDE_density_resolution && $k1 < .9 * $KDE_density_resolution) {
@@ -289,8 +231,8 @@ sub get_relationship_likelihood_vectors {
                     @density_vector[2] = 100;
                 }
                 else {
-                    print "$name1 <-> $name2 = $k0:$k1:$k2 (IBD 0:1:2)\n";
-                    print "D_vector: @density_vector\n";
+                    $LOG->info("$name1 <-> $name2 = $k0:$k1:$k2 (IBD 0:1:2)\n");
+                    $LOG->info("D_vector: @density_vector\n");
                     die "Unable to predict relationship from IBD estimates for $name1 <-> $name2: $temp[$$IBD_file_ref{'IBD0'}-1]:$temp[$$IBD_file_ref{'IBD1'}-1]:$temp[$$IBD_file_ref{'IBD2'}-1] (IBD 0:1:2); Probability vector confidence too low (@density_vector). Try to get more accurate genome-wide IBD estimates (e.g. adjust for admixture or provide more accurate reference minor allele frequencies when calculating the IBD estimates)\n";
                 }
 			}
@@ -317,7 +259,7 @@ sub get_relationship_likelihood_vectors {
 			if ($sum01 < 0.4) {
 
 				my $vector_str = join(',',@vector);
-				my $socket_data = "$name1|$name2|$vector_str|pairwise";
+				my $socket_data = "$name1|$name2|$vector_str|pairwise\n";
 				my $new_vector = send_to_compadre_helper($socket_data, $port_number);
 				chomp($new_vector);
 				
@@ -333,7 +275,6 @@ sub get_relationship_likelihood_vectors {
 				# 	# Revert to the original vector if the change wasn't HAG<->CGH
 				# 	@vector = @vector_copy;
 				# } else {
-				# 	print "RELATIONSHIP CHANGED ($name1 $name2): $rel_old -> $rel_new\n";
 				# }
 
 				# new version 
@@ -346,7 +287,6 @@ sub get_relationship_likelihood_vectors {
 				# 	# Revert to the original vector if none of the acceptable changes
 				# 	@vector = @vector_copy;
 				# } else {
-				# 	print "RELATIONSHIP CHANGED ($name1 $name2): $rel_old -> $rel_new\n";
 				# }
 			}
 		}
@@ -355,7 +295,6 @@ sub get_relationship_likelihood_vectors {
 		if (@vector[1] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
 			#if($verbose > -1)
 			#{
-			#		warn "WARNING!!! Both FS and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the HAG relationship.\n";
 			#}
 			#@vector[2] += @vector[1];
 			#@vector[1] =  0;	
@@ -364,9 +303,7 @@ sub get_relationship_likelihood_vectors {
 
 		## If the initial_likelihood_cutoff is dropped low enough, the HAG (2nd degree) will overlap with PC, 
 		if (@vector[0] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
-			if ($verbose > 1) {
-				warn "WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n";
-			}
+      $LOG->info("WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n");
 			@vector[0] += @vector[2];
 			@vector[2] =  0;
 			
@@ -404,7 +341,6 @@ sub get_relationship_likelihood_vectors {
 
 		# if ($rel ne $rel_old) {
 		# 	if ($verbose > 2) {
-		# 		print "NEW relationship prediction ( $name1 $name2 ) : $rel (previously $rel_old)\n";
 		# 	}
 		# }
 
@@ -417,30 +353,22 @@ sub get_relationship_likelihood_vectors {
 		my $num_possibilities = @possibilities;
 		$total_possibilities += $num_possibilities;
 		
-		if ($verbose > 2) {
-			print "line: $line\n";
-			print "likelihood vector: $name1 -> $name2 = @vector\n";
-			print "densities: @density_vector\n";
-		}
+    $LOG->debug("line: $line\n");
+    $LOG->debug("likelihood vector: $name1 -> $name2 = @vector\n");
+    $LOG->debug("densities: @density_vector\n");
 		
 		## Test if relationship vector matches the expected relationship (if provided)
 		if (grep {$_ eq $relationship} @possibilities) {
-			if ($verbose > 3) {
-				print "PASS.\n";
-				print "line: $line\n";
-				print "likelihood vector: $name1 -> $name2 = @vector\n";
-				print "densities: @density_vector\n";
-			}
+      $LOG->trace("PASS.\n");
+      $LOG->trace("line: $line\n");
+      $LOG->trace("likelihood vector: $name1 -> $name2 = @vector\n");
+      $LOG->trace("densities: @density_vector\n");
 		}
 		else {
-			if ($verbose > 3) {
-				print "FAIL: $line\n";
-				print "$name1 -> $name2 = @vector\n";
-				print "densities: @density_vector\n";
-				print "@temp[6]:@temp[7]:@temp[8]\n";
-				#push(@fails,$line);
-				#die "FAIL!!! @k1_vector != $relationship\n";
-			}
+      $LOG->trace("FAIL: $line\n");
+      $LOG->trace("$name1 -> $name2 = @vector\n");
+      $LOG->trace("densities: @density_vector\n");
+      $LOG->trace("@temp[6]:@temp[7]:@temp[8]\n");
 		}
 	}
 	close(IN);
@@ -483,18 +411,14 @@ sub load_likelihood_vectors_from_file {
   
 		## If the intial_likelihood_cutoff is dropped low enough, the FS will overlap with HAG (2nd degree); should probably change the reconstruction code to split FS and HAG out from eachother like I do with 2nd and 3rd degree, and 3rd and unrelated 
 		if (@vector[1] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
-			if ($verbose > -1)  {
-				warn "WARNING!!! Both FS and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the HAG relationship.\n";
-			}
+      $LOG->warn("WARNING!!! Both FS and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the HAG relationship.\n");
 			@vector[2] += @vector[1];
 			@vector[1] =  0;
 			
 		}
 		## If the intial_likelihood_cutoff is dropped low enough, the HAG (2nd degree) will overlap with PC, 
 		if (@vector[0] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
-			if ($verbose > -1)  {
-				warn "WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n";
-			}
+      $LOG->warn("WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n");
 			@vector[0] += @vector[2];
 			@vector[2] =  0;
 			
@@ -507,7 +431,6 @@ sub load_likelihood_vectors_from_file {
 		my @possibilities = predict_relationship(@vector);
 		my $rel = get_maximum_relationship(@vector);
 
-    	#print PROB_OUT "$name1\t$name2\t".join(',',@vector)."\t$rel\t".join(',',@possibilities)."\t$MIN_LIKELIHOOD\n";
 		print PROB_OUT "$FID1\t$IID1\t$FID2\t$IID2\t$rel\t".join(',',@vector)."\t$ibd0\t$ibd1\t$ibd2\t$PI_HAT\t-1\t".join(',',@possibilities)."\t$MIN_LIKELIHOOD\n";
 
     	my $num_possibilities = @possibilities;
@@ -585,9 +508,7 @@ sub get_data_arrays {
 
 	my $file = shift;
 
-	if($verbose > 0) {
-		print "Loading KDE look-up-file = $file\n"
-	}
+  $LOG->info("Loading KDE look-up-file = $file\n");
 	my @data_array;
 
 	for (my $i = 0; $i <= $KDE_density_resolution; $i++) {
@@ -601,15 +522,12 @@ sub get_data_arrays {
 	my $k1 = 0;
 	while (my $line = <IN>) {
 		my @temp =  split(/\s+/,$line);
-		#print "line = " . @temp[0] . " " . @temp[1] . "\n";
 		my $k0 = 0;
 		foreach (@temp) {
-			#print "k1: $k1\t";
 			$data_array[$k0][$k1] = $_;
 			$k0++;
 		}
 		$k1++;
-		#print "\n\n";
 	}
 	close(IN);
 	return \@data_array;
