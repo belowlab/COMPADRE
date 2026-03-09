@@ -12,6 +12,10 @@ use PRIMUS::get_age_flags;
 use PRIMUS::predict_relationships_2D qw(get_relationship_likelihood_vectors);
 use PRIMUS::compare_fam_files;
 use List::Util qw(sum);
+use Log::Log4perl;
+
+# lets get the logger
+my $LOG = Log::Log4perl->get_logger(__PACKAGE__);
 
 ## Code to build a network and print out the pairwise relationships from a ped/fam file
 #my @network_refs_from_fam = build_network_from_fam_file("../data/PCfamilies.fam");
@@ -44,12 +48,10 @@ my $allow_half_sib_dummy_mating = 0;
 my $allow_full_sib_dummy_mating = 0;
 my $USE_SIBLING_BLOCKS = 1; ## Setting this to 1 will speed up the runtime, but will reduce the number of possible pedigrees that are inbred, but it will still produce all possible outbred pedigrees.
 my $dummy_ctr = 1;
-my $LOG;
 my %age;
 my $enforce_age_filtering = 0;
 my $degree_rel_cutoff = 3;
 
-open($LOG,"");
 
 sub reconstruct_pedigree {
 
@@ -153,8 +155,6 @@ sub reconstruct_pedigree {
 		"max_gen=i" => \$MAX_GENERATIONS,
 
 	) or die "Failed to parse options for Pedigree Reconstruction\n";
-	
-	open($LOG,">$output_directory/$network_name.log") if($LOG eq "");
 
 	PRIMUS::node_v7::set_min_likelihood($MIN_LIKELIHOOD);
 	PRIMUS::node_v7::set_verbose($verbose);
@@ -163,18 +163,14 @@ sub reconstruct_pedigree {
 	my $y_ref = load_y_data($Y_file_ref) if exists $$Y_file_ref{'FILE'};
 	
 	$age_flags{"age_file"}=1 if(keys %age > 0);
-	print "RECONSTRUCTING $network_name\n" if($verbose > 0);
-	print "Output directory: $output_directory\n" if($verbose > 0);
-	print "Use mito non-match: $USE_NO_MATCH_MITO\n" if($verbose > 0);
-	print "Use mito match: $USE_MATCH_MITO\n" if($verbose > 0);
-	print "Use Y non-match: $USE_NO_MATCH_Y\n" if($verbose > 0);
-	print "Use Y match: $USE_MATCH_Y\n" if($verbose > 0);
-	print "min likelihood: $MIN_LIKELIHOOD\n" if($verbose > 1);
-	print "MAX GENERATIONS: $MAX_GENERATIONS\n" if($verbose > 1);
-	print $LOG "RECONSTRUCTING $network_name\n" if($verbose > 0);
-	print $LOG "Output directory: $output_directory\n" if($verbose > 0);
-	print $LOG "min likelihood: $MIN_LIKELIHOOD\n" if($verbose > 1);
-	print $LOG "MAX GENERATIONS: $MAX_GENERATIONS\n" if($verbose > 1);
+	$LOG->info("RECONSTRUCTING $network_name\n");
+	$LOG->info("Output directory: $output_directory\n");
+	$LOG->info("Use mito non-match: $USE_NO_MATCH_MITO\n");
+	$LOG->info("Use mito match: $USE_MATCH_MITO\n");
+	$LOG->info("Use Y non-match: $USE_NO_MATCH_Y\n");
+	$LOG->info("Use Y match: $USE_MATCH_Y\n");
+	$LOG->debug("min likelihood: $MIN_LIKELIHOOD\n");
+	$LOG->debug("MAX GENERATIONS: $MAX_GENERATIONS\n");
 	
 	## Load network data
 	## $relationships_ref = a reference to a hash of hashes of arrays; format is $relationship{$id1}{$id2} = [likelihood of relationships]
@@ -183,8 +179,7 @@ sub reconstruct_pedigree {
 
 	eval
 	{
-		print "\nmin_likelihood: $MIN_LIKELIHOOD\n";
-		print $LOG "min_likelihood: $MIN_LIKELIHOOD\n" if $verbose > 1;
+		$LOG->info("min_likelihood: $MIN_LIKELIHOOD\n");
 
 		## fallback
 		
@@ -233,8 +228,7 @@ sub reconstruct_pedigree {
 		}
 		my @sample_names = keys %samples;
 
-		print "FAILED RELATIONSHIP PREDICTION: $@\n";
-		print $LOG "FAILED RELATIONSHIP PREDICTION: $@\n";
+		$LOG->proginfo("FAILED RELATIONSHIP PREDICTION: $@\n");
 		chomp($@);
 		write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@networks,\@sample_names,"",$@);
 		return $total_possibilities;
@@ -259,8 +253,7 @@ sub reconstruct_pedigree {
 	
 	if($@)
 	{
-		print "Failed reconstruction (COMPADRE): $@\n";
-		print $LOG "Failed reconstruction (COMPADRE): $@\n";
+		$LOG->proginfo("Failed reconstruction (COMPADRE): $@\n");
 		#write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@networks,\@sample_names,"",$@);
 		#return $total_possibilities;
 		@networks = ();
@@ -268,8 +261,7 @@ sub reconstruct_pedigree {
 
 	# If no valid pedigrees found and we have fallback data, try reconstruction with fallback
     if (@networks == 0 && defined $fallback_relationships_ref) {
-        print "No valid pedigrees reconstructed with composite approach.\nAttempting reconstruction with base KDEs ...\n" if $verbose;
-		print LOG "No valid pedigrees reconstructed with composite approach.\nAttempting reconstruction with base KDEs ...\n" if $verbose;
+		  $LOG->info("No valid pedigrees reconstructed with composite approach.\nAttempting reconstruction with base KDEs ...\n");
 
         eval {
 			$network_ref = load_network($fallback_relationships_ref, $mito_ref, $y_ref, \%gender);
@@ -277,8 +269,7 @@ sub reconstruct_pedigree {
 			
 			# If successful, update the relationship data for subsequent processing
 			if (@networks > 0) {
-				print "Fallback reconstruction successful, found " . scalar(@networks) . " pedigree(s)\n" if $verbose > 0;
-				print $LOG "Fallback reconstruction successful, found " . scalar(@networks) . " pedigree(s)\n" if $verbose > 0;
+				$LOG->info("Fallback reconstruction successful, found " . scalar(@networks) . " pedigree(s)\n");
 				
 				$relationships_ref = $fallback_relationships_ref;
 				$raw_relationship_densities_ref = $fallback_raw_densities_ref;
@@ -286,8 +277,7 @@ sub reconstruct_pedigree {
 			1;
 		};
 		if($@) {
-			print "Failed reconstruction (PRIMUS): $@\n";
-			print $LOG "Failed reconstruction (PRIMUS): $@\n";
+			$LOG->error("Failed reconstruction (PRIMUS): $@\n");
 			write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@networks,\@sample_names,"",$@);
 			return $total_possibilities;
 		}
@@ -297,8 +287,7 @@ sub reconstruct_pedigree {
 	## Test if timed out
 	if (@networks[0] == -100)
 	{
-		print "TIMED OUT\n";
-		print $LOG "TIMED OUT\n";
+		$LOG->error("TIMED OUT\n");
 		write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@networks,\@sample_names,"","TIMED OUT");
 		return $total_possibilities;
 	}
@@ -306,8 +295,7 @@ sub reconstruct_pedigree {
 	## Test if too many possible pedigrees
 	if (@networks[0] == -101)
 	{
-		print "TOO many possible pedigrees\n";
-		print $LOG "TOO many possible pedigrees\n";
+		$LOG->error("TOO many possible pedigrees\n");
 		write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@networks,\@sample_names,"","Too many possible pedigrees");
 		return $total_possibilities;
 	}
@@ -315,19 +303,11 @@ sub reconstruct_pedigree {
 	## Rank
 	my @ranked_networks = rank_networks($raw_relationship_densities_ref,\%scores,\%num_dummies,\%num_generations,\%age,\%age_flags,@networks);
 
-	if($verbose > 0)
-	{
-		print "networks pre-prune: ".@ranked_networks."\n";
-		print $LOG "networks pre-prune: ".@ranked_networks."\n";
-	}
+  $LOG->info("networks pre-prune: ".@ranked_networks."\n");
 
 	## Prune
 	@ranked_networks = post_prune_networks(@ranked_networks);
-	if($verbose > 0)
-	{
-		print "networks post-prune: ".@ranked_networks."\n";
-		print $LOG "networks post-prune: ".@ranked_networks."\n";
-	}
+  $LOG->info("networks post-prune: ".@ranked_networks."\n");
 
 	## Write out pedigree files
 	write_summary_file(\%scores,\%num_dummies,\%num_generations,$output_directory,$network_name,\@ranked_networks,\@sample_names,\%age_flags,"none");
@@ -336,8 +316,7 @@ sub reconstruct_pedigree {
 	foreach my $network_ref (@ranked_networks)
 	{
 		my $network_name = "$network_name\_$possible_pedigree_ctr";
-		print "Writing .fam file for $network_name\n" if $verbose > 0;
-		print $LOG "Writing .fam file for $network_name\n" if $verbose > 0;
+		$LOG->info("Writing .fam file for $network_name\n");
 		eval
 		{
 			write_fam_file($network_ref,$network_name,\%affected_status,$output_directory,$network_num);
@@ -347,7 +326,7 @@ sub reconstruct_pedigree {
 		};
 		if($@)
 		{
-			warn "$network_name failed to write\n";
+			$LOG->warn("$network_name failed to write");
 		};
 	}
 
@@ -406,8 +385,6 @@ sub load_y_data
 	my $match_col = $y{'MATCH'};
 
 	my %match_data;
-	#print "file: $file\n";
-	#print "$FID1_col :: $IID1_col\n";
 	while(my $line = <IN>)
 	{
 		$line =~ s/^\s+//;
@@ -422,7 +399,6 @@ sub load_y_data
 		$match = 1 if $val == $y{'MATCH_VAL'};
 		$match_data{"$FID1\__$IID1"}{"$FID2\__$IID2"} = $match;
 		$match_data{"$FID2\__$IID2"}{"$FID1\__$IID1"} = $match;
-		#print "$FID2\__$IID2 <-> $FID1\__$IID1 = ". $match_data{"$FID2\__$IID2"}{"$FID1\__$IID1"} ."\n";
 	}
 	return \%match_data;
 }
@@ -439,11 +415,11 @@ sub load_mito_data
 		return "";
 	}
 	
-	print "NO_MITO: $NO_MITO\n" if $verbose > 1;
+	$LOG->debug("NO_MITO: $NO_MITO\n"); 
 
 	$USE_NO_MATCH_MITO = 1;
-	print "USE_NO_MATCH_MITO: $USE_NO_MATCH_MITO\n" if $verbose > 1;
-	print "USE_MATCH_MITO: $USE_MATCH_MITO\n" if $verbose > 1;
+	$LOG->debug("USE_NO_MATCH_MITO: $USE_NO_MATCH_MITO\n");
+	$LOG->debug("USE_MATCH_MITO: $USE_MATCH_MITO\n");
 
 	my $FID1_col = $mito{'FID1'};
 	my $IID1_col = $mito{'IID1'};
@@ -452,8 +428,6 @@ sub load_mito_data
 	my $match_col = $mito{'MATCH'};
 
 	my %match_data;
-	#print "file: $file\n";
-	#print "$FID1_col :: $IID1_col\n";
 	while(my $line = <IN>)
 	{
 		$line =~ s/^\s+//;
@@ -468,15 +442,13 @@ sub load_mito_data
 		$match = 1 if $val == $mito{'MATCH_VAL'};
 		$match_data{"$FID1\__$IID1"}{"$FID2\__$IID2"} = $match;
 		$match_data{"$FID2\__$IID2"}{"$FID1\__$IID1"} = $match;
-		#print "$FID2\__$IID2 <-> $FID1\__$IID1 = ". $match_data{"$FID2\__$IID2"}{"$FID1\__$IID1"} ."\n";
 	}
 	return \%match_data;
 }
 
 sub write_summary_file
 {
-	print "Writing summary file\n" if($verbose > 0);
-	print $LOG "Writing summary file\n" if($verbose > 0);
+	$LOG->info("Writing summary file\n");
 	
 	my $scores = shift;
 	my $num_dummies = shift;
@@ -651,7 +623,6 @@ sub rank_networks
 					}
 				}
 				$network_score = $network_score + log($score); 
-				#print "network_score= $network_score\n";
 				$ctr++;
 			}
 		}
@@ -666,16 +637,13 @@ sub rank_networks
 		if($$age_flags_ref{"age_file"} ne "")
 		{
 			PRIMUS::get_age_flags::get_age_flags_in_network($network_ref,$ages_ref,$age_flags_ref);
-			#print "Flags:\n";
 			foreach my $id1 (keys %{ $$age_flags_ref{$network_ref} })
 			{
 				foreach my $id2 (keys %{ $$age_flags_ref{$network_ref}{$id1} })
 				{
-					#print "$id1 -> $id2 = $$age_flags_ref{$network_ref}{$id1}{$id2}\n";
 					$num_flags{$network_ref}++;
 				}
 			}
-			#print "Done with age flags\n";
 			#exit;
 		}
 		else
@@ -941,22 +909,21 @@ sub reconstruct_network
 	my $start_time = time;
 	my @networks_resolved0;
 
-	print "Entering Resolve PC trios. # of possible pedigrees: ". @networks_unresolved ."\n" if $verbose > 0;
+	$LOG->info("Entering Resolve PC trios. # of possible pedigrees: ". @networks_unresolved ."\n");
 	
 	while(@networks_unresolved > 0)
 	{
-		print "# of networks to resolve: " . @networks_unresolved . "\n" if($verbose > 1);
-		print $LOG "# of networks to resolve: " . @networks_unresolved . "\n" if($verbose > 1);
+		$LOG->debug("# of networks to resolve: " . @networks_unresolved . "\n");
 		my $network_ref = shift(@networks_unresolved);
 		
     my ($resolved, @temp_networks) = resolve_PC_trio($network_ref);
     
-    print "# temp_networks: " . @temp_networks . "\n" if($verbose > 1);
+    $LOG->debug("# temp_networks: " . @temp_networks . "\n");
     push(@networks_unresolved,@temp_networks);
 
 		if($resolved eq 1)
 		{
-      print "RESOLVED\n" if($verbose > 1);
+      $LOG->debug("RESOLVED\n");
 			push(@networks_resolved0,$network_ref);
 		}
 		if(@networks_unresolved > $MAX_NETWORKS_TO_RESOLVE)
@@ -970,7 +937,6 @@ sub reconstruct_network
 		## Make sure everyone has dummy parents
 		foreach my $node_name (keys %$network_ref)
 		{
-			#print "Node: $node_name\n";
 			my @parents = $$network_ref{$node_name}->parents();
 			while(@parents < 2)
 			{
@@ -987,14 +953,11 @@ sub reconstruct_network
 	
 	
 	my @networks_resolved1;
-	print "Entering Phase 1. # of possible pedigrees: ". @networks_resolved0 ."\n" if $verbose > 0;
-	print $LOG "Entering Phase 1. # of possible pedigrees: ". @networks_resolved0 ."\n" if $verbose > 0;
-
+	$LOG->info("Entering Phase 1. # of possible pedigrees: ". @networks_resolved0 ."\n");
 
 	while(@networks_resolved0 > 0)
 	{
-		print "# of networks to resolve: " . @networks_resolved0 . "\n" if($verbose > 1);
-		print $LOG "# of networks to resolve: " . @networks_resolved0 . "\n" if($verbose > 1);
+		$LOG->debug("# of networks to resolve: " . @networks_resolved0 . "\n");
 		my $network_ref = shift(@networks_resolved0);
 		my ($continue, @temp_networks) = phase_1($network_ref);
 
@@ -1018,8 +981,7 @@ sub reconstruct_network
 	}
 	my $curr_time = time;
 	my $timer = $curr_time - $start_time;
-	print "phase 1 complete (t=$timer\s)\n" if $verbose > 1;
-	print $LOG "phase 1 complete (t=$timer\s)\n" if $verbose > 1;
+	$LOG->debug("phase 1 complete (t=$timer\s)\n");
 
   if($degree_rel_cutoff < 2)
   {
@@ -1031,12 +993,10 @@ sub reconstruct_network
 	#### Phase 2: resolve all possible relationships that are still not resolved and check existing relationships by cycling through HS/GG/AV (HAG) relationship
 	
 	my @networks_resolved2;
-	print "Entering Phase 2. # of possible pedigrees: ". @networks_resolved1 ."\n" if($verbose > 0);
-	print $LOG "Entering Phase 2. # of possible pedigrees: ". @networks_resolved1 ."\n" if($verbose > 0);
+	$LOG->info("Entering Phase 2. # of possible pedigrees: ". @networks_resolved1 ."\n");
 	while(@networks_resolved1 > 0)
 	{
-		print "# of networks to resolve: " . @networks_resolved1 . "\n" if($verbose > 1);
-		print $LOG "# of networks to resolve: " . @networks_resolved1 . "\n" if($verbose > 1);
+		$LOG->debug("# of networks to resolve: " . @networks_resolved1 . "\n");
 		my $network_ref = shift(@networks_resolved1);
 
 		## Check to see if the phase_2 reconstruction of the network failed due to an error, if so catch/report the error and reject the network.
@@ -1083,8 +1043,7 @@ sub reconstruct_network
 	}
 	my $curr_time = time;
 	my $timer = $curr_time - $start_time;
-	print "Phase 2 complete (t=$timer\s)\n" if $verbose > 1;
-	print $LOG "Phase 2 complete (t=$timer\s)\n" if $verbose > 1;
+	$LOG->debug("Phase 2 complete (t=$timer\s)\n");
 
   if($degree_rel_cutoff < 3)
   {
@@ -1093,14 +1052,12 @@ sub reconstruct_network
 
 	##################################################################################################
 	#### Phase 3: combine family networks only conencted by CGH relationship (cousin, great grandparent, half avuncular, and great avuncular)
-	print "Entering Phase 3. # of possible pedigrees: ". @networks_resolved2 ."\n" if($verbose > 0);
-	print $LOG "Entering Phase 3. # of possible pedigrees: ". @networks_resolved2 ."\n" if($verbose > 0);
+	$LOG->info("Entering Phase 3. # of possible pedigrees: ". @networks_resolved2 ."\n");
 	my @networks_resolved3;
 	
 	while(@networks_resolved2 > 0)
 	{
-		print "# of networks to resolve: " . @networks_resolved2 . "\n" if($verbose > 1);
-		print $LOG "# of networks to resolve: " . @networks_resolved2 . "\n" if($verbose > 1);
+		$LOG->debug("# of networks to resolve: " . @networks_resolved2 . "\n");
 		my $network_ref = shift(@networks_resolved2);
 
 		## Check to see if the phase_3 reconstruction of the network failed due to an error, if so catch/report the error and reject the network.
@@ -1137,8 +1094,7 @@ sub reconstruct_network
 	
 	my $curr_time = time;
 	my $timer = $curr_time - $start_time;
-	print "Phase 3 complete (t=$timer\s)\n" if $verbose > 1;
-	print $LOG "Phase 3 complete (t=$timer\s)\n" if $verbose > 1;
+	$LOG->debug("Phase 3 complete (t=$timer\s)\n");
 	
 	##################################################################################################
 	#### TESTING PHASE
@@ -1155,7 +1111,7 @@ sub reconstruct_network
 		};
 		if($@)
 		{
-			warn "ERROR IN check_network after Phase 3: $@\n";
+			$LOG->warn("ERROR IN check_network after Phase 3: $@\n");
 		};
 	}
 	return (@networks_resolved);
@@ -1183,7 +1139,6 @@ sub phase_1
 			my @possible_rels = @{$$network_ref{$node_name}->possible_relationships($first_degree_rel) };
 			if(@possible_rels > 1)
 			{
-				#print "Splitting PC and FS\n";
 				my $fs_network_ref = separate_PC_and_FS($network_ref,$node_name,$first_degree_rel);
 				if($fs_network_ref ne "")
 				{
@@ -1637,7 +1592,6 @@ sub phase_2
 			}
 			
 			
-			#print "A done\n";
 			### B: avuncular relationships #######################################################
 			## Dummy is selfs full sibling and is dummy parent1 of rel_hag = neice or nephew; 
 			## If dummy parent1 has a real parent, then it must be shared between it and the uncle
@@ -2039,14 +1993,18 @@ sub phase_1D
 			else  ## unestablished directionality
 			{
 				my @PC_rels = keys %PC;
-				if(@PC_rels > 1){print $LOG "ERROR!!! $node_name has more than one PC_rels: @PC_rels\n";}	## longer PC strings would have been resolved in Phase1C and then Phase1A
-				if(@PC_rels > 1){print "ERROR!!! $node_name has more than one PC_rels: @PC_rels\n";return -1;}	## longer PC strings would have been resolved in Phase1C and then Phase1A
+				if(@PC_rels > 1){
+					$LOG->error("ERROR!!! $node_name has more than one PC_rels: @PC_rels\n");
+					return -1;
+				}	## longer PC strings would have been resolved in Phase1C and then Phase1A
 				
 
 				## set node as child
 				my $new_network2 = new_network($network_ref);
 				my @networks = add_parent($new_network2,$PC_rels[0],$node_name);
-				if(@networks > 1){die "IN 1D; new_network2 SHOULD NOT HAVE RETURNED MORE THAN ONE NETWORK\n";}
+				if(@networks > 1){
+          die "IN 1D; new_network2 SHOULD NOT HAVE RETURNED MORE THAN ONE NETWORK\n";
+        }
 				$new_network2 = shift(@networks);
 				
 				## set node as parent of PC_rel if PC_rel doesn't already have two parents
@@ -2092,8 +2050,7 @@ sub resolve_FS_dummy_parents
 		my $match = do_arrays_match(\@parents,\@sib_parents);
 		if($match eq 0)
 		{
-			print "$node_name parents (@parents) do not match sibling $sib_name parents (@sib_parents)\n" if $verbose > 1;
-			print $LOG "$node_name parents (@parents) do not match sibling $sib_name parents (@sib_parents)\n" if $verbose > 1;
+			$LOG->debug("$node_name parents (@parents) do not match sibling $sib_name parents (@sib_parents)\n");
 			return -1;
 		}
 	}
@@ -2120,8 +2077,7 @@ sub resolve_FS_dummy_parents
 		my $match = do_arrays_match(\@parents,\@sib_parents);
 		if($match eq 0)
 		{
-			print "$node_name parents (@parents) do not match sibling $sib_name parents (@sib_parents)\n" if $verbose > 1;
-			print $LOG "$node_name parents (@parents) do not match sibling $sib_name parents (@sib_parents)\n" if $verbose > 1;
+			$LOG->debug("$node_name parents (@parents) do not match sibling $sib_name parents (@sib_parents)\n");
 			return -1;
 		}
 	}
@@ -2156,12 +2112,10 @@ sub resolve_PC_trio
         #if(grep($_ eq "", @{$relationships_ref}) || (!grep($_ eq "FS", @{$relationships_ref})) || @$relationships_ref eq 0) ##check if parents of $node_name;
         if(grep($_ eq "", @{$relationships_ref}) || (!grep($_ eq "FS", @{$relationships_ref}) && !grep($_ eq "HAG", @{$relationships_ref})) || @$relationships_ref eq 0) ##check if parents of $node_name;
         {		
-          #print "$rel1_name : $rel2_name = !FS && !HAG; Parents of $node_name\n";
           if(@num_real_parents > 1)
           {	
             my @parents = $$network_ref{$node_name}->parents();
-            print "$node_name already has two parents (@parents) can't add these two\n" if $verbose > 1;
-            print $LOG "$node_name already has two parents (@parents) can't add these two\n" if $verbose > 1;
+            $LOG->debug("$node_name already has two parents (@parents) can't add these two\n");
             return (-1,@return_networks);
           }
           $$network_ref{$node_name}->parents($rel1_name,$rel2_name);
@@ -2175,15 +2129,12 @@ sub resolve_PC_trio
           my $hag_network_ref = separate_first_degree_and_HAG($network_ref,$rel1_name,$rel2_name);
           push(@return_networks,$hag_network_ref) if $hag_network_ref ne "";
 
-          #print "$rel1_name : $rel2_name = FS; PARENT = $node_name\n";
-          #print "HAG net not empty\n" if $hag_network_ref ne "";
           if($$network_ref{$rel1_name}->num_real_parents() > 1)
           {
             my @parents = $$network_ref{$rel1_name}->parents();
             if(!grep ($_ eq $node_name, @parents ))
             {
-              print "$rel1_name already has two parents (@parents) can't add $node_name\n" if $verbose > 1;
-              print $LOG "$rel1_name already has two parents (@parents) can't add $node_name\n" if $verbose > 1;
+              $LOG->debug("$rel1_name already has two parents (@parents) can't add $node_name\n");
               return (-1,@return_networks);
             }		
           }
@@ -2192,8 +2143,7 @@ sub resolve_PC_trio
             my @parents = $$network_ref{$rel2_name}->parents();
             if(!grep ($_ eq $node_name, @parents ))
             {
-              print "$rel2_name already has two parents (@parents) can't add $node_name\n" if $verbose > 1;
-              print $LOG "$rel2_name already has two parents (@parents) can't add $node_name\n" if $verbose > 1;
+              $LOG->debug("$rel2_name already has two parents (@parents) can't add $node_name\n");
               return (-1,@return_networks);
             }
           }
@@ -2207,8 +2157,7 @@ sub resolve_PC_trio
         {
           if($verbose > 2)
           {
-            print "$rel1_name : $rel2_name = HAG; do nothing\n" if $verbose > 1; ## for now. This precents PRIMUS from reconsructing pedigrees where the parents are 2nd degree relatives (HAGs)
-            print $LOG "$rel1_name : $rel2_name = HAG; do nothing\n" if $verbose > 1; ## for now. This precents PRIMUS from reconsructing pedigrees where the parents are 2nd degree relatives (HAGs)
+            $LOG->debug("$rel1_name : $rel2_name = HAG; do nothing\n"); ## for now. This precents PRIMUS from reconsructing pedigrees where the parents are 2nd degree relatives (HAGs)
           }
            ## This means that this could be a parent or a child. 
         }
@@ -2281,7 +2230,7 @@ sub load_network
   ## Collapse each MZ twin network into a single "person" or node
   for(my $i = 1; $i < $mz_network_counter; $i++)
   {
-    print "Collapsing network $i\n";
+    $LOG->proginfo("Collapsing network $i\n");
     # Get the collapsed name
     my @names_to_collapse;
     foreach my $twin (keys %mz_twin_network_lookup)
@@ -2308,13 +2257,11 @@ sub load_network
     delete $data{$new_name}{$new_name};
   }
 
-  #print "AFTER\n";
   foreach my $self (sort keys %data)
 	{
 		foreach my $rel (sort keys %{ $data{$self} })
 		{
 			my @likelihoods = @{ $data{$self}{$rel} };
-      #print "$self <-> $rel = @likelihoods\n";
     }
   }
 
@@ -2332,7 +2279,6 @@ sub load_network
 		{
 			my @likelihoods = @{ $data{$self}{$rel} };
 			
-			#print "$self <-> $rel\n";
 
 			## Add rel to network
 			if(!exists $$network_ref{$rel})
@@ -2345,7 +2291,6 @@ sub load_network
 			my $y_match = "";
 			$mito_match = $$mito_ref{$self}{$rel} if exists $$mito_ref{$self}{$rel};
 			$y_match = $$y_ref{$self}{$rel} if exists $$y_ref{$self}{$rel};
-			#print "$self <-> $rel = $match\n";
 			$$network_ref{$self}->add_relative($rel,@likelihoods);
 			$$network_ref{$rel}->add_relative($self,@likelihoods);
 			$$network_ref{$self}->add_mito_match($rel,$mito_match);
@@ -3205,14 +3150,12 @@ sub add_parent
 	}
 	elsif(@parents[0] =~ /Dummy/i)
 	{
-		#print "1. REPLACE @parents[0] with $parent\n";
 		my @networks = merge_nodes($network_ref,$parent,@parents[0]);
 		push(@networks_to_return, @networks);
 		#@parents[0] = $parent;
 	}
 	elsif(@parents[1] =~ /Dummy/i)
 	{
-		#print "2. REPLACE @parents[1] with $parent\n";
 		my @networks = merge_nodes($network_ref,$parent,@parents[1]);
 		push(@networks_to_return, @networks);
 		#@parents[1] = $parent;
@@ -3499,7 +3442,6 @@ sub write_cranefoot_files
 	foreach my $ID (keys %$network_ref)
 	{
 		my $g = $$network_ref{$ID}->sex();
-		#print "ID $ID ($g)\n";
 		if($g == 0)
 		{
 			if($ID !~ /Dummy/i)
@@ -3562,14 +3504,12 @@ sub write_cranefoot_files
 		my $g = "0";
 		if(exists $$gender_ref{$ID})
 		{
-			#print "$ID exists\n";
 			$g = $$gender_ref{$ID};
 			if($g == 1){$g = 7;}
 			else{$g = 1;}
 		}
 		if(exists $gender_ambigious{$ID})
 		{
-			#print "$ID ambigious\n";
 			$g = 0;
 		}
 
@@ -3586,11 +3526,7 @@ sub write_cranefoot_files
 		my $mat;
 		if(exists $$gender_ref{@parent_IDs[0]} && $$gender_ref{@parent_IDs[0]} == $$gender_ref{@parent_IDs[1]} && $$gender_ref{@parent_IDs[0]} ne 0)
 		{
-			if($verbose > 1)
-			{
-				print "WARNING2!!! Parents @parents[0] and @parents[1] are the same gender " . $$gender_ref{@parents[1]}." !!!\n" if $verbose > 0;
-				print $LOG "WARNING2!!! Parents @parents[0] and @parents[1] are the same gender " . $$gender_ref{@parents[1]}." !!!\n" if $verbose > 0;
-			}
+      $LOG->info("WARNING2!!! Parents @parents[0] and @parents[1] are the same gender " . $$gender_ref{@parents[1]}." !!!\n");
 		}
 		elsif($$gender_ref{@parent_IDs[0]} == 1)
 		{
@@ -3698,11 +3634,7 @@ sub write_fam_file
 		my $mat;
 		if(exists $$gender_ref{@parent_IDs[0]} && $$gender_ref{@parent_IDs[0]} == $$gender_ref{@parent_IDs[1]} && $$gender_ref{@parent_IDs[0]} ne 0)
 		{
-			if($verbose > 1)
-			{
-				print "WARNING3!!! Parents @parents[0] and @parents[1] are the same gender ". $$gender_ref{@parents[1]}." !!!\n" if $verbose > 0;
-				print $LOG "WARNING3!!! Parents @parents[0] and @parents[1] are the same gender ". $$gender_ref{@parents[1]}." !!!\n" if $verbose > 0;
-			}
+      $LOG->info("WARNING3!!! Parents @parents[0] and @parents[1] are the same gender ". $$gender_ref{@parents[1]}." !!!\n");
 		}
 		elsif($$gender_ref{@parent_IDs[0]} == 1)
 		{
@@ -3753,7 +3685,7 @@ sub check_network
 		my @parents = $$network_ref{$node_name}->parents();
 		if(@parents[0] ne "" && @parents[0] eq @parents[1])
 		{
-			print "[check_network] [ERROR] Parents are the same\n" if $verbose > 2;
+			$LOG->trace("[check_network] [ERROR] Parents are the same\n");
 			return 100;
 		}
 		my $node = $$network_ref{$node_name};
@@ -3763,15 +3695,14 @@ sub check_network
 		
 		my $fail = $$network_ref{$node_name}->are_relationships_missing_in_pedigree($network_ref,$phase-1);
 		if($fail >= 1){
-			print "[check_network] [ERROR] relationships missing in pedigree (?)\n" if $verbose > 2;
+			$LOG->trace("[check_network] [ERROR] relationships missing in pedigree (?)\n");
 			return 99;
 		}
 	}	
 	my $num_generations = get_num_generations($network_ref);
 	if($num_generations > $MAX_GENERATIONS)
 	{
-		print "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n" if $verbose > 2;
-		print $LOG "[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n" if $verbose > 2;
+		$LOG->trace("[check_network] [ERROR] Network $network_ref has $num_generations generations. Exceeds MAX_GENERATIONS: $MAX_GENERATIONS\n");
 		return 101;
 	}
 	
@@ -3779,7 +3710,7 @@ sub check_network
 	if($sibling_mating eq 1)
 	{
 		## Full-sib mating; that is illegal
-		print "[check_network] [ERROR] Illegal full-sib mating\n"  if $verbose > 2;
+		$LOG->trace("[check_network] [ERROR] Illegal full-sib mating\n");
 		return 102;
 	}
 	
@@ -3794,8 +3725,7 @@ sub check_network
         {
             foreach my $id2 (keys %{ $$age_flags_ref{$network_ref}{$id1} })
             {
-                #print "##################  AGE INCOMPATIBLE!!!!!!!!!!!!!!!!!!!!!!!!\n";
-				print "[check_network] [ERROR] Age incompatible\n" if $verbose > 2;
+                $LOG->trace("[check_network] [ERROR] Age incompatible\n");
                 return 105;
             }
         }
@@ -3806,13 +3736,13 @@ sub check_network
 	my $pass = mito_check($network_ref,$final_check);
 	if($pass != 1) 
 	{
-		print "FAILED MITO CHECK\n" if $verbose > 0;
+		$LOG->info("FAILED MITO CHECK\n");
 		return 103;
 	}
 	my $pass = y_check($network_ref,$final_check);
 	if($pass != 1) 
 	{	
-		print "FAILED Y CHECK\n" if $verbose > 0;
+		$LOG->info("FAILED Y CHECK\n");
 		return 104;
 	}
 	resolve_sex_with_mito($network_ref) if $phase > 1;
@@ -3864,7 +3794,6 @@ sub resolve_sex_with_mito
 	{
 		next if $node_name =~ /Dummy/i;
 		## next if $node_name does not have any mito matching data ### IMPLEMENT THIS
-		#print "\n\nRESOLVING WITH $node_name ##########################################\n";
 		my %visited;
 		my @path;
 		my $ancestral_node = "";
@@ -3894,14 +3823,10 @@ sub traverse_mito
 	my $node = $$path_ref[-1];
 	my $start = $$path_ref[0];
 	$$visited_ref{$node} = 1;
-	#print "\nstart: $start\n";
-	#print "PATH: @$path_ref\n";
-	#print "end: $node\n";
 
 	## Check for valid path
 	if(!is_valid_mito_path($network_ref,$path_ref,$ancestral_node))
 	{
-		#print "invalid1\n";
 		return;
 	}
 	else
@@ -3915,16 +3840,13 @@ sub traverse_mito
 	{
 		$continue = resolve_unknown_sex_mito($network_ref,$path_ref,$ancestral_node);
 		resolve_sex_with_known_parents($network_ref) if $continue;
-		#print "RESOLVED!!!\n" if $continue;
 	}
-	#print "Done resolving sex\n\n";
 
 	#### Traverse pedigree
 	my @parents = $$network_ref{$node}->parents();
 	my @children = $$network_ref{$node}->children();
 	my @fullsibs = $$network_ref{$node}->get_full_sibs($network_ref);
 
-	#print "$node parents(@parents) sibs(@fullsibs) children(@children)\n";
 
 	## only need to add full-sibs to visited, because they are the only ones that could be checked in a future recursive call
 	foreach(@fullsibs){$$visited_ref{$_} = 1}
@@ -3933,7 +3855,6 @@ sub traverse_mito
 	foreach my $parent (@parents)
 	{
 		my $parent_sex = $$network_ref{$parent}->sex() if $parent ne "";
-		#print "parent $parent($parent_sex)\n";
 		my @new_path = (@$path_ref,$parent);
 		traverse_mito($network_ref,\@new_path,$visited_ref,$parent) if $parent_sex != 1;
 	}
@@ -3941,7 +3862,6 @@ sub traverse_mito
 	## Traverse fullsibs
 	foreach my $fullsib (@fullsibs)
 	{
-		#print "fullsib $fullsib\n";
 		my @new_path = (@$path_ref,$fullsib);
 		traverse_down_mito($network_ref,\@new_path,$visited_ref,$ancestral_node);
 	}
@@ -3951,7 +3871,6 @@ sub traverse_mito
 	{
 		last if ($$network_ref{$node}->sex()) == 1;
 		next if exists $$visited_ref{$child};
-		#print "child $child\n";
 		my @new_path = (@$path_ref,$child);
 		$ancestral_node = $node if $ancestral_node eq "";
 		traverse_down_mito($network_ref,\@new_path,$visited_ref,$ancestral_node);
@@ -3968,11 +3887,8 @@ sub resolve_unknown_sex_mito
 	my $start = $$path_ref[0];
 	my $end = $$path_ref[-1];
 	return 0 if $start =~ /Dummy/i || $end =~ /Dummy/i; ## Can't resolve if I don't have match data, and I don't have mito matches for Dummies
-	#print "\nResolve unknown sex @$path_ref?\n";
-	#print "Ancestral_node $ancestral_node\n";
 	my $match = $$network_ref{$start}->is_mito_match($end);
 
-	#print "$start <-> $end = $match\n";
 
 	if($match == 1 && !$USE_MATCH_MITO)
 	{
@@ -3987,7 +3903,7 @@ sub resolve_unknown_sex_mito
 			my $old_sex = 0;
 			$old_sex = $$network_ref{$ancestral_node}->sex() if $ancestral_node ne "";
 			$change = 1 if $old_sex ne 2;
-			warn "WARNING! resolve_unknown_sex_mito is changing the sex of $ancestral_node from $old_sex to 2" if $old_sex == 1;
+			$LOG->warn("WARNING! resolve_unknown_sex_mito is changing the sex of $ancestral_node from $old_sex to 2") if $old_sex == 1;
 			$$network_ref{$ancestral_node}->sex(2);
 		}
 		
@@ -3996,10 +3912,9 @@ sub resolve_unknown_sex_mito
 			my $node = $$path_ref[$i];
 			my $old_sex = $$network_ref{$node}->sex();
 			$change = 1 if $old_sex ne 2;
-			warn "WARNING! resolve_unknown_sex_mito is changing the sex of $node from $old_sex to 2" if $old_sex == 1;
+			$LOG->warn("WARNING! resolve_unknown_sex_mito is changing the sex of $node from $old_sex to 2") if $old_sex == 1;
 			$$network_ref{$node}->sex(2);
 		}
-		#print "here1\n";
 		return $change;
 	}
 	elsif($match == 0 && !$USE_NO_MATCH_MITO)
@@ -4023,19 +3938,14 @@ sub resolve_unknown_sex_mito
 			$num_sex_unknown++ if $node_sex == 0;
 			$unknown_sex_node = $node if $node_sex == 0;
 		}
-		#print "unknown sex node: $unknown_sex_node\n";
 		#### Check that there aren't too many unknowns
 		## If either $end or $start are ancestral and have unknown sex, then it must be counted in $num_sex_unknown
 		my $first = @$path_ref[0];
 		my $last = @$path_ref[-1];
 		my $sex_ancestral_node = 0;
 		$sex_ancestral_node = $$network_ref{$ancestral_node}->sex() if $ancestral_node ne "";
-		#print "first: $first; ancetral_node $ancestral_node($sex_ancestral_node)\n";
-		#print "last: $last; ancetral_node $ancestral_node($sex_ancestral_node)\n";
-		#print "unknown sex node: $unknown_sex_node\n";
 		if($sex_ancestral_node == 0 && ($ancestral_node eq $first))
 		{
-			#print "here\n";
 			$num_sex_unknown++;
 			$unknown_sex_node = $first;
 		}
@@ -4044,13 +3954,10 @@ sub resolve_unknown_sex_mito
 			$num_sex_unknown++;
 			$unknown_sex_node = $last;
 		}
-		#print "unknown sex node: $unknown_sex_node\n";
 
 		return 0 if $num_sex_unknown > 1 || $num_sex_unknown == 0; ## can't resolve unknown sex if there are 0 or >1 unknowns
 		my $unknown_sex_node_sex = $$network_ref{$unknown_sex_node}->sex();
-		#print "$unknown_sex_node sex = $unknown_sex_node_sex\n";
 		$$network_ref{$unknown_sex_node}->sex(1);
-		#print "here2\n";
 		return 1;
 	}
 	elsif($match == -1)
@@ -4061,7 +3968,6 @@ sub resolve_unknown_sex_mito
 	{
 		die "SHOULDN'T BE HERE; match = $match\n";
 	}
-	#print "here3\n";
 	return 0;
 }
 
@@ -4071,7 +3977,6 @@ sub is_valid_mito_path
 	my $path_ref = shift;
 	my $ancestral_node = shift;
 	
-	#print "\nis valid mito path @$path_ref?\n";
 
 	## Check sex of the ancestral node
 	my $sex_ancestral_node = 0;
@@ -4111,7 +4016,6 @@ sub is_valid_mito_path
 ## 3. For each child ($c) : push(@{$path,$c); traverse_down($network_ref,$path,\%visited,$ancestral_node)
 sub traverse_down_mito
 {
-	#print "MITO DOWN\n";
 	my $network_ref = shift;
 	my $path_ref = shift;
 	my $visited_ref = shift;
@@ -4119,14 +4023,10 @@ sub traverse_down_mito
 	
 	my $node = $$path_ref[-1];
 	my $start = $$path_ref[0];
-	#print "\nstart: $start\n";
-	#print "PATH: @$path_ref\n";
-	#print "end: $node\n";
 
 	## Check for valid path
 	if(!is_valid_mito_path($network_ref,$path_ref,$ancestral_node))
 	{
-		#print "invalid\n";
 		return;
 	}
 	else
@@ -4169,14 +4069,13 @@ sub mito_check
 	my $final_check = shift;
 	my $sex_val = 2;
 
-	print "Mito_check\n" if $verbose > 2;
+	$LOG->trace("Mito_check\n");
 	foreach my $node_name (sort keys %$network_ref)
 	{
 		my %should_match;
 		my %visited;
 		my @nodes_to_visit;
 
-		#print "NODE: $node_name\n";
 
 		## Get all the expected matches from the pedigree
 		push(@nodes_to_visit,$node_name);
@@ -4186,13 +4085,11 @@ sub mito_check
 			next if exists $visited{$curr_node};
 			
 			my $curr_node_sex = $$network_ref{$curr_node}->sex();
-			#print "$curr_node ($curr_node_sex)\n";
 			
 
 			$visited{$curr_node} = 1;
 			
 			my @full_sibs = $$network_ref{$curr_node}->get_full_sibs($network_ref);
-			#print "$curr_node sibs @full_sibs\n";
 			foreach my $sib (@full_sibs)
 			{
 				my $sib_sex = $$network_ref{$sib}->sex();
@@ -4202,7 +4099,6 @@ sub mito_check
 
 			## Add the mom for mito, dad for Y, and no one if sex of the individual is not known
 			my @parents = $$network_ref{$curr_node}->parents();
-			#print "$curr_node parents @parents\n";
 			foreach my $parent (@parents)
 			{
 				my $sex = $$network_ref{$parent}->sex();
@@ -4217,7 +4113,6 @@ sub mito_check
 			if($curr_node_sex == $sex_val)
 			{
 				my @children = $$network_ref{$curr_node}->children();
-				#print "$curr_node children @children\n";
 				foreach my $child (@children)
 				{
 					my $child_sex = $$network_ref{$child}->sex();
@@ -4230,13 +4125,10 @@ sub mito_check
 		## Check if there is any intersection between pedigree matches and genetic matches
 		my @no_matches = $$network_ref{$node_name}->get_mito_no_match();
 		my @should_matches = keys %should_match;
-		#print "should match: @should_matches\n";
-		#print "no_matches: @no_matches\n";
 		foreach my $node (@no_matches)
 		{
 			if(exists $should_match{$node})
 			{
-				#print "\n$node_name matches with $node, but should not\n";
 				return 0;
 			}
 		}
@@ -4250,20 +4142,17 @@ sub mito_check
 			my @matches = $$network_ref{$node_name}->get_mito_match();
 			my @should_matches = keys %should_match;
 
-			#print "should mito matches for $node_name: @should_matches\n";
-			#print "expected mito matches for $node_name: @matches\n";
 			foreach my $node (@matches)
 			{
 				if(!exists $should_match{$node})
 				{
 					
-					#print "$node_name doesn't matches with $node, but should\n";
 					return 0;
 				}
 			}
 		}
 	}
-	print "done\n" if $verbose > 2;
+	$LOG->trace("done\n");
 	return 1;
 }
 
@@ -4278,7 +4167,6 @@ sub resolve_sex_with_y
 	{
 		next if $node_name =~ /Dummy/i || ($$network_ref{$node_name}->sex() == 2); ## Don't bother if dummy or female
 		## next if $node_name does not have any y matching data ### IMPLEMENT THIS
-		#print "\n\nRESOLVING Y WITH $node_name ##########################################\n";
 		my %visited;
 		my @path;
 		my $ancestral_node = "";
@@ -4307,19 +4195,14 @@ sub traverse_y
 	my $node = $$path_ref[-1];
 	my $start = $$path_ref[0];
 	$$visited_ref{$node} = 1;
-	#print "\nstart: $start\n";
-	#print "PATH: @$path_ref\n";
-	#print "end: $node\n";
 
 	## Check for valid path
 	if(!is_valid_y_path($network_ref,$path_ref,$ancestral_node))
 	{
-		#print "invalid\n";
 		return;
 	}
 	else
 	{
-		#print "pass\n\n";
 	}
 
 	## Resolved any unkown sex
@@ -4328,16 +4211,13 @@ sub traverse_y
 	{
 		$continue = resolve_unknown_sex_y($network_ref,$path_ref,$ancestral_node);
 		resolve_sex_with_known_parents($network_ref) if $continue;
-		#print "RESOLVED!!!\n" if $continue;
 	}
-	#print "Done resolving sex\n\n";
 
 	#### Traverse pedigree
 	my @parents = $$network_ref{$node}->parents();
 	my @children = $$network_ref{$node}->children();
 	my @fullsibs = $$network_ref{$node}->get_full_sibs($network_ref);
 
-	#print "$node parents(@parents) sibs(@fullsibs) children(@children)\n";
 
 	## only need to add full-sibs to visited, because they are the only ones that could be checked in a future recursive call
 	foreach(@fullsibs){$$visited_ref{$_} = 1}
@@ -4346,7 +4226,6 @@ sub traverse_y
 	foreach my $parent (@parents)
 	{
 		my $parent_sex = $$network_ref{$parent}->sex() if $parent ne "";
-		#print "parent $parent($parent_sex)\n";
 		my @new_path = (@$path_ref,$parent);
 		traverse_y($network_ref,\@new_path,$visited_ref,$parent) if $parent_sex != 2;
 	}
@@ -4354,7 +4233,6 @@ sub traverse_y
 	## Traverse fullsibs
 	foreach my $fullsib (@fullsibs)
 	{
-		#print "fullsib $fullsib\n";
 		my @new_path = (@$path_ref,$fullsib);
 		traverse_down_y($network_ref,\@new_path,$visited_ref,$ancestral_node);
 	}
@@ -4364,7 +4242,6 @@ sub traverse_y
 	foreach my $child (@children)
 	{
 		next if exists $$visited_ref{$child};
-		#print "child $child\n";
 		my @new_path = (@$path_ref,$child);
 		$ancestral_node = $node if $ancestral_node eq "";
 		traverse_down_y($network_ref,\@new_path,$visited_ref,$ancestral_node);
@@ -4381,10 +4258,8 @@ sub resolve_unknown_sex_y
 	my $start = $$path_ref[0];
 	my $end = $$path_ref[-1];
 	return 0 if $start =~ /Dummy/i || $end =~ /Dummy/i; ## Can't resolve if I don't have match data, and I don't have y matches for Dummies
-	#print "\nResolve unknown sex @$path_ref?\n";
 	my $match = $$network_ref{$start}->is_y_match($end);
 
-	#print "$start <-> $end = $match\n";
 
 	if($match == 1 && !$USE_MATCH_Y)
 	{
@@ -4447,7 +4322,6 @@ sub is_valid_y_path
 	my $path_ref = shift;
 	my $ancestral_node = shift;
 	
-	#print "\nis valid y path @$path_ref?\n";
 
 	## Count number of individuals with unknown sex and check if there are any known females in the path 
 	my $num_sex_unknown = 0;
@@ -4476,7 +4350,6 @@ sub is_valid_y_path
 ## 3. For each child ($c) : push(@{$path,$c); traverse_down($network_ref,$path,\%visited,$ancestral_node)
 sub traverse_down_y
 {
-	#print "Y DOWN\n";
 	my $network_ref = shift;
 	my $path_ref = shift;
 	my $visited_ref = shift;
@@ -4484,14 +4357,10 @@ sub traverse_down_y
 	
 	my $node = $$path_ref[-1];
 	my $start = $$path_ref[0];
-	#print "\nstart: $start\n";
-	#print "PATH: @$path_ref\n";
-	#print "end: $node\n";
 
 	## Check for valid path
 	if(!is_valid_y_path($network_ref,$path_ref,$ancestral_node))
 	{
-		#print "invalid\n";
 		return;
 	}
 	else
@@ -4505,9 +4374,7 @@ sub traverse_down_y
 	{
 		$continue = resolve_unknown_sex_y($network_ref,$path_ref,$ancestral_node);
 		resolve_sex_with_known_parents($network_ref) if $continue;
-		#print "RESOLVED!!!\n" if $continue;
 	}
-	#print "Done resolving sex\n\n";
 
 	#### Traverse pedigree
 	my @children = $$network_ref{$node}->children();
@@ -4517,7 +4384,6 @@ sub traverse_down_y
 	foreach my $child (@children)
 	{
 		next if exists $$visited_ref{$child};
-		#print "child $child\n";
 		my @new_path = (@$path_ref,$child);
 		$ancestral_node = $node if $ancestral_node eq "";
 		traverse_down_y($network_ref,\@new_path,$visited_ref,$ancestral_node);
@@ -4530,14 +4396,13 @@ sub y_check
 	my $final_check = shift;
 	my $sex_val = 1;
 
-	print "Y_check\n" if $verbose > 2;
+	$LOG->trace("Y_check\n");
 	foreach my $node_name (sort keys %$network_ref)
 	{
 		my %should_match;
 		my %visited;
 		my @nodes_to_visit;
 
-		#print "NODE: $node_name\n";
 		my $node_name_sex = $$network_ref{$node_name}->sex();
 		next if $node_name_sex == 2;
 
@@ -4549,14 +4414,12 @@ sub y_check
 			next if exists $visited{$curr_node};
 			
 			my $curr_node_sex = $$network_ref{$curr_node}->sex();
-			#print "$curr_node ($curr_node_sex)\n";
 			next if $curr_node_sex == 2;
 
 
 			$visited{$curr_node} = 1;
 			
 			my @full_sibs = $$network_ref{$curr_node}->get_full_sibs($network_ref);
-			#print "$curr_node sibs @full_sibs\n";
 			foreach my $sib (@full_sibs)
 			{
 				my $sib_sex = $$network_ref{$sib}->sex();
@@ -4569,7 +4432,6 @@ sub y_check
 
 			## Add dad for Y, and no one if sex of the individual is not known
 			my @parents = $$network_ref{$curr_node}->parents();
-			#print "$curr_node parents @parents\n";
 			foreach my $parent (@parents)
 			{
 				my $sex = $$network_ref{$parent}->sex();
@@ -4584,7 +4446,6 @@ sub y_check
 			if($curr_node_sex == $sex_val)
 			{
 				my @children = $$network_ref{$curr_node}->children();
-				#print "$curr_node children @children\n";
 				foreach my $child (@children)
 				{
 					my $child_sex = $$network_ref{$child}->sex();
@@ -4601,13 +4462,10 @@ sub y_check
 		## Check if there is any intersection between pedigree should matches and genetic no matches (correct?)
 		my @no_matches = $$network_ref{$node_name}->get_y_no_match();
 		my @should_matches = keys %should_match;
-		#print "should match: @should_matches\n";
-		#print "no_matches: @no_matches\n";
 		foreach my $node (@no_matches)
 		{
 			if(exists $should_match{$node})
 			{
-				#print "\n$node_name matches with $node, but should not\n";
 				#exit;
 				return 0;
 			}
@@ -4621,21 +4479,18 @@ sub y_check
 			my @matches = $$network_ref{$node_name}->get_y_match();
 			my @should_matches = keys %should_match;
 
-			#print "should y matches for $node_name: @should_matches\n";
-			#print "expected y matches for $node_name: @matches\n";
 			foreach my $node (@matches)
 			{
 				if(!exists $should_match{$node})
 				{
 					
-					#print "$node_name Should match $node\n";
 					#exit;
 					return 0;
 				}
 			}
 		}
 	}
-	print "done.\n" if $verbose > 2;
+	$LOG->trace("done.\n");
 	return 1;
 }
 
@@ -4668,7 +4523,6 @@ sub are_sibs_mating
 				{
 					if($allow_full_sib_dummy_mating eq 0)
 					{
-						#print "SIB MATING: @childs_grandparents; p: @parents\n";
 						return 1;
 					}
 				}
@@ -4677,7 +4531,6 @@ sub are_sibs_mating
 				if(@parents < 1 || @childs_grandparents < 1 || $allow_half_sib_dummy_mating eq 1){next}
 				if(@parents[0] eq @childs_grandparents[0] || @parents[1] eq @childs_grandparents[0] || @parents[0] eq @childs_grandparents[1] || @parents[1] eq @childs_grandparents[1])
 				{
-					#print "SIB MATING: @childs_grandparents; p: @parents\n";
 					return 1;
 				}
 			}
@@ -4720,13 +4573,10 @@ sub get_genders
 {
 	my $network_ref = shift;
 	my %genders;
-	#print "Genders before proceeding:\n";
 	foreach my $node (keys %$network_ref)
 	{
 		$genders{$node} = $$network_ref{$node}->sex();
-	#	print "$node $genders{$node}\n";
 	}
-	#print "\n";
 	my $gender_ref = \%genders;
 	my @names = keys %$network_ref;
 	my %unresolved;	# names of the nodes whose parents are not both resolved
@@ -4803,7 +4653,6 @@ sub get_genders
 		}
 		else
 		{
-			#print "parents are both unspecified sex\n";
 			if($randomly_assign_sex_to_two_unknown_parents)
 			{
 				$pat = @parent_IDs[1];
@@ -4820,7 +4669,6 @@ sub get_genders
 		{
 			if($$gender_ref{$pat} eq 2)
 			{
-				#print "GENDERS FAIL!!! pat: $pat\n";
 				return 0;
 			}
 			else{$$gender_ref{$pat} = 1;}
@@ -4830,7 +4678,6 @@ sub get_genders
 		{
 			if($$gender_ref{$mat} eq 1)
 			{
-				#print "GENDERS FAIL!!! mat: $mat\n";
 				return 0;
 			}
 			else{$$gender_ref{$mat} = 2;}
@@ -4851,8 +4698,7 @@ sub get_genders
 sub build_network_from_fam_file
 {
 	my $fam_file = shift;
-	print "Building network for $fam_file\n" if $verbose > 0;
-	print $LOG "Building network for $fam_file\n" if $verbose > 0;
+	$LOG->info("Building network for $fam_file\n");
 	
 	## Read in file
 	open(IN,$fam_file);
@@ -4941,8 +4787,7 @@ sub build_network_from_fam_file
 sub write_out_relationships
 {
 	my $file = shift;
-	print "Writing relationships to $file\n" if $verbose > 0;
-	print $LOG "Writing relationships to $file\n" if $verbose > 0;
+	$LOG->info("Writing relationships to $file\n");
 	my @network_refs = @_;
 	open(OUT,">$file");
 	print OUT "FID1\tIID1\tFID2\tIID2\tRELATIONSHIP\n";

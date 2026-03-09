@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#!/usr/bin/env perl
 
 # Script to run PRIMUS
 
@@ -15,19 +15,22 @@ use File::Find;
 use File::Basename;
 use File::Spec;
 #use warnings;
-use IO::Socket::INET; # added for socket compadre helper connectionuse IPC::Open2;
-use IPC::Open2; # also for new compadre helper
+use IO::Socket::INET; # added for socket compadre helper connection
+use IPC::Open3; # also for new compadre helper
 
 my @commandline_options = @ARGV;
 
 #use lib '../lib/perl_modules';
 use Getopt::Long 2.13;
+use Socket::socket_helper qw(send_to_compadre_helper);
+use LogConfig::configure qw(configure_logger get_logger_level);
 use PRIMUS::IMUS qw(run_IMUS);
 use PRIMUS::reconstruct_pedigree_v7;
 use PRIMUS::predict_relationships_2D;
 use PRIMUS::prePRIMUS_pipeline_v7;
 use PRIMUS::PRIMUS_plus_ERSA;
 use File::Path qw(make_path);
+use POSIX ":sys_wait_h";
 
 use Cwd qw(abs_path);
 my $script_path = abs_path($0);
@@ -71,6 +74,8 @@ my $LOG;
 our $compadre_pid;
 our $cleanup_called = 0; 
 our $port_number_glob;
+# We are also going to spawn a listener process that will allow us to continue logging values from the python server even when the perl code moves on after its main loop
+our $listener_pid;
 
 sub cleanup_compadre {
     my $sig = shift;
@@ -79,32 +84,42 @@ sub cleanup_compadre {
     return if $cleanup_called;
     $cleanup_called = 1;
     
-    print "\nReceived signal $sig, cleaning up COMPADRE helper...\n" if $verbose > 0;
+    $LOG->info("\nReceived signal $sig, cleaning up COMPADRE helper...\n");
     
     if (defined $compadre_pid) {
         # Skip graceful shutdown for forced termination - just kill it
         if ($sig eq 'INT' || $sig eq 'TERM' || $sig eq 'QUIT') {
             if (kill(0, $compadre_pid)) {
-                print "Force terminating COMPADRE helper (PID: $compadre_pid)\n" if $verbose > 0;
+                $LOG->info("Force terminating COMPADRE helper (PID: $compadre_pid)\n");
                 kill('KILL', $compadre_pid);  # Use KILL immediately for forced shutdown
                 sleep(1);
             }
         } else {
             # For normal END cleanup, try graceful first
             eval {
-                my $shutdown_ack = send_to_compadre_helper("close", $port_number);
-                print "COMPADRE graceful shutdown: $shutdown_ack\n" if $verbose > 0;
+                my $shutdown_ack = send_to_compadre_helper("close\n", $port_number);
+                $LOG->info("COMPADRE graceful shutdown: $shutdown_ack\n");
             };
             
-            sleep(1);
+            sleep(3);
+
+            # Check if process has already exited (reap zombie)
+            waitpid($compadre_pid, WNOHANG);
             
             if (kill(0, $compadre_pid)) {
-                print "Force terminating COMPADRE helper (PID: $compadre_pid)\n" if $verbose > 0;
+                $LOG->info("Force terminating COMPADRE helper (PID: $compadre_pid)\n");
                 kill('TERM', $compadre_pid);
                 sleep(1);
                 kill('KILL', $compadre_pid) if kill(0, $compadre_pid);
             }
         }
+    }
+    # We need to repeat the same process to shutdown the listener process
+    if (defined $listener_pid) {
+       $LOG->info("closing the listener process at $listener_pid\n");
+       kill('TERM', $listener_pid);
+       sleep(1);
+       kill('KILL', $listener_pid) if kill(0, $listener_pid);
     }
     
     exit(0) unless $sig eq 'END';
@@ -211,9 +226,18 @@ if(-d $output_dir) # The output directory exist we are going to rename
 # Then we need to create the directory to output to
 make_path($output_dir) if !-d $output_dir;
 
-open($LOG,">$log_file") if($LOG eq "");
+# we need to create the logger that the program will use
+# We start by converting the verbosity integer to one of the loglevels 
+# (WARN, DEBUG, INFO)
+my $loglevel = get_logger_level($verbose);
 
-print $LOG "Commandline options used: @commandline_options\n";
+# now we can config the log file appender and the appender that writes to 
+# the console
+configure_logger($log_file, $loglevel);
+
+$LOG = Log::Log4perl->get_logger();
+
+$LOG->proginfo("Commandline options used: @commandline_options\n");
 
 ################ Print all files and settings ################
 
@@ -221,18 +245,14 @@ print_files_and_settings() if $verbose > 0;
 
 if($max_generations eq 'none'){$max_generations = 1000}
 
-# if(-d $output_dir)
-# {
-# 	system("mv $output_dir $output_dir\_OLD");
-# }
 
 
 #################### RUN PROGRAMS ###########################
 if($generate_likelihood_vectors_only)
 {
   generate_likelihood_vectors_only();
-  print "done.\n";
-  exit;
+  $LOG->proginfo("done.");
+  exit
 }
 
 if($run_prePRIMUS){
@@ -242,10 +262,11 @@ if($run_prePRIMUS){
 ## Run IMUS to get family networks and maximum unrelated set (unless turned off)
 if($reconstruct_pedigrees || $get_max_unrelated_set)
 {
-	my @IMUS_commands = ("--do_IMUS",$get_max_unrelated_set,"--do_PR",$reconstruct_pedigrees,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--trait_order",\@trait_order,"--traits",\%traits,"--output_dir",$output_dir,"--rel_threshold",$relatedness_threshold,"--lib",$lib_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--log_file_handle",$LOG);
-	print "IMUS_commands: @IMUS_commands\n" if $verbose > 1;
-	print $LOG "IMUS_commands: @IMUS_commands\n" if $verbose > 1;
-	if(!PRIMUS::IMUS::run_IMUS(@IMUS_commands)){die "IMUS FAILED TO COMPLETE\n\n"}
+	my @IMUS_commands = ("--do_IMUS",$get_max_unrelated_set,"--do_PR",$reconstruct_pedigrees,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--trait_order",\@trait_order,"--traits",\%traits,"--output_dir",$output_dir,"--rel_threshold",$relatedness_threshold,"--lib",$lib_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff);
+	$LOG->debug("IMUS_commands: @IMUS_commands\n");
+	if(!PRIMUS::IMUS::run_IMUS(@IMUS_commands)){
+    die "IMUS FAILED TO COMPLETE\n\n";
+  }
 }
 
 ## Run pedigree reconstruction
@@ -259,7 +280,7 @@ if($reconstruct_pedigrees){
 if($run_PRIMUS_plus_ERSA)
 {
 	my $results = PRIMUS::PRIMUS_plus_ERSA::run_PRIMUS_plus_ERSA_project_summary($project_summary_file,$ersa_model_output,$ersa_results,$degree_rel_cutoff,$output_dir,$PADRE_multiple_test_correct);
-	print "PADRE results: $results\n";
+	$LOG->proginfo("PADRE results: $results\n");
 }
 
 
@@ -271,7 +292,7 @@ exit 0;
 
 sub generate_likelihood_vectors_only
 {
-  print "Generating likelihood vector file...\n";
+  $LOG->proginfo("Generating likelihood vector file...\n");
   if(!-d $output_dir)
   {
     make_path($output_dir);
@@ -289,7 +310,7 @@ sub run_prePRIMUS
 	my $preprimus_dir = "$output_dir/$study_name\_prePRIMUS";
 	make_path($preprimus_dir, { mode => 0755 }) if !-d $preprimus_dir;
 	
-	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--log_file_handle",$LOG,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y, "--min_pihat_threshold", $min_pihat_threshold, "--max_memory",$max_memory);
+	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y, "--min_pihat_threshold", $min_pihat_threshold, "--max_memory",$max_memory);
 
 	## Run the PLINK IBD pipeline
 	my ($temp_genome_file,$temp_sex_file,$temp_mt_match_file,$temp_y_match_file) = PRIMUS::prePRIMUS_pipeline_v7::run_prePRIMUS_main(@IBD_commands);
@@ -308,10 +329,8 @@ sub run_prePRIMUS
 		$y_matches{'FILE'}=$temp_y_match_file;
 	}
 	$dataset_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($temp_genome_file);
-	print "Dataset name: $dataset_name\n" if $verbose > 0;
-	print $LOG "Dataset name: $dataset_name\n" if $verbose > 0;
-	print "PrePRIMUS done.\n" if $verbose > 0;
-	print $LOG "PrePRIMUS done.\n" if $verbose > 0;
+	$LOG->info("Dataset name: $dataset_name\n");
+	$LOG->info("PrePRIMUS done.\n");
 }
 
 sub run_PR {
@@ -335,7 +354,7 @@ sub run_PR {
 	{
 		if(!-e $sexes{'FILE'})
 		{
-			warn "$sexes{'FILE'} does not exists; continuing without sex info.\n";
+			$LOG->warn("$sexes{'FILE'} does not exists; continuing without sex info.\n");
 			delete $sexes{'FILE'};
 		}
 		else
@@ -346,11 +365,7 @@ sub run_PR {
 				if($$sexes_ref{$id} eq $sexes{'MALE'}){$$sexes_ref{$id} = 1}
 				elsif($$sexes_ref{$id} eq $sexes{'FEMALE'}){$$sexes_ref{$id} = 2}
 				else{$$sexes_ref{$id} = 0}
-				if($verbose > 1)
-				{
-					print "$id sex = $$sexes_ref{$id}\n";
-					print $LOG "$id sex = $$sexes_ref{$id}\n";
-				}
+        $LOG->debug("$id sex = $$sexes_ref{$id}\n");
 			}
 		}
 	}
@@ -413,8 +428,7 @@ sub run_PR {
 			close(AFFECTION);
 			#print "pr: @PR_commands\n";
 			my $file = "$network_dir/run_dataset_cluster_$network_name.sh";
-			print "writing $file\n" if $verbose > 0;
-			print $LOG "writing $file\n" if $verbose > 0;
+			$LOG->info("writing $file\n");
 			open(OUT,">$file") or die "Can't open $file;$!\n\n";
 			print OUT "\#\$ -S /bin/bash\n";
 			print OUT "\#\$ -l h_vmem=8G -l mem_requested=8G\n";
@@ -445,67 +459,56 @@ sub run_PR {
 		}
 		else
 		{
-			my @PR_commands = ("--network",$network_name,"--ibd_estimates",\%network_ibd_estimates,"--y_hash",\%y_matches,"--mito_hash",\%mito_matches,"--verbose",$verbose,"--output_dir",$network_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--max_gen",$max_generations,"--sex_ref",$sexes_ref,"--age_ref",$ages_ref,"--affection_ref",$affections_ref,"--network_num",$net,"--affection_status_value",$affections{'AFFECTION_VALUE'}, "--lib",$lib_dir,"--bin",$bin_dir,"--log_file_handle",$LOG,"--no_mito",$no_mito,"--no_y",$no_y,"--use_mito_match",$use_mito_match,"--use_y_match",$use_y_match,"--degree_rel_cutoff",$degree_rel_cutoff);
+			my @PR_commands = ("--network",$network_name,"--ibd_estimates",\%network_ibd_estimates,"--y_hash",\%y_matches,"--mito_hash",\%mito_matches,"--verbose",$verbose,"--output_dir",$network_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--max_gen",$max_generations,"--sex_ref",$sexes_ref,"--age_ref",$ages_ref,"--affection_ref",$affections_ref,"--network_num",$net,"--affection_status_value",$affections{'AFFECTION_VALUE'}, "--lib",$lib_dir,"--bin",$bin_dir,"--no_mito",$no_mito,"--no_y",$no_y,"--use_mito_match",$use_mito_match,"--use_y_match",$use_y_match,"--degree_rel_cutoff",$degree_rel_cutoff);
 			eval
 			{
 				PRIMUS::reconstruct_pedigree_v7::reconstruct_pedigree(@PR_commands);
 			};
 			if($@)
 			{
-				warn "Reconstruction failed for $network_name: $@\n";
+				$LOG->warn("Reconstruction failed for $network_name: $@\n");
 			};
 		}
 	}
 	
-	if($verbose > 0){print "Writing dataset summary file $output_dir/Summary_$dataset_name.txt\n"}
-	if($verbose > 0){print $LOG "Writing dataset summary file $output_dir/Summary_$dataset_name.txt\n"}
+	$LOG->info("Writing dataset summary file $output_dir/Summary_$dataset_name.txt\n");
+
 	system("$bin_dir/make_dataset_summary.pl $output_dir $dataset_name");
 	system("./make_dataset_pairwise_summary.pl $output_dir $dataset_name");
 
-	print "done.\n" if $verbose > 0;
-	print $LOG "done.\n" if $verbose > 0;
+	$LOG->info("done.\n");
 
 	# convert ps to pdf files 
-	find(\&process_file, $output_dir);
+	find({ wanted => \&process_file, no_chdir => 1 }, $output_dir);
 
-	#print "converted .ps to .pdf.\n" if $verbose > 0;
-	#print $LOG "converted .ps to .pdf.\n" if $verbose > 0;
 
 	###############################################################################################
 
 	if ($run_padre) {
 
-		print "\nInitializing PADRE\n" if $verbose > 0;
-		print $LOG "Initializing PADRE\n" if $verbose > 0;
+		$LOG->info("Initializing PADRE\n");
 
-		print "Requesting ERSA output path from COMPADRE helper... (port $port_number_glob)\n" if $verbose > 1;
-		print $LOG "Requesting ERSA output path from COMPADRE helper... (port $port_number_glob)\n" if $verbose > 1;
+		$LOG->debug("Requesting ERSA output path from COMPADRE helper... (port $port_number_glob)\n");
 
-		my $ersa_output_path_prefix = PRIMUS::predict_relationships_2D::send_to_compadre_helper("padre", $port_number_glob);
+		my $ersa_output_path_prefix = send_to_compadre_helper("padre\n", $port_number_glob);
 
-		print "Received ERSA output path prefix: $ersa_output_path_prefix\n" if $verbose > 1;
-		print $LOG "Received ERSA output path prefix: $ersa_output_path_prefix\n" if $verbose > 1;
+		$LOG->debug("Received ERSA output path prefix: $ersa_output_path_prefix\n");
 
 		# Get the exact ones for regular and model files
 		my $ersa_model_output_path = "$ersa_output_path_prefix.model";
 		my $ersa_output_path = "$ersa_output_path_prefix.out";
 
-		my $padre_command = "perl $project_root/padre/bin/run_PADRE.pl --ersa_model_output $ersa_model_output_path --ersa_results $ersa_output_path --project_summary $output_dir/Summary_$dataset_name.txt --degree_rel_cutoff $degree_rel_cutoff --output_dir $output_dir/padre_results";
+		my $padre_command = "perl $project_root/padre/bin/run_PADRE.pl --ersa_model_output $ersa_model_output_path --ersa_results $ersa_output_path --project_summary $output_dir/Summary_$dataset_name.txt --degree_rel_cutoff $degree_rel_cutoff --output_dir $output_dir/padre_results --verbose $verbose --log_file \"$log_file\"";
 
 		system($padre_command) == 0
 			or warn "Failed to run PADRE: $padre_command\n";
 
-		print "PADRE complete.\n\n" if $verbose > 0;
-		print $LOG "PADRE complete.\n\n" if $verbose > 0;
-
+		$LOG->info("PADRE complete.\n\n");
 	}
 
-	my $shutdown_ack = PRIMUS::predict_relationships_2D::send_to_compadre_helper("close", $port_number_glob);
-	print "COMPADRE socket shutdown message: $shutdown_ack\n" if $verbose > 0;	
+	my $shutdown_ack = send_to_compadre_helper("close\n", $port_number_glob);
+  $LOG->info("COMPADRE socket shutdown message: $shutdown_ack\n");	
 
-	## Write out pairwise Summary file based on the results in the Summary file and possible pedigrees
-	#my $rels_ref = PRIMUS::get_pairwise_summary::get_possible_relationships($output_dir,"$output_dir/Summary_$dataset_name.txt");
-	#PRIMUS::get_pairwise_summary::write_table("$output_dir/Summary_$dataset_name\_pairwise_table.txt",$rels_ref);
 }
 
 # Convert .ps from cranefoot to .pdf 
@@ -514,46 +517,81 @@ sub process_file
     if (/\.(ps)$/i) {
         my $file = $File::Find::name;
         (my $output_file = $file) =~ s/\.ps$/.pdf/i;
-        my $command = "ps2pdf -dFirstPage=2 $file $output_file";
+        my $command = "ps2pdf -dFirstPage=2 \"$file\" \"$output_file\"";
         system($command) == 0 or warn "Failed to execute: $command\n";
     }
 }
 
+# process the output log messages (not the JSON response) from the python 
+# socket and determine the appropriate way to handle it
+sub process_socket_log {
+  my ($socket_log) = @_;
+
+  if ($socket_log =~ /^(\w+):\s+(.*)$/) {
+    my $severity = lc($1);
+    my $message = $2;
+    if ($severity eq "warn") {
+      $LOG->warn($message);
+    }
+    elsif ($severity eq "info") {
+      $LOG->info($message);
+    }
+    elsif ($severity eq "debug") {
+      $LOG->debug($message);
+    }
+    elsif ($severity eq "fatal") {
+      $LOG->fatal($message);
+    }
+    elsif ($severity eq "proginfo") {
+      $LOG->proginfo($message);
+    }
+    else {
+      $LOG->warn("Unknown log level: $severity. Log message: $message\n");
+    }
+  }
+  else {
+    $LOG->warn("Failed to parse the log from the python server:\n $socket_log\n");
+  }
+
+}
+
 sub print_files_and_settings {
 
-	print "\nFILES AND COLUMNS\n";
-	print $LOG "\nFILES AND COLUMNS\n";
+	$LOG->proginfo("\nFILES AND COLUMNS\n");
 	
-	print "LOG FILE: $log_file\n";
+	$LOG->proginfo("LOG FILE: $log_file\n");
 
-	print "Data stem: $data_stem\n" if $data_stem ne "";
-	print $LOG "Data stem: $data_stem\n" if $data_stem ne "";
-	print "IBD file: $ibd_estimates{'FILE'} (FID1=".($ibd_estimates{'FID1'})."; IID1=".($ibd_estimates{'IID1'})."; FID2=".($ibd_estimates{'FID2'})."; IID2=".($ibd_estimates{'IID2'})."; IBD0=".($ibd_estimates{'IBD0'})."; IBD1=".($ibd_estimates{'IBD1'})."; IBD2=".($ibd_estimates{'IBD2'})."; PI_HAT/RELATEDNESS=".($ibd_estimates{'PI_HAT'}).")\n" if exists $ibd_estimates{'FILE'};
-	print $LOG "IBD file: $ibd_estimates{'FILE'} (FID1=".($ibd_estimates{'FID1'})."; IID1=".($ibd_estimates{'IID1'})."; FID2=".($ibd_estimates{'FID2'})."; IID2=".($ibd_estimates{'IID2'})."; IBD0=".($ibd_estimates{'IBD0'})."; IBD1=".($ibd_estimates{'IBD1'})."; IBD2=".($ibd_estimates{'IBD2'})."; PI_HAT/RELATEDNESS=".($ibd_estimates{'PI_HAT'}).")\n" if exists $ibd_estimates{'FILE'};
+	$LOG->proginfo("Data stem: $data_stem\n") if $data_stem ne "";
+
+	$LOG->proginfo("IBD file: $ibd_estimates{'FILE'} (FID1=".($ibd_estimates{'FID1'})."; IID1=".($ibd_estimates{'IID1'})."; FID2=".($ibd_estimates{'FID2'})."; IID2=".($ibd_estimates{'IID2'})."; IBD0=".($ibd_estimates{'IBD0'})."; IBD1=".($ibd_estimates{'IBD1'})."; IBD2=".($ibd_estimates{'IBD2'})."; PI_HAT/RELATEDNESS=".($ibd_estimates{'PI_HAT'}).")\n") if exists $ibd_estimates{'FILE'};
 	
-	print "Dataset results dir: $output_dir\n";
-	print $LOG "Dataset results dir: $output_dir\n";
+	$LOG->proginfo("Dataset results dir: $output_dir\n");
 
-	if(!exists $ages{'FILE'}){print "Age file: none\n";print $LOG "Age file: none\n";}
-	elsif(!-e $ages{'FILE'}){print "Age file: $ages{'FILE'} does not exists\n"; $pod2usage->(2);print $LOG "Age file: $ages{'FILE'} does not exists\n"; $pod2usage->(2)}
-	else{print "Age file: $ages{'FILE'} (FID=".($ages{'FID'})."; IID=".($ages{'IID'})."; AGE=".($ages{'AGE'}).")\n"; print $LOG "Age file: $ages{'FILE'} (FID=".($ages{'FID'})."; IID=".($ages{'IID'})."; AGE=".($ages{'AGE'}).")\n";}
+	if(!exists $ages{'FILE'}) {
+    $LOG->proginfo("Age file: none\n");
+  }
+	elsif(!-e $ages{'FILE'}){
+    $LOG->proginfo("Age file: $ages{'FILE'} does not exists\n"); 
+    $pod2usage->(2);
+  }
+	else {
+    $LOG->proginfo("Age file: $ages{'FILE'} (FID=".($ages{'FID'})."; IID=".($ages{'IID'})."; AGE=".($ages{'AGE'}).")\n");
+  }
 
-	if(!exists $sexes{'FILE'}){print "Sex file: none\n";}
-	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){print "Sex file: $sexes{'FILE'} does not exists\n"; $pod2usage->(2)}
-	else{print "Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n";}
-	if(!exists $sexes{'FILE'}){print $LOG "Sex file: none\n";}
-	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){print $LOG "Sex file: $sexes{'FILE'} does not exists\n"; $pod2usage->(2)}
-	else{print $LOG "Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n";}
+	if(!exists $sexes{'FILE'}){
+    $LOG->proginfo("Sex file: none\n");
+  }
+	elsif(!$run_prePRIMUS && !-e $sexes{'FILE'}){
+    $LOG->proginfo("Sex file: $sexes{'FILE'} does not exists\n"); 
+    $pod2usage->(2);
+  }
+	else{
+    $LOG->proginfo("Sex file: $sexes{'FILE'} (FID=$sexes{'FID'}; IID=$sexes{'IID'}; SEX=$sexes{'SEX'}; MALE=$sexes{'MALE'}, FEMALE=$sexes{'FEMALE'})\n");
+  }
 
-	print "Segment data file: $ersa_data\n" if $ersa_data ne "";
-	print $LOG "Segment data file: $ersa_data\n" if $ersa_data ne "";
+	$LOG->proginfo("Segment data file: $ersa_data\n") if $ersa_data ne "";
 
-	print "Port number: $port_number\n" if $port_number ne "" && $port_number != 6000;
-	print $LOG "Port number: $port_number\n" if $port_number ne "" && $port_number != 6000;
-
-	# if ($ersa_data ne "") # checking if an argument was actually passed for ersa data
-	# {
-		#print "\nSegment file: $ersa_data\n";
+	$LOG->proginfo("Port number: $port_number\n") if $port_number ne "" && $port_number != 6000;
 
 	# get absolute path of compadre helper 
 	my $libpath = $lib_dir;
@@ -561,15 +599,26 @@ sub print_files_and_settings {
 	my $parent_dir = File::Spec->catdir(dirname($libpath));
 	my $helper_path = File::Spec->catfile($parent_dir, 'compadre.py');
 
+  # add a check to make sure that the compadre.py filepath exists. It 
+  # should be this is a safeguard that will allow us to fail fast if 
+  # the script has been deleted for some reason.
+  unless (-e $helper_path) {
+    $LOG->fatal("The file: $helper_path, for the ersa socket was not found. This behavior is not expected and the file may have been deleted accidentally. Please redownload the file from GitHub. Exiting now...");
+
+    die
+
+  }
+  
+  # reading and writing stream that will be used to handle data going in and out of the python socket
 	my ($reader, $writer);
 
 	# Check if ersa data is passed in at runtime. If it is, send that path, and if not, send 'NA'
 	my $ersa_arg = ($ersa_data ne "") ? $ersa_data : "NA";
 	if ($ersa_data ne "") {
-		print "\nLaunching COMPADRE helper (with segment data) ...\n";
+		$LOG->proginfo("\nLaunching COMPADRE helper (with segment data) ...\n");
 	}
 	else {
-		print "\nLaunching COMPADRE helper (no segment data) ...\n";
+		$LOG->proginfo("\nLaunching COMPADRE helper (no segment data) ...\n");
 	}
 
 	my $ersa_flags = "";
@@ -581,50 +630,94 @@ sub print_files_and_settings {
 		}
 	}
 
-	# Open socket
-	#my $pid = open2($reader, $writer, "python3 $helper_path $ersa_arg $port_number \"$ersa_flags\" $output_dir");
-	my $pid = open2($reader, $writer, 'python3', $helper_path, $ersa_arg, $port_number, $ersa_flags, $output_dir);
+  # switch this from open2 to open3 because open2 doesn't actually merge stderr and stdout. 
+	my $pid = open3($writer, $reader, $reader, 'python3', $helper_path, $ersa_arg, $port_number, $ersa_flags, $output_dir);
 
 	if (!defined $pid) {
-		die "Failed to launch COMPADRE helper: $!\n\n";
+    $LOG->fatal("Failed to launch COMPADRE helper: $!\n\n");
+		die;
 	}
 	$compadre_pid = $pid;
 
 	# Wait for the server to be ready and check for port changes
-    my $actual_port = $port_number;  # Default to requested port
+  my $actual_port = $port_number;  # Default to requested port
 
 	while (my $line = <$reader>) {
 
-        # Check for port change notification (comes via stderr which open2 merges)
-        if ($line =~ /Port changed: (\d+)/) {
-            $actual_port = $1;
-			$port_number = $actual_port;
+    # Check for port change notification (comes via stderr which open3 merges)
+    if ($line =~ /Port changed: (\d+)/) {
+        $actual_port = $1;
 
-            print "\n[COMPADRE] Port $port_number was in use, using port $actual_port instead.\n";
-            print $LOG "[COMPADRE] Port $port_number was in use, using port $actual_port instead.\n";
-        }
+        $LOG->proginfo("\n[COMPADRE] Port $port_number was in use, using port $actual_port instead.\n");
+        $port_number = $actual_port;
+    }
 
-        # Always parse the actual port from the "ready" line on stdout
+    # Always parse the actual port from the "ready" line on stdout. The 
+    # capture group (\d+) will catch the port number and save it to the 
+    # $1 variable
 		elsif ($line =~ /COMPADRE helper is ready on port\s+(\d+)/) {
 			$actual_port = $1;  # <-- CRITICAL: take the authoritative port from stdout
 			chomp $line;
-			print "\n$line\n";
+      $LOG->proginfo("\n$line\n");
 
 			# Overwrite the working port so all later steps use it
 			$port_number = $actual_port;
 
-			last;
+      # We are going to add logic here to create a child process that can continue to read from the $reader in order to log messages from the python socket
+      # perl will return 0 for the child and the parent will continue. Imagine it like 2 threads are being formed although this is not threading 
+      my $forked_pid = fork();
+
+      if (!defined $forked_pid) {
+        $LOG->fatal("Error: failed to fork a listener for the child process: $!");
+        die;
+      }
+      if ($forked_pid == 0) {
+        # This block represents our listing process that will continue to
+        # read from the $reader and will print the output. This block 
+        # intentionally hangs until it gets cleaned up or the python program 
+        # closes the pipe.
+        
+        # Reset signal handler so child doesn't run parent's cleanup_compadre
+        $SIG{INT} = 'DEFAULT';
+        $SIG{TERM} = 'DEFAULT';
+        
+        # Clear the PID so the END block doesn't try to cleanup the helper
+        undef $compadre_pid;
+
+        # We don't need to write to the socket so we can close that
+        close($writer);
+
+        while (my $line = <$reader>) {
+          # The response from the python server could be a WARN, INFO, or DEBUG. This block will contain logic to determine what the correct output is
+          process_socket_log($line);
+        }
+        # If the pipe is closed by Python then we need to kill the program
+        exit(0);
+      }
+      else {
+        #This block represents the parent process
+        #We need to save the listener process id so that we can clean this up at the end of the program
+        $listener_pid = $forked_pid;
+        # This parent thread no longer needs to read from the socket and leaving it open could cause log messages to go missing.
+        close($reader);
+        # weird perl keyword that ends the while loop
+        last;
+      }
 		}
 
-        elsif ($line =~ /ERROR|FAILED|Exception/) {
-            die "COMPADRE error: $line\n";
-        }
-    }
-	
-	our $compadre_pid = $pid;
+    elsif ($line =~ /ERROR|FAILED|Exception/) {
+          $LOG->fatal("COMPADRE error: $line\n");
+          die;
 
-	print "\nReference file specification: $reference_pop\n\n" if $reference_pop ne "";
-	print $LOG "Reference file specification: $reference_pop\n\n" if $reference_pop ne "";
+    }
+    else {
+      process_socket_log($line);
+    }
+  }
+	
+	# our $compadre_pid = $pid;
+
+	$LOG->proginfo("\nReference file specification: $reference_pop\n\n") if $reference_pop ne "";
 
 	# Standard arguments 
 
@@ -639,49 +732,41 @@ sub print_files_and_settings {
 
 	#############################################################################
 
-	if(!exists $affections{'FILE'}){print "Affection file: none\n";}
-	elsif(!-e $affections{'FILE'}){print "Affection file: $affections{'FILE'} does not exists\n"; $pod2usage->(2)}
-	else{print "Affection file: $affections{'FILE'} (FID=$affections{'FID'}; IID=$affections{'IID'}; AFFECTION=$affections{'AFFECTION'}; AFFECTION_VALUE=$affections{'AFFECTION_VALUE'})\n";}
-	if(!exists $affections{'FILE'}){print $LOG "Affection file: none\n";}
-	elsif(!-e $affections{'FILE'}){print $LOG "Affection file: $affections{'FILE'} does not exists\n"; $pod2usage->(2)}
-	else{print $LOG "Affection file: $affections{'FILE'} (FID=$affections{'FID'}; IID=$affections{'IID'}; AFFECTION=$affections{'AFFECTION'}; AFFECTION_VALUE=$affections{'AFFECTION_VALUE'})\n";}
+	if(!exists $affections{'FILE'}){
+    $LOG->proginfo( "Affection file: none\n");
+  }
+	elsif(!-e $affections{'FILE'}){
+    $LOG->fatal("Affection file: $affections{'FILE'} does not exists\n");
+    $pod2usage->(2);
+  }
+	else{
+    $LOG->proginfo("Affection file: $affections{'FILE'} (FID=$affections{'FID'}; IID=$affections{'IID'}; AFFECTION=$affections{'AFFECTION'}; AFFECTION_VALUE=$affections{'AFFECTION_VALUE'})\n");
+    }
 
-	print "Trait weighting:\n";
-	print $LOG "Trait weighting:\n";
+	$LOG->proginfo("Trait weighting:\n");
 	foreach my $trait_file (@trait_order)
 	{
 		if($get_max_unrelated_set)
 		{
-			print "\t$trait_file ";
-			print $LOG "\t$trait_file ";
-			if(exists $traits{$trait_file}){print"($traits{$trait_file})"};
-			if(exists $traits{$trait_file}){print $LOG "($traits{$trait_file})"};
-			print"\n";
-			print $LOG "\n";
+			$LOG->proginfo("\t$trait_file ");
+			if(exists $traits{$trait_file}){ 
+        $LOG->proginfo("($traits{$trait_file})");
+      }
+			$LOG->proginfo("\n");
 		}
 	}
 
 
-	print "\nSETTINGS\n";
-	print "Get PLINK IBD ESTIMATES with prePRIMUS: $run_prePRIMUS\n";
-	print "Automatic reference population selection: " .!$no_automatic_IBD."\n";
-	print "Verbose: $verbose\n";
-	print "Relatedness threshold: $relatedness_threshold\n";
-	print "Initial likelihood cutoff: $initial_likelihood_cutoff\n";
-	print "Max generations: $max_generations\n";
-	print "Max generational mating gap: $max_generation_gap\n";
-	print "Get max unrelated set: $get_max_unrelated_set\n";
-	print "Reconstruct pedigrees: $reconstruct_pedigrees\n";
-	print $LOG "\nSETTINGS\n";
-	print $LOG "Get PLINK IBD ESTIMATES with prePRIMUS: $run_prePRIMUS\n";
-	print $LOG "Automatic reference population selection: " .!$no_automatic_IBD."\n";
-	print $LOG "Verbose: $verbose\n";
-	print $LOG "Relatedness threshold: $relatedness_threshold\n";
-	print $LOG "Initial likelihood cutoff: $initial_likelihood_cutoff\n";
-	print $LOG "Max generations: $max_generations\n";
-	print $LOG "Max generational mating gap: $max_generation_gap\n";
-	print $LOG "Get max unrelated set: $get_max_unrelated_set\n";
-	print $LOG "Reconstruct pedigrees: $reconstruct_pedigrees\n";
+	$LOG->proginfo("\nSETTINGS\n");
+	$LOG->proginfo("Get PLINK IBD ESTIMATES with prePRIMUS: $run_prePRIMUS\n");
+	$LOG->proginfo("Automatic reference population selection: " .!$no_automatic_IBD."\n");
+	$LOG->proginfo("Verbose: $verbose\n");
+	$LOG->proginfo("Relatedness threshold: $relatedness_threshold\n");
+	$LOG->proginfo("Initial likelihood cutoff: $initial_likelihood_cutoff\n");
+	$LOG->proginfo("Max generations: $max_generations\n");
+	$LOG->proginfo("Max generational mating gap: $max_generation_gap\n");
+	$LOG->proginfo("Get max unrelated set: $get_max_unrelated_set\n");
+	$LOG->proginfo("Reconstruct pedigrees: $reconstruct_pedigrees\n");
 }
 
 sub get_sample_info
@@ -708,15 +793,13 @@ sub get_sample_info
 
 		if($FID =~ /\*\*/ || $FID =~ /,/)
 		{
-			print "File $file has invalid FID: $FID\n";
-			print $LOG "File $file has invalid FID: $FID\n";
-			die "FIDs and IIDs cannot contain '**' or ','\n";
+			$LOG->fatal("File $file has invalid FID: $FID\n");
+			die;
 		}
 		if($IID =~ /\*\*/ || $IID =~ /,/)
 		{
-			print "File $file has invalid IID: $IID\n";
-			print $LOG "File $file has invalid IID: $IID\n";
-			die "FIDs and IIDs cannot contain '**' or ','\n";
+			$LOG->fatal("File $file has invalid IID: $IID\n");
+			die;
 		}
 
 		$hash{"$IID"} = @temp[$trait_col-1];
@@ -725,7 +808,7 @@ sub get_sample_info
 	return (\%hash);
 }
 
-
+# everything in this function needs to use print not $LOG because the logger is not yet set up at this point in the code
 sub apply_options {
     my $help = 0;		
     my $ident = 0;		
@@ -787,9 +870,6 @@ sub apply_options {
 					print "\n\n[COMPADRE] Error: Invalid 1KG population: $pop\n";
 					print "Must be a comma seperated list these: @onekg_pops\n";
 					print "For example: --ref_pops CEU,TSI,YRI\n\n";
-					print $LOG "\n\n[COMPADRE] Error: Invalid 1KG population: $pop\n";
-					print $LOG "Must be a comma seperated list these: @onekg_pops\n";
-					print $LOG "For example: --ref_pops CEU,TSI,YRI\n\n";
 					$pod2usage->(2);
 				}
 			}
@@ -836,9 +916,7 @@ sub apply_options {
 			else
 			{
 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0] option: @_[1]\n";
-				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0] option: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
 		},
@@ -855,8 +933,6 @@ sub apply_options {
 			{
 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
 		},
@@ -873,8 +949,6 @@ sub apply_options {
 			{
 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --affections option: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --affections option: @_[1]\n";
-				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
 		},	
@@ -891,8 +965,6 @@ sub apply_options {
 			{
 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
 		},
@@ -909,8 +981,6 @@ sub apply_options {
 			{
 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
 		},
@@ -927,8 +997,6 @@ sub apply_options {
 			{
 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
 				print "Must be one of these: @possible_keys\n\n";
-				print $LOG "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print $LOG "Must be one of these: @possible_keys\n\n";
 				$pod2usage->(2);
 			}
 		},
@@ -1105,7 +1173,8 @@ sub apply_options {
 		}
 	}
 
-	$log_file = "$output_dir/COMPADRE_output.log";
+  # platform agonistic way to form the file path
+	$log_file = File::Spec->catfile($output_dir, "COMPADRE_output.log");
 }
 
 sub do_arrays_match
@@ -1152,7 +1221,7 @@ sub check_names
 	{
 		if(!-e $sexes{'FILE'})
 		{
-			warn "$sexes{'FILE'} does not exists; continuing without sex info.\n";
+			$LOG->warn("$sexes{'FILE'} does not exists; continuing without sex info.\n");
 			delete $sexes{'FILE'};
 		}
 		else
@@ -1165,22 +1234,21 @@ sub check_names
 				else{$$sexes_ref{$id} = 0}
 				if($verbose > 1)
 				{
-					print "$id sex = $$sexes_ref{$id}\n";
-					print $LOG "$id sex = $$sexes_ref{$id}\n";
+					$LOG->proginfo("$id sex = $$sexes_ref{$id}\n");
 				}
 			}
 			foreach my $sample (keys %$samples1_ref)
 			{
 				if(!exists $$sexes_ref{$sample})
 				{
-					warn "WARNING: sample $sample is not included in the sex file $sexes{'FILE'}\n";
+					$LOG->warn("WARNING: sample $sample is not included in the sex file $sexes{'FILE'}\n");
 				}
 			}
 			foreach my $sample (keys %$samples2_ref)
 			{
 				if(!exists $$sexes_ref{$sample})
 				{
-					warn "WARNING: sample $sample is not included in the sex file $sexes{'FILE'}\n";
+					$LOG->warn("WARNING: sample $sample is not included in the sex file $sexes{'FILE'}\n");
 				}
 			}
 		}
@@ -1192,14 +1260,14 @@ sub check_names
 		{
 			if(!exists $$affections_ref{$sample})
 			{
-				warn "WARNING: sample $sample is not included in the affections file $affections{'FILE'}\n";
+				$LOG->warn("WARNING: sample $sample is not included in the affections file $affections{'FILE'}\n");
 			}
 		}
 		foreach my $sample (keys %$samples2_ref)
 		{
 			if(!exists $$affections_ref{$sample})
 			{
-				warn "WARNING: sample $sample is not included in the affections file $affections{'FILE'}\n";
+				$LOG->warn("WARNING: sample $sample is not included in the affections file $affections{'FILE'}\n");
 			}
 		}
 
@@ -1211,14 +1279,14 @@ sub check_names
 		{
 			if(!exists $$ages_ref{$sample})
 			{
-				warn "WARNING: sample $sample is not included in the age file $ages{'FILE'}\n";
+				$LOG->warn("WARNING: sample $sample is not included in the age file $ages{'FILE'}\n");
 			}
 		}
 		foreach my $sample (keys %$samples2_ref)
 		{
 			if(!exists $$ages_ref{$sample})
 			{
-				warn "WARNING: sample $sample is not included in the age file $ages{'FILE'}\n";
+				$LOG->warn("WARNING: sample $sample is not included in the age file $ages{'FILE'}\n");
 			}
 		}
 	}
