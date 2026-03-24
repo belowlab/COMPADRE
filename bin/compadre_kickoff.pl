@@ -174,6 +174,7 @@ my $no_PCA_plot = 0;
 my @ref_pops;
 my $rerun = 0;
 my $min_pihat_threshold = 0;
+my $samples_file = "";
 
 ## PADRE variables
 my $run_PRIMUS_plus_ERSA = 0;
@@ -237,6 +238,14 @@ configure_logger($log_file, $loglevel);
 
 $LOG = Log::Log4perl->get_logger();
 
+if ($min_pihat_threshold > 0 && $samples_file eq "")
+{
+	my $msg = "ERROR: --min_pihat_threshold requires a master list of all samples via the --samples flag (e.g., your .fam file).\n" .
+	          "This ensures that individuals with no relatives are still included in the Maximum Unrelated Set analysis.\n";
+	$LOG->error($msg);
+	die $msg;
+}
+
 $LOG->proginfo("Commandline options used: @commandline_options\n");
 
 ################ Print all files and settings ################
@@ -262,7 +271,7 @@ if($run_prePRIMUS){
 ## Run IMUS to get family networks and maximum unrelated set (unless turned off)
 if($reconstruct_pedigrees || $get_max_unrelated_set)
 {
-	my @IMUS_commands = ("--do_IMUS",$get_max_unrelated_set,"--do_PR",$reconstruct_pedigrees,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--trait_order",\@trait_order,"--traits",\%traits,"--output_dir",$output_dir,"--rel_threshold",$relatedness_threshold,"--lib",$lib_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff);
+	my @IMUS_commands = ("--do_IMUS",$get_max_unrelated_set,"--do_PR",$reconstruct_pedigrees,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--trait_order",\@trait_order,"--traits",\%traits,"--output_dir",$output_dir,"--rel_threshold",$relatedness_threshold,"--lib",$lib_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--samples_file",$samples_file);
 	$LOG->debug("IMUS_commands: @IMUS_commands\n");
 	if(!PRIMUS::IMUS::run_IMUS(@IMUS_commands)){
     die "IMUS FAILED TO COMPLETE\n\n";
@@ -857,6 +866,7 @@ sub apply_options {
 		"no_PCA_plot" => \$no_PCA_plot,
 		"rerun" => \$rerun,
 		"min_pihat_threshold=f" => \$min_pihat_threshold,
+		"samples=s" => \$samples_file,
 		"ref_pops=s" => sub 
 		{
 			@ref_pops = split(/,/,@_[1]);
@@ -1345,6 +1355,7 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
    --alt_ref_stem	Path to PLINK formatted data (no file extensions) used for allele frequencies
    --keep_inter_files	Keep intermediate files used to create the IBD estimates with prePRIMUS
    --min_pihat_threshold Set a minimum pi-hat threshold that will be used in the plink --genome calculation
+   --samples            A file containing a list of all samples (e.g., a .fam file) to ensure individuals with no relatives are included
    --max_memory		Specify amount of memory to be used in PLINK prePRIMUS commands (in MB)
 
  Identification of maximum unrelated set (IMUS) options:

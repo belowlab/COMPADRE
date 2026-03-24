@@ -32,6 +32,7 @@ my $verbose;
 my $lib_dir;
 my $LOG;
 
+my $samples_file;
 my %arg;
 my $relatedness_file;
 my $relatedness_file_name;
@@ -96,6 +97,7 @@ sub run_IMUS
 
 	if($verbose >= 1){print "Loading data...\n";}
 	if($verbose >= 1){print $LOG "Loading data...\n";}
+	load_samples($samples_file) if defined $samples_file && $samples_file ne "";
 	load_data($relatedness_file);
 	load_trait_data();
 	if($verbose >= 1){print "done.\n";}
@@ -283,6 +285,7 @@ sub set_values2
 		"do_PR=i" => \$do_PR,
 		"missing_val=f"=> \$EXCLUDE_VALUE,
 		"output_dir=s" => \$output_dir,
+		"samples_file=s" => \$samples_file,
 		#"ersa_data=s" => \$ersa_data,
 		"trait_order=s" => sub{ @trait_order = @{$_[1]} },
 		"lib=s"=>\$lib_dir,
@@ -554,6 +557,41 @@ sub get_correct_column
 	}
 
 	return $column - 1; # needs to be zero based, not one based like printed out to the user.
+}
+
+sub load_samples
+{
+	my $file = shift;
+	if($verbose >= 1){print $LOG "Loading all samples from $file...\n";}
+	
+	if(!open(IN,$file))
+	{
+		my $msg = "ERROR!!! Samples file $file cannot be read; $!\n";
+		print $LOG $msg if defined $LOG;
+		die $msg;
+	}
+	while(my $line = <IN>)
+	{
+		$line =~ s/^\s+//;
+		chomp($line);
+		next if $line eq "" || $line =~ /^FID/; # Skip empty and header
+
+		my @temp = split(/\s+/, $line);
+		my $iid;
+		if (@temp >= 2) {
+			$iid = $temp[1]; # Standard .fam format: FID IID ...
+		} else {
+			$iid = $temp[0]; # Single column format
+		}
+		my $name = "$iid";
+
+		if (!exists $id_network{$name}) {
+			$id_network{$name} = $network_ctr;
+			push @{ $networks{$network_ctr} }, "$name";
+			$network_ctr++;
+		}
+	}
+	close(IN);
 }
 
 sub load_data
@@ -1621,14 +1659,14 @@ sub get_node_to_remove
 {
 	my $degrees_ref = shift;
 	my $neighbors_ref = shift;
-	my @nodes = keys %$degrees_ref;
+	my @nodes = sort keys %$degrees_ref;
 	my $node = @nodes[0];
 	my $degree = $$degrees_ref{$node};
 	if($degree == 0)
 	{
 		die "ERROR REMOVING A NODE WITHOUT NEIGHBORS $node\n";
 	}
-	my @neighbors = keys %{ $neighbors_ref->{$node}}; # %neighbors;
+	my @neighbors = sort keys %{ $neighbors_ref->{$node}}; # %neighbors;
 	my $neighbor = @neighbors[0];
 	my $neighbor_degree = $$degrees_ref{$neighbor};
 	my @node_values;
