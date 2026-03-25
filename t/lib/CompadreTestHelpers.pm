@@ -2,10 +2,13 @@ package CompadreTestHelpers;
 
 use strict;
 use warnings;
+use Exporter 'import';
 use File::Temp qw(tempdir);
 use File::Spec;
-use IO::Socket::INET;
 use IPC::Run qw(run);
+use IO::Socket::INET;
+
+our @EXPORT = qw(get_free_port run_compadre cleanup_test_output verify_output_exists);
 
 =head1 NAME
 
@@ -56,7 +59,7 @@ sub get_free_port {
     my $max_attempts = 100;
     
     for (my $i = 0; $i < $max_attempts; $i++) {
-        my $socket = IO::Socket::INET->new(
+        $socket = IO::Socket::INET->new(
             LocalHost => 'localhost',
             LocalPort => $port,
             Proto     => 'tcp',
@@ -69,6 +72,7 @@ sub get_free_port {
     
         $port++;
     }
+    
     close($socket) if $socket;
     
     # If we tried up to port number 6099 then at the final iteration we 
@@ -77,7 +81,7 @@ sub get_free_port {
     if ($port >= 6000 + $max_attempts) {
         die "Could not find free port after $max_attempts attempts";
     }
-    return($port)
+    return $port;
 }
 
 =head2 run_compadre($input_file, $segment_file, $output_dir, $port)
