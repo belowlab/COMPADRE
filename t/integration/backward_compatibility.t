@@ -31,6 +31,7 @@ SKIP: {
         $port
     );
 
+    ok($result->{success}, "compadre ran successfully") or diag("compadre failed with error: $result->{stderr}");
     cleanup_test_output($temp_output_dir);
 }
 
