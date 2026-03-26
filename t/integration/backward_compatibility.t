@@ -61,7 +61,31 @@ SKIP: {
         File::Spec->catfile($temp_output_dir, "input_cleaned.genome_maximum_independent_set")
     );
 
-    ok($success_code, "check IMUS unrelated set ids") or diag($err_message);
+    ok($success_code, "checking IMUS unrelated set ids") or diag($err_message);
+
+    #TEST4: check and make sure that the ids in the unrelated_set (PLINK version) file are as should be expected.
+    my ($success_code_plink, $err_message_plink) = compare_independent_set_files(
+        File::Spec->catfile($truth_set_dir, "input_cleaned.genome_maximum_independent_set_PLINK"),
+        File::Spec->catfile($temp_output_dir, "input_cleaned.genome_maximum_independent_set_PLINK")
+    );
+    ok($success_code_plink, "checking PLINK unrelated set ids") or diag($err_message_plink);
+
+    # TEST5: check and make sure that the ids in the unrelated set (KING version) file are as should be expected.
+    my ($success_code_king, $err_message_king) = compare_independent_set_files(
+        File::Spec->catfile($truth_set_dir, "input_cleaned.genome_maximum_independent_set_KING"),
+        File::Spec->catfile($temp_output_dir, "input_cleaned.genome_maximum_independent_set_KING")
+    );
+    ok($success_code_king, "checking KING unrelated set ids") or diag($err_message_king);
+
+    # TEST6: check and make sure that hte ids in the unrelated set (PRIMUS version) file are as should be expected.
+    my ($success_code_primus, $err_message_primus) = compare_independent_set_files(
+        File::Spec->catfile($truth_set_dir, "input_cleaned.genome_maximum_independent_set_PRIMUS"),
+        File::Spec->catfile($temp_output_dir, "input_cleaned.genome_maximum_independent_set_PRIMUS")
+    );
+    ok($success_code_primus, "checking PRIMUS unrelated set ids") or diag($err_message_primus);
+
+    # TEST7: check and make sure that the network files are 
+    # correct
 
     cleanup_test_output($temp_output_dir);
 }
