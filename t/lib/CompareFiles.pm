@@ -5,7 +5,7 @@ use warnings;
 use Exporter 'import';
 use File::Spec;
 
-our @EXPORT = qw(verify_output_files_made compare_independent_set_files);
+our @EXPORT = qw(verify_output_files_made compare_independent_set_files compare_genome_file_content);
 
 =head1 Functions
 
@@ -43,7 +43,7 @@ Compare the ids in the truth set to the ids in the output produced by the test. 
 Parameters:
     - $true_file: the path to the file that contains the true ids. We assume that this file has a header line with FID and IID as the first two columns.
     - $test_file: the path to the file that contains the test ids. We assume that this file has a header line with FID and IID as the first two columns.
-    
+
 Returns: a list where the first value is either 1 or 0 (indicating success or failure), and the second value is an error message if any ids do not match.
 
 =cut
@@ -71,6 +71,71 @@ sub compare_independent_set_files {
         }
     }
 
+    return ($success_code, $err_message);
+}
+
+=head2 sort_genome_file_lines($genome_filepath)
+
+read in the lines. of the genome file and sort them.
+
+Parameters:
+    - $genome_filepath: the path to the genome file that we want to sort. 
+
+Returns: a sorted array of the lines in the genome file, excluding the header line. We assume that the genome file has a header line that contains any of the following phrases: Network, FID1, IID1, FID2, IID2, Z0, Z1, Z2, PI_HAT (case-insensitive).
+=cut
+
+sub sort_genome_file_lines {
+    my ($genome_filepath) = @_;
+    # array that will hold each line
+    my @lines;
+
+    open my $fh, '<', $genome_filepath or die "Could not open file '$genome_filepath': $!";
+
+    for my $line (<$fh>) {
+        chomp $line;
+        # We need to skip the header line because we are assuming that the file has a header line and if it does then it contains any of the following phrases
+        next if $line =~ /^(Network|FID1|IID1|FID2|IID2|Z0|Z1|Z2|PI_HAT)/i;
+
+        push @lines, $line;
+    }
+    # we are going to sort the lines so that they are in the 
+    # same order
+    return sort @lines;
+}
+
+=head2 compare_genome_file_content($true_file, $test_file) 
+
+Compare the 2 genome files to make sure they have the same content. We can't assume that the files have the same order so this function will read the data into arrays, sort the arrays, and then compare them. The test data is not that large so we are okay to perform our test this way.
+
+Parameters:
+    - $true_file: the path to the file that contains the true genome data. We assume that this file has a header line that contains any of the following phrases: Network, FID1, IID1, FID2, IID2, Z0, Z1, Z2, PI_HAT (case-insensitive).
+    - $test_file: the path to the file that contains the test genome data. We assume that this file has a header line that contains any of the following phrases: Network, FID1, IID1, FID2, IID2, Z0, Z1, Z2, PI_HAT (case-insensitive).   
+
+Returns: a list where the first value is either 1 or 0 (indicating success or failure), and the second value is an error message if any lines do not match.
+
+=cut
+
+sub compare_genome_file_content {
+    my ($true_file, $test_file) = @_;
+
+    my $success_code = 1;
+    my $err_message = "";
+
+    my @true_lines = sort_genome_file_lines($true_file);
+    my @test_lines = sort_genome_file_lines($test_file);
+
+    if (scalar(@true_lines) != scalar(@test_lines)) {
+        $success_code = 0;
+        $err_message = "The number of lines in the true file ($true_file) is different from the number of lines in the test file ($test_file). True file has " . scalar(@true_lines) . " lines, while test file has " . scalar(@test_lines) . " lines.";
+    } else {
+        for (my $i = 0; $i < scalar(@true_lines); $i++) {
+            if ($true_lines[$i] ne $test_lines[$i]) {
+                $success_code = 0;
+                $err_message = "The lines in the true file ($true_file) and the test file ($test_file) do not match. The first mismatch is at index $i: true line is '$true_lines[$i]', while test line is '$test_lines[$i]'.";
+                last;
+            }
+        }
+    }
     return ($success_code, $err_message);
 }
 

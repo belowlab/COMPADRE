@@ -86,7 +86,20 @@ SKIP: {
 
     # TEST7: check and make sure that the network files are 
     # correct
+    my ($success_code_genome, $err_message_genome) = compare_genome_file_content(
+        File::Spec->catfile($truth_set_dir, "input_cleaned.genome_networks"),
+        File::Spec->catfile($temp_output_dir, "input_cleaned.genome_networks")
+    );
+    ok($success_code_genome, "checking genome network file content") or diag($err_message_genome);
 
+    # TEST8: we now need to make sure the original network file created by the 
+    # plink --genome command is the same
+    my ($success_code_genome_plink, $err_message_genome_plink) = compare_genome_file_content(
+        File::Spec->catfile($truth_set_dir, "prePRIMUS", "input_cleaned.genome"),
+        File::Spec->catfile($temp_output_dir, "input_prePRIMUS", "input_cleaned.genome")
+    );
+    ok($success_code_genome_plink, "checking original genome file from PLINK") or diag($err_message_genome_plink);
+    
     cleanup_test_output($temp_output_dir);
 }
 
