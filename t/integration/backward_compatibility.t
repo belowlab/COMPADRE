@@ -99,7 +99,18 @@ SKIP: {
         File::Spec->catfile($temp_output_dir, "input_prePRIMUS", "input_cleaned.genome")
     );
     ok($success_code_genome_plink, "checking original genome file from PLINK") or diag($err_message_genome_plink);
-    
+
+    # TEST9: we now need to check the network summary file nad 
+    # make sure that each line in this file matches. The 
+    # ordering of the file here does matter so we don't need to 
+    # perform an sorting
+    my ($success_code_summary, $err_message_summary) = compare_network_summary_files(
+        File::Spec->catfile($truth_set_dir, "Summary_input_cleaned.genome_network1.txt"),
+        File::Spec->catfile($temp_output_dir, "input_cleaned.genome_network1", "Summary_input_cleaned.genome_network1.txt")
+    );
+
+    ok($success_code_summary, "checking network summary file content") or diag($err_message_summary);
+
     cleanup_test_output($temp_output_dir);
 }
 

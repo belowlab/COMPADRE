@@ -5,7 +5,7 @@ use warnings;
 use Exporter 'import';
 use File::Spec;
 
-our @EXPORT = qw(verify_output_files_made compare_independent_set_files compare_genome_file_content);
+our @EXPORT = qw(verify_output_files_made compare_independent_set_files compare_genome_file_content compare_network_summary_files);
 
 =head1 Functions
 
@@ -98,6 +98,7 @@ sub sort_genome_file_lines {
 
         push @lines, $line;
     }
+    close $fh;
     # we are going to sort the lines so that they are in the 
     # same order
     return sort @lines;
@@ -137,6 +138,122 @@ sub compare_genome_file_content {
         }
     }
     return ($success_code, $err_message);
+}
+
+=head2 load_network_file($network_file)
+
+Read in the lines of a network summary file and return them as an array.
+
+Parameters:
+    - $network_file: the path to the network summary file that we want to read in.
+
+Returns: an array of each line from the file
+
+=cut
+
+sub load_network_file {
+    my ($network_file) = @_;
+    my @network_data;
+
+    open my $fh, '<', $network_file or die "Could not open file '$network_file': $!";
+
+    while (my $line = <$fh>) {
+        chomp $line;
+        push @network_data, $line;
+    }
+    close $fh;
+    return @network_data;
+}
+
+=head2 compare_network_summary_files($true_file, $test_file)
+
+Compare the content of two network summary files. We will read in the lines of each file, sort them, and then compare them.
+
+Parameters:
+    - $true_file: the path to the file that contains the true network summary data.
+    - $test_file: the path to the file that contains the test network summary data.
+
+Returns: a list where the first value is either 1 or 0 (indicating success or failure), and the second value is an error message if any lines do not match.
+=cut
+
+sub compare_network_summary_files {
+    my ($true_file, $test_file) = @_;
+    # we are going to read in the summary files and then compare them. We are going to assume that the summary files have a header line and that the first column contains the network id. We will sort the lines by the network id and then compare them.
+
+    my $success_code = 1;
+    my $err_message = "";
+
+    my @true_lines = load_network_file($true_file);
+    my @test_lines = load_network_file($test_file);
+
+    if (scalar(@true_lines) != scalar(@test_lines)) {
+        $success_code = 0;
+        $err_message = "The number of lines in the true file ($true_file) is different from the number of lines in the test file ($test_file). True file has " . scalar(@true_lines) . " lines, while test file has " . scalar(@test_lines) . " lines.";
+    } else {
+        for (my $i = 0; $i < scalar(@true_lines); $i++) {
+            if ($true_lines[$i] =~ /^## Sample_IIDs:/ && $test_lines[$i] =~ /^## Sample_IIDs:/) {
+                # Compare Sample_IIDs lines (order-independent)
+                my ($line_success, $line_err) = compare_sample_ids_lines($true_lines[$i], $test_lines[$i], $true_file, $test_file);
+                unless ($line_success) {
+                    $success_code = 0;
+                    $err_message = $line_err;
+                    last;
+                }
+            } elsif ($true_lines[$i] ne $test_lines[$i]) {
+                # For all other lines, we will compare them directly without ignoring the order of any values.
+                $success_code = 0;
+                $err_message = "The lines in the true file ($true_file) and the test file ($test_file) do not match. The first mismatch is at index $i: true line is '$true_lines[$i]', while test line is '$test_lines[$i]'.";
+                last;
+            }
+        }
+    }
+    return ($success_code, $err_message);
+}
+
+=head2 compare_sample_ids_lines($true_line, $test_line, $true_file, $test_file)
+
+Compare two lines that contain Sample_IIDs in an order-independent way.
+These lines have the format: "## Sample_IIDs: id1,id2,id3,..."
+
+Parameters:
+    - $true_line: the baseline line containing Sample_IIDs
+    - $test_line: the test line containing Sample_IIDs
+    - $true_file: the baseline file path (for error messages)
+    - $test_file: the test file path (for error messages)
+
+Returns: a list where the first value is 1 (success) or 0 (failure), and the second value is an error message if comparison failed
+
+=cut
+
+sub compare_sample_ids_lines {
+    my ($true_line, $test_line, $true_file, $test_file) = @_;
+    
+    my $success_code = 1;
+    my $err_msg = "";
+    # Extract the comma-separated ID list after the colon
+    my ($true_ids_str) = $true_line =~ /^## Sample_IIDs:\s+(.+)$/;
+    my ($test_ids_str) = $test_line =~ /^## Sample_IIDs:\s+(.+)$/;
+    
+    # Split on commas and sort the IDs for order-independent comparison
+    my @true_ids = sort split(/,/, $true_ids_str);
+    my @test_ids = sort split(/,/, $test_ids_str);
+
+    # Check if the number of IDs match
+    if (scalar(@true_ids) != scalar(@test_ids)) {
+        $err_msg = "The number of ids in the true file ($true_file) is different from the number of ids in the test file ($test_file) for the line that starts with '## Sample_IIDs:'. True file has " . scalar(@true_ids) . " ids, while test file has " . scalar(@test_ids) . " ids.";
+        $success_code = 0;
+    } else {
+        # Check if all IDs match (after sorting)
+        for (my $j = 0; $j < scalar(@true_ids); $j++) {
+            if ($true_ids[$j] ne $test_ids[$j]) {
+                $err_msg = "The ids in the true file ($true_file) and the test file ($test_file) do not match for the line that starts with '## Sample_IIDs:'. The first mismatch is at index $j: true id is '$true_ids[$j]', while test id is '$test_ids[$j]'.";
+                $success_code = 0;
+                last;
+            }
+        }
+    }
+    
+    return ($success_code, $err_msg);
 }
 
 =head2 verify_output_files_made($output_dir, @files)

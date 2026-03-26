@@ -171,6 +171,7 @@ sub cleanup_test_output {
     }
 }
 
+
 =head2 verify_output_exists($dir, @files)
 
 Verify that all expected output files exist in the output directory.
