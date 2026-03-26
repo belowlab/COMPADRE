@@ -15,7 +15,7 @@ my $port = CompadreTestHelpers::get_free_port();
 my $temp_output_dir = tempdir(CLEANUP => 0);
 # Next three lines define where the input files and comparison files are located    
 my $fixtures = File::Spec->catfile('t', 'fixtures');
-my $truth_set_dir = File::Spec->catfile($fixtures, 'truth_sets');
+my $truth_set_dir = File::Spec->catfile($fixtures, 'expected_outputs', 'backwards_compat');
 my $inputs_dir = File::Spec->catfile($fixtures, 'input');
 
 # This represents the total number of test being run. We may have to update 
@@ -32,10 +32,15 @@ SKIP: {
         $temp_output_dir,
         $port
     );
-
+    #TEST1: we want to make sure that the program runs 
+    # successfully without crashing. We can do this just by 
+    # checking the response code 
     ok($result->{success}, "compadre ran successfully") or diag("compadre failed with error: $result->{stderr}");
 
-    # now we want to make sure that hte correct output files were created
+    #TEST2: now we want to make sure that the correct output 
+    # files were created. Because COMPADRE makes the file 
+    # names then we can check and make sure that these exact 
+    # files are made.
     my ($files_found, $err_msg) = verify_output_files_made($temp_output_dir,
         "input_cleaned.genome_maximum_independent_set_PLINK",
         "input_cleaned.genome_maximum_independent_set_KING",
@@ -48,6 +53,16 @@ SKIP: {
         "Summary_input_cleaned.genome.txt",
     );
     ok($files_found, "all expected output files were created") or diag($err_msg);
+    
+
+    #TEST3: check and make sure that the ids in the unrelated_set file are as should be expected.
+    my ($success_code, $err_message) = compare_independent_set_files(
+        File::Spec->catfile($truth_set_dir, "input_cleaned.genome_maximum_independent_set"),
+        File::Spec->catfile($temp_output_dir, "input_cleaned.genome_maximum_independent_set")
+    );
+
+    ok($success_code, "check IMUS unrelated set ids") or diag($err_message);
+
     cleanup_test_output($temp_output_dir);
 }
 
