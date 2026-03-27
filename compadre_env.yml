@@ -24,6 +24,8 @@ dependencies:
   - perl-test-more=1.001002
   - perl-ipc-run=20250809.0
   - perl-file-temp=0.2304
+  - plink=1.90b7.7
+  - plink2=2.0.0a.6.9
   - pip:
       - aiodns==2.0.0
       - aiohappyeyeballs==2.4.3
