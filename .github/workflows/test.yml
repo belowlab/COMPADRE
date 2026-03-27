@@ -1,0 +1,27 @@
+name: Test Suite
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Mamba environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          use-mamba: true
+          auto-activate-base: true
+          activate-environment: compadre
+          environment-file: compadre_env.yml
+      
+      - name: Run test suite
+        shell: bash -l {0}
+        run: |
+          prove t/ -v
