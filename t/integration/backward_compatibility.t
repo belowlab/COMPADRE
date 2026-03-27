@@ -20,10 +20,24 @@ my $inputs_dir = File::Spec->catfile($fixtures, 'input');
 
 # This represents the total number of test being run. We may have to update 
 # this at some point
-my $num_test = 1;
+my $num_test = 9;
+
+# Paths to the reference data required from compadre_data.zip
+my $onekg_ref    = File::Spec->catfile('lib', '1KG', '1KG_reference');
+my $hapmap3_dir  = File::Spec->catfile('lib', 'hapmap3');
+my $kde_data_dir = File::Spec->catfile('lib', 'KDE_data');
+
+my $data_url = 'https://github.com/belowlab/COMPADRE/releases/download/pre-release-0.2.0/compadre_data.zip';
+my $data_msg = "Required reference data is missing. Download $data_url and extract it into the lib/ directory.";
 
 SKIP: { 
     skip "the plink binary was not found in the users PATH. PLINK is required for the testing suite. Please install plink and then rerun the tests", $num_test unless can_run('plink');
+    skip "1KG reference files not found at $onekg_ref (.bed/.bim/.fam). $data_msg", $num_test
+        unless (-e "$onekg_ref.bed" && -e "$onekg_ref.bim" && -e "$onekg_ref.fam");
+    skip "hapmap3 directory not found at $hapmap3_dir. $data_msg", $num_test
+        unless -d $hapmap3_dir;
+    skip "KDE_data directory not found at $kde_data_dir. $data_msg", $num_test
+        unless -d $kde_data_dir;
 
     # We are going to first make sure that we can run through all of the compadre test suite
     my $result = run_compadre(

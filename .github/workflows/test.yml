@@ -23,6 +23,14 @@ jobs:
           channels: conda-forge,bioconda,defaults
           channel-priority: flexible
       
+      - name: Download and extract required reference data
+        run: |
+          curl -fL -o /tmp/compadre_data.zip \
+            https://github.com/belowlab/COMPADRE/releases/download/pre-release-0.2.0/compadre_data.zip || \
+            { echo "Failed to download compadre_data.zip"; exit 1; }
+          unzip -o /tmp/compadre_data.zip -d lib/ || \
+            { echo "Failed to extract compadre_data.zip"; exit 1; }
+
       - name: Run test suite
         shell: bash -l {0}
         run: |
