@@ -51,12 +51,6 @@ SKIP: {
     # checking the response code 
     ok($result->{success}, "compadre ran successfully") or diag("compadre failed with error: $result->{stderr}");
     
-    # Debug output for understanding what happened
-    diag("COMPADRE stdout:\n$result->{stdout}") if $result->{stdout};
-    diag("COMPADRE stderr:\n$result->{stderr}") if $result->{stderr};
-    diag("COMPADRE exit code: $result->{exit_code}");
-    diag("Output directory: $temp_output_dir");
-    diag("Files in output directory: " . join(", ", glob("$temp_output_dir/*")));
 
     #TEST2: now we want to make sure that the correct output 
     # files were created. Because COMPADRE makes the file 

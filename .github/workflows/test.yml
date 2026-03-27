@@ -10,14 +10,14 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Set up Mamba environment
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
           use-mamba: true
-          auto-activate-base: true
+          auto-activate: true
           activate-environment: compadre
           environment-file: compadre_env.yml
           channels: conda-forge,bioconda,defaults

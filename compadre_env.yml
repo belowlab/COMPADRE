@@ -1,8 +1,7 @@
-name: compadre_env_test
+name: compadre
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
   - python=3.11
   - numpy=1.25.0
