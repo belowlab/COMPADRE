@@ -1,8 +1,7 @@
-name: compadre_env_test
+name: compadre
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
   - python=3.11
   - numpy=1.25.0
@@ -21,6 +20,13 @@ dependencies:
   - wheel=0.38.4
   - ghostscript=10.06.0
   - perl-log-log4perl=1.55
+  - perl-test-more=1.001002
+  - perl-ipc-run=20250809.0
+  - perl-file-temp=0.2304
+  - plink=1.90b7.7
+  - plink2=2.0.0a.6.9
+  - r-base=4.5.3
+  - r-kernsmooth=2.23_26
   - pip:
       - aiodns==2.0.0
       - aiohappyeyeballs==2.4.3
