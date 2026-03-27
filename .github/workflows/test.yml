@@ -20,8 +20,10 @@ jobs:
           auto-activate-base: true
           activate-environment: compadre
           environment-file: compadre_env.yml
+          channels: conda-forge,bioconda,defaults
+          channel-priority: strict
       
       - name: Run test suite
         shell: bash -l {0}
         run: |
-          prove t/ -v
+          prove -r t/ -v
