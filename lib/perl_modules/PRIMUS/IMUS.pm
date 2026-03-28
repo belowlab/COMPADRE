@@ -228,6 +228,28 @@ Piper Below - below\@uw.edu
 \n\n";
 }
 
+# This function will be used to make surde the ids always appear in 
+# the same order. This will be useful when they are added to a map 
+# later and will enable us to not have to add duplicate entries to 
+# account for ID order
+=head2 sort_key($name1, $name2)
+
+given two ids, we sort the values. This saves us from having to store 
+the keys in both orders in later hashes.
+
+Parameters:
+  - $name1: first id
+  - $name2: second id
+
+Returns:
+  - A string with the two names sorted and separated by a semicolon, e.g. "ID1;ID2"
+=cut
+
+sub sort_key {
+  my ($name1, $name2) = @_;
+  return  ($name1 lt $name2) ? "$name1\;$name2" : "$name2\;$name1";
+}
+
 sub parseCommandLine 
 {
 	my $trait_ctr = 1;
@@ -572,8 +594,10 @@ sub load_samples
 	}
 	while(my $line = <IN>)
 	{
+		# remove leading whitespace and newline characters
 		$line =~ s/^\s+//;
 		chomp($line);
+		# if line is empty or we think it is a header, skip it
 		next if $line eq "" || $line =~ /^FID/; # Skip empty and header
 
 		my @temp = split(/\s+/, $line);
@@ -583,11 +607,10 @@ sub load_samples
 		} else {
 			$iid = $temp[0]; # Single column format
 		}
-		my $name = "$iid";
 
-		if (!exists $id_network{$name}) {
-			$id_network{$name} = $network_ctr;
-			push @{ $networks{$network_ctr} }, "$name";
+		if (!exists $id_network{$iid}) {
+			$id_network{$iid} = $network_ctr;
+			push @{ $networks{$network_ctr} }, "$iid";
 			$network_ctr++;
 		}
 	}
@@ -618,17 +641,16 @@ sub load_data
 		my $name1 = "$IID1";
 		my $name2 = "$IID2";
 
+		# Lets sort the names so that we dont have to store both 
+        # copies of the key
+        my $key = sort_key($name1, $name2);
+
 		my $PI_HAT = @temp[$RELATEDNESS_COLUMN];
 		if($PI_HAT > $THRESHOLD)
 		{
-			$id_id_scores{"$name1\;$name2"} = $PI_HAT;
-			$id_id_scores{"$name2\;$name1"} = $PI_HAT;
+			$id_id_scores{$key} = $PI_HAT;
+			$id_id_all_info{$key} = $line;
 		}
-		$id_id_all_info{"$name1\;$name2"} = $line;
-		$id_id_all_info{"$name2\;$name1"} = $line;
-
-		#$iid_to_fid{$IID1} = $FID1;
-		#$iid_to_fid{$IID2} = $FID2;
 		
 		if(!exists $id_network{$name1})
 		{
@@ -883,12 +905,13 @@ sub write_out_networks
 			{
 				my $id1 = $temp[$i];
 				my $id2 = $temp[$j];
-				my $info = $id_id_all_info{"$id1\;$id2"};
+				my $key = sort_key($id1, $id2);
+				my $info = $id_id_all_info{$key};
 				if($info ne "")
 				{
 					print GENOMES_OUT "$info\n";
 				}
-				my $score = $id_id_scores{"$id1\;$id2"};
+				my $score = $id_id_scores{$key};
 				if($score > $THRESHOLD)
 				{
 					print NETWORKS_OUT "$network_ctr\t$info\n";
@@ -916,8 +939,9 @@ sub get_connectedness
 		{
 			my $key = @ids[$i];
 			my $key2 = @ids[$j];
+			my $sorted_key = sort_key($key, $key2);
 			$max_connections++;
-			my $PI_HAT = $id_id_scores{"$key\;$key2"};
+			my $PI_HAT = $id_id_scores{$sorted_key};
 			if($PI_HAT > $THRESHOLD)
 			{
 				$num_connections++;
@@ -1335,7 +1359,8 @@ sub get_actual_neighbors
 		{
 			next;
 		}
-		my $score = $id_id_scores{"$v\;$n_v"};
+		my $key = sort_key($v, $n_v);
+		my $score = $id_id_scores{$key};
 		if($score > $THRESHOLD)
 		{
 			$neighbors{$n_v} = $$hash_ref{$n_v};
@@ -1358,7 +1383,8 @@ sub get_inverse_neighbors
 		{
 			next;
 		}
-		my $score = $id_id_scores{"$v\;$n_v"};
+		my $key = sort_key($v, $n_v);
+		my $score = $id_id_scores{$key};
 		if($score <= $THRESHOLD)
 		{
 			$$neighbors{$n_v} = $$hash_ref{$n_v};
@@ -1388,9 +1414,10 @@ sub write_out_dot_file
 		{
 			my $id1 = $temp[$i];
 			my $id2 = $temp[$j];
-			my $info = $id_id_all_info{"$id1\;$id2"};
-			my $score = $id_id_scores{"$id1\;$id2"};
-			
+			my $key = sort_key($id1, $id2);
+			my $info = $id_id_all_info{$key};
+			my $score = $id_id_scores{$key};
+
 			## Change the ** delimiter between FID and IID to and _
       #$id1 =~ s/\*\*/_/;
       #$id2 =~ s/\*\*/_/;
