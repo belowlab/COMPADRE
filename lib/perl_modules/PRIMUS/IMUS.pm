@@ -622,7 +622,6 @@ sub load_data
 	my $file = shift;
 	open(IN,$file) or die "ERROR!!! Relatedness input file $file cannot be read in; $!\n";
 	$OUTFILE_HEADER = <IN>; ## skip header
-	$network_ctr = 0;
 	while(my $line = <IN>)
 	{
 		$line =~ s/^\s+//;
@@ -649,8 +648,9 @@ sub load_data
 		if($PI_HAT > $THRESHOLD)
 		{
 			$id_id_scores{$key} = $PI_HAT;
-			$id_id_all_info{$key} = $line;
 		}
+
+		$id_id_all_info{$key} = $line;
 		
 		if(!exists $id_network{$name1})
 		{

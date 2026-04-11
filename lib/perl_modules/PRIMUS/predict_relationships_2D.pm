@@ -141,7 +141,9 @@ sub get_relationship_likelihood_vectors {
 		#my $name2 = "$FID2\__$IID2";
 		my $name1 = "$IID1";
 		my $name2 = "$IID2";
-		
+
+		my ($first, $second) = ($name1 lt $name2) ? ($name1, $name2) : ($name2, $name1);
+
 		my @vector;
 
 		my $k0 = int(@temp[$$IBD_file_ref{'IBD0'}-1] * $KDE_density_resolution);
@@ -193,9 +195,9 @@ sub get_relationship_likelihood_vectors {
 			@density_vector = (0,1,0,0,0,0,1);
 			@vector = (0,1,0,0,0,0,1);
 			my @possibilities = predict_relationship(@vector);
-			print MZ_OUT "$name1\tMZ-$name2\n";
-			print MZ_OUT "$name2\tMZ-$name1\n";
-			$relationships{$name1}{$name2} = \@vector;
+			print MZ_OUT "$first\tMZ-$second\n";
+			print MZ_OUT "$second\tMZ-$first\n";
+			$relationships{$first}{$second} = \@vector;
 		}
 		
 		my @density_vector = ($PC->[$k0][$k1],$FS->[$k0][$k1],$HAG->[$k0][$k1],$CGH->[$k0][$k1],$DR->[$k0][$k1],$UN->[$k0][$k1]);
@@ -251,15 +253,15 @@ sub get_relationship_likelihood_vectors {
 		if ($match_data ne "") {
 
 			## instantiate fallback
-			$fallback_relationships{$name1}{$name2} = [@vector_copy];
-            $fallback_raw_densities{$name1}{$name2} = [@density_vector];
+			$fallback_relationships{$first}{$second} = [@vector_copy];
+			$fallback_raw_densities{$first}{$second} = [@density_vector];
 
 			# Check vector to see if we even need to run ersa
 			my $sum01 = $vector[0] + $vector[1];
 			if ($sum01 < 0.4) {
 
 				my $vector_str = join(',',@vector);
-				my $socket_data = "$name1|$name2|$vector_str|pairwise\n";
+				my $socket_data = "$first|$second|$vector_str|pairwise\n";
 				my $new_vector = send_to_compadre_helper($socket_data, $port_number);
 				chomp($new_vector);
 				
@@ -312,7 +314,7 @@ sub get_relationship_likelihood_vectors {
 		##################################
 
 		### Vector added to total relationships data structure
-		$relationships{$name1}{$name2} = \@vector;
+		$relationships{$first}{$second} = \@vector;
 
 		# fix density vector with the multiplier from before
 		if ($match_data ne "")
@@ -321,11 +323,11 @@ sub get_relationship_likelihood_vectors {
 			my $new_sum = sum(@density_vector_new);
 			my $new_str_normalized = join(',',@vector);
 			my $new_str = join(',',@density_vector_new);
-			$raw_relationship_densities{$name1}{$name2} = \@density_vector_new;
+			$raw_relationship_densities{$first}{$second} = \@density_vector_new;
 		}
 		else 
 		{
-			$raw_relationship_densities{$name1}{$name2} = \@density_vector;
+			$raw_relationship_densities{$first}{$second} = \@density_vector;
 		}
 
 		
@@ -403,10 +405,12 @@ sub load_likelihood_vectors_from_file {
 		my $name1 = "$IID1";
 		my $name2 = "$IID2";
 
+		my ($first, $second) = ($name1 lt $name2) ? ($name1, $name2) : ($name2, $name1);
+
 		## Check if MZ twins
 		if (@vector[6] > 0) {
-			print MZ_OUT "$name1\tMZ-$name2\n";
-			print MZ_OUT "$name2\tMZ-$name1\n";
+			print MZ_OUT "$first\tMZ-$second\n";
+			print MZ_OUT "$second\tMZ-$first\n";
 		}
   
 		## If the intial_likelihood_cutoff is dropped low enough, the FS will overlap with HAG (2nd degree); should probably change the reconstruction code to split FS and HAG out from eachother like I do with 2nd and 3rd degree, and 3rd and unrelated 
@@ -424,8 +428,8 @@ sub load_likelihood_vectors_from_file {
 			
 		}
 
-		$$raw_relationships_ref{$name1}{$name2} = \@vector;
-    	$$relationships_ref{$name1}{$name2} = \@vector;
+		$$raw_relationships_ref{$first}{$second} = \@vector;
+		$$relationships_ref{$first}{$second} = \@vector;
 
 		##Testing stuff
 		my @possibilities = predict_relationship(@vector);
