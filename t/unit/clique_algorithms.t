@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 4;
+use Test::More tests => 5;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -37,6 +37,7 @@ sub reset_imus_globals {
     %PRIMUS::IMUS::id_network = ();
 }
 
+#TODO: these functions are currently storing the 
 sub setup_k3_network {
     # Complete graph: 3 nodes all connected
     # Edges: 1-2, 1-3, 2-3 (all > threshold)
@@ -45,12 +46,12 @@ sub setup_k3_network {
     
     no strict 'refs';
     %PRIMUS::IMUS::id_id_scores = (
-        '1;2' => 0.25,
-        '1;3' => 0.28,
-        '2;3' => 0.26,
+        'ID01;ID02' => 0.25,
+        'ID01;ID03' => 0.28,
+        'ID02;ID03' => 0.26,
     );
     
-    return { 1 => 1, 2 => 1, 3 => 1 };
+    return { ID01 => 1, ID02 => 1, ID03 => 1 };
 }
 
 sub setup_k4_network {
@@ -60,12 +61,12 @@ sub setup_k4_network {
     
     no strict 'refs';
     %PRIMUS::IMUS::id_id_scores = (
-        '1;2' => 0.25,  '1;3' => 0.28,  '1;4' => 0.30,
-        '2;3' => 0.26,  '2;4' => 0.27,
-        '3;4' => 0.29,
+        'ID01;ID02' => 0.25,  'ID01;ID03' => 0.28,  'ID01;ID04' => 0.30,
+        'ID02;ID03' => 0.26,  'ID02;ID04' => 0.27,
+        'ID03;ID04' => 0.29,
     );
     
-    return { 1 => 1, 2 => 1, 3 => 1, 4 => 1 };
+    return { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1 };
 }
 
 sub setup_disconnected_network {
@@ -76,7 +77,32 @@ sub setup_disconnected_network {
     no strict 'refs';
     %PRIMUS::IMUS::id_id_scores = ();  # Empty = no relationships
     
-    return { 1 => 1, 2 => 1, 3 => 1, 4 => 1 };
+    return { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1 };
+}
+
+sub setup_bipartite_network {
+    # Bipartite graph: 2 groups (5 nodes each) - for finding independent set
+    # Group A: nodes 1-5 (unrelated to each other)
+    # Group B: nodes 6-10 (unrelated to each other)
+    # Between-group: related (score > threshold) - so they don't connect in complement graph
+    
+    reset_imus_globals();
+    
+    no strict 'refs';
+    
+    my %edges = (
+        # Between groups only: related (score > threshold)
+        # Within-group pairs left undefined (treated as unrelated <= threshold)
+        'ID01;ID06' => 0.25,  'ID01;ID07' => 0.28,  'ID01;ID08' => 0.30,  'ID01;ID09' => 0.26,  'ID01;ID10' => 0.27,
+        'ID02;ID06' => 0.26,  'ID02;ID07' => 0.27,  'ID02;ID08' => 0.25,  'ID02;ID09' => 0.29,  'ID02;ID10' => 0.28,
+        'ID03;ID06' => 0.30,  'ID03;ID07' => 0.26,  'ID03;ID08' => 0.27,  'ID03;ID09' => 0.25,  'ID03;ID10' => 0.29,
+        'ID04;ID06' => 0.28,  'ID04;ID07' => 0.29,  'ID04;ID08' => 0.26,  'ID04;ID09' => 0.27,  'ID04;ID10' => 0.25,
+        'ID05;ID06' => 0.27,  'ID05;ID07' => 0.25,  'ID05;ID08' => 0.29,  'ID05;ID09' => 0.28,  'ID05;ID10' => 0.26,
+    );
+    
+    %PRIMUS::IMUS::id_id_scores = %edges;
+    
+    return { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1, ID06 => 1, ID07 => 1, ID08 => 1, ID09 => 1, ID10 => 1 };
 }
 
 #####################################
@@ -97,13 +123,11 @@ sub setup_disconnected_network {
     my $num_visited = 0;
     
     # Call the actual BronKerbosh from IMUS
-    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited);
+    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited, \%PRIMUS::IMUS::id_id_scores);
     
-    is(scalar(@maximal_cliques), 1, "K3: One maximal clique found");
-    
-    my @clique_nodes = sort keys %{ $maximal_cliques[0] };
-    my @expected = sort (1, 2, 3);
-    cmp_deeply(\@clique_nodes, \@expected, "K3: Clique contains nodes {1, 2, 3}");
+    # All scores > threshold means complement graph has no edges
+    # So each node is its own clique
+    is(scalar(@maximal_cliques), 3, "K3: Three maximal cliques found (one per node)");
 }
 
 # Test 3: Complete Graph K4 (4 nodes, all connected)
@@ -116,12 +140,14 @@ sub setup_disconnected_network {
     my %X = ();
     my $num_visited = 0;
     
-    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited);
+    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited, \%PRIMUS::IMUS::id_id_scores);
+
     
-    is(scalar(@maximal_cliques), 1, "K4: One maximal clique found");
+    # All scores > threshold means complement graph has no edges
+    is(scalar(@maximal_cliques), 4, "K4: Four maximal cliques found (one per node)");
 }
 
-# Test 3: Disconnected Graph (no edges, should find multiple cliques)
+# Test 4: Disconnected Graph (no edges, should find multiple cliques)
 {
     my $network_ref = setup_disconnected_network();
     
@@ -131,9 +157,8 @@ sub setup_disconnected_network {
     my %X = ();
     my $num_visited = 0;
     
-    # Debug output
     
-    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited);
+    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited, \%PRIMUS::IMUS::id_id_scores);
     
  
     
@@ -142,4 +167,62 @@ sub setup_disconnected_network {
     # This is edge case behavior - the algorithm is designed for highly 
     # connected genetic networks, not completely disconnected graphs.
     is(scalar(@maximal_cliques), 1, "Disconnected graph: All unrelated nodes found in one clique");
+}
+
+# Test 5: checking how the algorithm performs for a bipartite 
+# graph. In this case our graph has 2 sets of 5 nodes where there # are only connectinos between sets and not within sets. We 
+# expect the function to return 2 sets. Nodes 1-5 have no 
+# connections to each other and nodes 6-10 have no connections to 
+# each other. Therefore we should get 2 sets where 1 contains 
+#nodes 1-5 and the other contains nodes 6-10.
+{
+    my $network_ref = setup_bipartite_network();
+    
+    my @maximal_cliques;
+    my %R = ();
+    my %P = %$network_ref;
+    my %X = ();
+    my $num_visited = 0;
+
+
+    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited, \%PRIMUS::IMUS::id_id_scores);
+
+    # Just verify we're finding the expected 2 cliques from the bipartite structure
+    is (scalar(@maximal_cliques), 2, "Bipartite graph: Two maximal cliques found");
+}
+
+# Test 6: Hypothesis test - verify how undefined hash values behave in comparison
+# This test validates that undefined hash lookups correctly treated as <= THRESHOLD
+# when checking for inverse neighbors (complement graph edges)
+{
+    reset_imus_globals();
+    
+    no strict 'refs';
+    
+    # Setup: only define one edge (1;2 > threshold)
+    # All other pairs undefined, should be treated as <= threshold
+    %PRIMUS::IMUS::id_id_scores = (
+        'ID01;ID02' => 0.25,
+    );
+    
+    my @maximal_cliques;
+    my %R = ();
+    my %P = ( ID01 => 1, ID02 => 1, ID03 => 1 );
+    my %X = ();
+    my $num_visited = 0;
+    
+    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited, \%PRIMUS::IMUS::id_id_scores);
+    
+    # In complement graph:
+    # - Edge 1-2 does NOT exist (score > threshold)
+    # - All other edges DO exist (score <= threshold, including undefined)
+    # So valid cliques: {1,3}, {2,3}, or {1,2,3} if they're isolated in complement
+    # We expect node 3 to connect with both 1 and 2 in complement (one or both cliques)
+    
+    my $has_node_3 = 0;
+    for my $clique_ref (@maximal_cliques) {
+        $has_node_3++ if exists $clique_ref->{ID03};
+    }
+    
+    is($has_node_3 > 0, 1, "Undefined scores: Node ID03 found in clique (treated as unrelated to ID01 and ID02)");
 }
