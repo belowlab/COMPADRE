@@ -109,13 +109,13 @@ sub run_IMUS {
     if ( $verbose >= 1 ) { print "Loading data...\n"; }
     if ( $verbose >= 1 ) { print $LOG "Loading data...\n"; }
     load_samples($samples_file) if defined $samples_file && $samples_file ne "";
-    load_data($relatedness_file);
+    load_data( $relatedness_file, \%id_id_scores );
     load_trait_data();
     if ( $verbose >= 1 ) { print "done.\n"; }
     if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
     if ( $verbose >= 1 ) { print $LOG "colapsing networks...\n"; }
-    colapse_networks();
+    colapse_networks( \%id_id_scores );
     if ( $verbose >= 1 ) { print "done.\n"; }
     if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
@@ -649,14 +649,15 @@ sub load_samples {
 
 # @purpose Load relatedness/IBD data from file into %id_id_scores and %id_id_all_info
 # @param $file (scalar) - Path to relatedness file
+# @param $id_id_scores_ref (hashref) - Reference to %id_id_scores hash to populate
 # @return (void)
-# @side_effects Populates %id_id_scores (key => PI_HAT value) and %id_id_all_info
+# @side_effects Populates hash referenced by $id_id_scores_ref (key => PI_HAT value) and %id_id_all_info
 # @side_effects Populates %networks and %id_network with IID pairs
 # @uses global $THRESHOLD, $RELATEDNESS_COLUMN, $ID1_COLUMN, $ID2_COLUMN, $FID1_COLUMN, $FID2_COLUMN
-# @notes Only stores pairs with score > THRESHOLD in %id_id_scores
+# @notes Only stores pairs with score > THRESHOLD in hash
 
 sub load_data {
-    my ( $file, %ld_ld_scores ) = @_;
+    my ( $file, $id_id_scores_ref ) = (@_);
     open( IN, $file )
       or die "ERROR!!! Relatedness input file $file cannot be read in; $!\n";
     $OUTFILE_HEADER = <IN>;    ## skip header
@@ -684,7 +685,7 @@ sub load_data {
 
         my $PI_HAT = @temp[$RELATEDNESS_COLUMN];
         if ( $PI_HAT > $THRESHOLD ) {
-            $id_id_scores{$key} = $PI_HAT;
+            $id_id_scores_ref->{$key} = $PI_HAT;
         }
 
         $id_id_all_info{$key} = $line;
@@ -776,6 +777,7 @@ sub load_trait_data {
 }
 
 ## Method used for doing weighting of tails, mean, or user specified value. It will adjust all the trait values to be the distance from the mean or the user specified value. This is NOT the most effective way to do the tail weighting of skewed traits where the mean is not actually halfwaye between the highest and lowest value. A better way would be to find the highest and lowest value, and for each value change it to the min(max-val,val-min). This will set it to the distance from the max or min whichever it is closer to.
+
 # @purpose Adjust trait data by distance from fold value (mean, tail weighting, or user value)
 # @param $trait_type (scalar) - Type of folding: 'mean', 'tail', or numeric value
 # @param $hash_ref (hashref) - Hash of ID => trait_value pairs
@@ -815,14 +817,15 @@ sub fold_trait_data {
 
 ## Network processing subroutines
 # @purpose Merge networks containing related individuals using predict_relationships_2D
-# @param (none)
+# @param $id_id_scores_ref (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (void)
 # @side_effects Merges %networks entries where individuals are related; updates %id_network
-# @uses global %id_id_scores, $THRESHOLD, %id_network, %networks, $do_PR
+# @uses global $THRESHOLD, %id_network, %networks, $do_PR, $IBD_file_ref, $MIN_LIKELIHOOD, $lib_dir, $output_dir
 # @calls PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors
 # @notes Core network construction algorithm; combines individuals into families
 
 sub colapse_networks {
+    my ($id_id_scores_ref) = @_;
 
     # print all unique entries
     #foreach my $network (sort {$a <=> $b} keys %networks)
@@ -842,9 +845,9 @@ sub colapse_networks {
         }
     }
 
-    foreach my $id_pair ( keys %id_id_scores ) {
+    foreach my $id_pair ( keys $id_id_scores ) {
         my ( $id1, $id2 ) = split( /\;/, $id_pair );
-        my $score       = $id_id_scores{$id_pair};
+        my $score       = $id_id_scores->{$id_pair};
         my $id1_network = $id_network{$id1};
         my $id2_network = $id_network{$id2};
 
@@ -966,13 +969,14 @@ sub write_out_networks {
 
 # @purpose Calculate connectivity of a network (ratio of edges to possible edges)
 # @param $network_ref (hashref) - Network nodes (nodes => value)
+# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (scalar) - Connectivity value 0-1 (0=isolated, 1=fully connected)
-# @side_effects Accesses %id_id_scores for all pairs in network
-# @uses global %id_id_scores, $THRESHOLD
+# @side_effects None (read-only operation on parameters)
+# @uses global $THRESHOLD
 # @notes Used to determine algorithm parameters for large networks
 
 sub get_connectedness {
-    my $network_ref = shift;
+    my ( $network_ref, $id_id_scores ) = (@_);
     my $num_connections;
     my %visited;
     my @ids             = keys %$network_ref;
@@ -984,7 +988,7 @@ sub get_connectedness {
             my $key2       = @ids[$j];
             my $sorted_key = sort_key( $key, $key2 );
             $max_connections++;
-            my $PI_HAT = $id_id_scores{$sorted_key};
+            my $PI_HAT = $id_id_scores->{$sorted_key};
             if ( $PI_HAT > $THRESHOLD ) {
                 $num_connections++;
             }
@@ -1003,7 +1007,7 @@ sub breakup_large_networks {
         my %P    = map { $_ => 1 } @temp;
 
         if ( keys %P > $LOWEST_MAX_NETWORK_SIZE ) {
-            my $connectedness = get_connectedness( \%P );
+            my $connectedness = get_connectedness( \%P, \%id_id_scores );
             my $size          = keys %P;
             my $MAX_NETWORK_SIZE =
               get_max_network_size( $connectedness, $size );
@@ -1051,7 +1055,8 @@ sub breakup_large_network {
 
                 ## if still too big, call this routine recursively
                 if ( keys %$hash_ref > $LOWEST_MAX_NETWORK_SIZE ) {
-                    my $connectedness = get_connectedness($hash_ref);
+                    my $connectedness =
+                      get_connectedness( $hash_ref, \%id_id_scores );
                     my $LOCAL_MAX_NETWORK_SIZE =
                       get_max_network_size($connectedness);
                     print "Connectedness: $connectedness\n";
@@ -1072,7 +1077,7 @@ sub breakup_large_network {
             # It should never get here
             die "ERROR!!! PRUNING NODE WITHOUT RELATIVES!!!\n";
         }
-        my $connectedness = get_connectedness($P_ref);
+        my $connectedness = get_connectedness( $P_ref, \%id_id_scores );
         $MAX_NETWORK_SIZE = get_max_network_size($connectedness);
 
         #print "Connectedness: $connectedness\n";
@@ -1162,12 +1167,12 @@ sub write_out_independent_set {
 # @notes Used for network analysis and degree-based pruning
 
 sub load_degrees_and_neighbors {
-    my $network_ref   = shift;
-    my $degree_ref    = shift;
-    my $neighbors_ref = shift;
+
+    my ( $network_ref, $degree_ref, $neighbors_ref ) = (@_);
 
     foreach my $node ( keys %$network_ref ) {
-        my %neighbors = get_actual_neighbors( $node, $network_ref );
+        my %neighbors =
+          get_actual_neighbors( $node, $network_ref, \%id_id_scores );
 
         $$neighbors_ref{$node} =
           \%neighbors;    #get_actual_neighbors($node,$network_ref);
@@ -1382,12 +1387,12 @@ sub BronKerbosh {
         $temp_R{$v} = $$P_ref{$v};    # Load temp_R = R union v
 
         my %temp_P;
-        get_inverse_neighbors( $v, $P_ref, \%temp_P )
+        get_inverse_neighbors( $v, $P_ref, \%temp_P, \%id_id_scores )
           ;                           # Load temp_P = P intersection N(v)
         my @temp_arr = keys %temp_P;
 
         my %temp_X;
-        get_inverse_neighbors( $v, $X_ref, \%temp_X )
+        get_inverse_neighbors( $v, $X_ref, \%temp_X, \%id_id_scores )
           ;                           # Load temp_X = X intersect N(v)
 
         BronKerbosh( $maximal_cliques_ref, \%temp_R, \%temp_P, \%temp_X,
@@ -1416,7 +1421,7 @@ sub select_pivot {
 
     foreach my $key ( keys %$P_ref ) {
         my %neighbors;
-        get_inverse_neighbors( $key, $P_ref, \%neighbors );
+        get_inverse_neighbors( $key, $P_ref, \%neighbors, \%id_id_scores );
         if ( $max_size < keys %neighbors ) {
             $max_size    = keys %neighbors;
             $u           = $key;
@@ -1426,24 +1431,25 @@ sub select_pivot {
     return ( $u, %u_neighbors );
 }
 
-# @param $v (scalar) - Node ID to find neighbors for
+# @purpose Find all related neighbors of a node (where score > THRESHOLD)
+# @param $v (scalar) - Node ID to find related neighbors for
 # @param $hash_ref (hashref) - Candidate nodes to check against (nodes => value)
-# @return (hash) - Related nodes where score > THRESHOLD
-# @uses %id_id_scores (global - REFACTOR: should be parameter)
-# @uses $THRESHOLD (global)
-# @notes Related = kinship coefficient > THRESHOLD (typically > 0.1); complement of get_inverse_neighbors()
+# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
+# @return (hash) - Hash of related neighbors (nodes => value)
+# @side_effects None (read-only operation on parameters)
+# @uses global $THRESHOLD
+# @notes Related = kinship coefficient > THRESHOLD (typically > 0.1); opposite of get_inverse_neighbors
 
 sub get_actual_neighbors {
-    my $v        = shift;
-    my $hash_ref = shift;
+    my ( $v, $hash_ref, $id_id_scores ) = (@_);
     my %neighbors;
 
-    foreach my $n_v ( keys %$hash_ref ) {
+    foreach my $n_v ( keys $hash_ref ) {
         if ( $n_v eq $v ) {
             next;
         }
         my $key   = sort_key( $v, $n_v );
-        my $score = $id_id_scores{$key};
+        my $score = $id_id_scores->{$key};
         if ( $score > $THRESHOLD ) {
             $neighbors{$n_v} = $$hash_ref{$n_v};
         }
@@ -1452,27 +1458,27 @@ sub get_actual_neighbors {
     return %neighbors;
 }
 
+# @purpose Find all unrelated neighbors of a node (where score <= THRESHOLD)
 # @param $v (scalar) - Node ID to find unrelated neighbors for
 # @param $hash_ref (hashref) - Candidate nodes to check against (nodes => value)
-# @param $neighbors (hashref) - Output hash: will be populated with unrelated neighbors
-# @return (hashref) - Same reference as $neighbors parameter (modified in place)
-# @uses %id_id_scores (global - REFACTOR: should be parameter) *** CRITICAL: undefined values treated as <= THRESHOLD
-# @uses $THRESHOLD (global)
-# @critical_issue Test 5 failing: undefined scores in %id_id_scores appear as unrelated (scope issue)
+# @param $neighbors (scalar or hashref) - Output: pass undef for auto-vivification or hashref to populate
+# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
+# @return (hashref) - Reference to neighbors hash (auto-vivified if needed), modified in place
+# @side_effects Modifies $neighbors hash (or creates new one via auto-vivification) with unrelated nodes
+# @uses global $THRESHOLD
 # @notes Unrelated = kinship coefficient <= THRESHOLD (typically <= 0.1); KEY function for Bron-Kerbosch algorithm
 
 sub get_inverse_neighbors {
-    my $v         = shift;
-    my $hash_ref  = shift;
-    my $neighbors = shift;
 
-    foreach my $n_v ( keys %$hash_ref ) {
+    my ( $v, $hash_ref, $neighbors, $id_id_scores ) = (@_);
+
+    foreach my $n_v ( keys $hash_ref ) {
 
         if ( $n_v eq $v ) {
             next;
         }
         my $key   = sort_key( $v, $n_v );
-        my $score = $id_id_scores{$key};
+        my $score = $id_id_scores->{$key};
         if ( $score <= $THRESHOLD ) {
             $$neighbors{$n_v} = $$hash_ref{$n_v};
         }
@@ -1612,14 +1618,6 @@ sub compare_alternative_methods {
 # @calls King_method for each network
 # @uses get_maximum_clique for clique selection
 
-# @purpose Find maximum independent set using KING method (greedy algorithm)
-# @param $file (scalar) - Base filename for output
-# @param %networks_king (hash) - Networks to process
-# @return (hash) - IID => 1 for selected unrelated individuals
-# @side_effects Creates ${file}_maximum_independent_set_KING
-# @calls King_method for each network
-# @uses get_maximum_clique for clique selection
-
 sub write_out_independent_set_KING {
     my $file          = shift;
     my %networks_king = @_;
@@ -1701,7 +1699,9 @@ sub load_inverse_degrees_and_neighbors {
     my $neighbors_ref = shift;
 
     foreach my $node ( keys %$network_ref ) {
-        my $neighbors = get_inverse_neighbors( $node, $network_ref );
+
+        my $neighbors =
+          get_inverse_neighbors( $node, $network_ref, undef, \%id_id_scores );
 
         $$neighbors_ref{$node} = $neighbors;
         my @temp   = keys %{ $neighbors_ref->{$node} };    # %neighbors;
@@ -1709,13 +1709,6 @@ sub load_inverse_degrees_and_neighbors {
         $$degree_ref{$node} = $degree;
     }
 }
-
-# @purpose Find maximum independent set using PLINK method
-# @param $file (scalar) - Base filename for output
-# @param %networks (hash) - Networks to process
-# @return (hash) - IID => 1 for selected individuals (already singleton networks)
-# @side_effects Creates ${file}_maximum_independent_set_PLINK
-# @notes PLINK method outputs one individual per network (very conservative/small independent set)
 
 # @purpose Find maximum independent set using PLINK method
 # @param $file (scalar) - Base filename for output
@@ -1744,13 +1737,6 @@ sub write_out_independent_set_PLINK {
     close(UNIQUE_OUT);
     return %unrelated_set;
 }
-
-# @purpose Break up large networks for PLINK method (one individual per network)
-# @param $networks_ref (hashref) - Networks to modify
-# @return (void)
-# @side_effects Modifies $networks_ref by splitting networks
-# @uses breakup_large_network_PLINK to split networks
-# @algorithm Removes highest-degree nodes until max 1 individual per network
 
 # @purpose Break up large networks for PLINK method (one individual per network)
 # @param $networks_ref (hashref) - Networks to modify
