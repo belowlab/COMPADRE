@@ -1146,7 +1146,7 @@ sub write_out_independent_set {
             print "Running BronKerbosh for network $network (size = " . @temp
               . ")\n";
         }
-        BronKerbosh( \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited );
+        BronKerbosh( \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited, \%id_id_scores);
 
         my $maximum_clique = get_maximum_clique(@maximal_cliques);
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
@@ -1363,11 +1363,14 @@ sub write_out_maximum_clique_ids {
 # @algorithm Bron-Kerbosch with pivot optimization; finds maximal cliques in complement graph
 
 sub BronKerbosh {
-    my $maximal_cliques_ref = shift;
-    my $R_ref               = shift;
-    my $P_ref               = shift;
-    my $X_ref               = shift;
-    my $num_visited_ref     = shift;
+    # my $maximal_cliques_ref = shift;
+    # my $R_ref               = shift;
+    # my $P_ref               = shift;
+    # my $X_ref               = shift;
+    # my $num_visited_ref     = shift;
+
+	my ($maximal_cliques_ref, $R_ref, $P_ref, $X_ref, $num_visited_ref, $id_id_scores) = (@_);
+
     $$num_visited_ref++;
     my $nodes_visited = 1;
 
@@ -1377,7 +1380,7 @@ sub BronKerbosh {
     }
 
     ## Select pivot node from P union X that maximizes the cardinality of P intersection N(u);
-    my ( $u, %u_neighbors ) = select_pivot( $P_ref, $X_ref );
+    my ( $u, %u_neighbors ) = select_pivot( $P_ref, $X_ref, $id_id_scores );
 
     foreach my $v ( keys %$P_ref ) {
         ## Use the pivot node: continue only if $v is not a neighbor of the pivot $u
@@ -1387,16 +1390,16 @@ sub BronKerbosh {
         $temp_R{$v} = $$P_ref{$v};    # Load temp_R = R union v
 
         my %temp_P;
-        get_inverse_neighbors( $v, $P_ref, \%temp_P, \%id_id_scores )
+        get_inverse_neighbors( $v, $P_ref, \%temp_P, $id_id_scores )
           ;                           # Load temp_P = P intersection N(v)
         my @temp_arr = keys %temp_P;
 
         my %temp_X;
-        get_inverse_neighbors( $v, $X_ref, \%temp_X, \%id_id_scores )
+        get_inverse_neighbors( $v, $X_ref, \%temp_X, $id_id_scores )
           ;                           # Load temp_X = X intersect N(v)
 
         BronKerbosh( $maximal_cliques_ref, \%temp_R, \%temp_P, \%temp_X,
-            $num_visited_ref );
+            $num_visited_ref, $id_id_scores );
         $$X_ref{$v} = $$P_ref{$v};
         delete( $$P_ref{$v} );
     }
@@ -1405,23 +1408,25 @@ sub BronKerbosh {
 
 # @param $P_ref (hashref) - Candidate set of nodes (nodes => 1)
 # @param $X_ref (hashref) - Already processed nodes (nodes => 1)
+# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (list) - ($pivot_node, %pivot_neighbors)
 # @return_detail $pivot_node - Node from P with most neighbors in P
 # @return_detail %pivot_neighbors - Inverse neighbors of pivot (score <= THRESHOLD)
-# @uses get_inverse_neighbors() which accesses global %id_id_scores
+# @uses get_inverse_neighbors() 
 # @notes Pivot selection maximizes |P ∩ N(u)| to reduce search space
 
 ## Select pivot node from P union X that maximizes the cardinality of P intersection N(u);
 sub select_pivot {
-    my $P_ref = shift;
-    my $X_ref = shift;
+
+	my ($P_ref, $X_ref, $id_id_scores) = (@_);
+
     my $u;
     my $max_size = -1;
     my %u_neighbors;
 
     foreach my $key ( keys %$P_ref ) {
         my %neighbors;
-        get_inverse_neighbors( $key, $P_ref, \%neighbors, \%id_id_scores );
+        get_inverse_neighbors( $key, $P_ref, \%neighbors, $id_id_scores );
         if ( $max_size < keys %neighbors ) {
             $max_size    = keys %neighbors;
             $u           = $key;
