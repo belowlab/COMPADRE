@@ -58,11 +58,10 @@ my %TRAIT_DATA_COLUMNS      = -1;
 my $PRINT_ALTERNATE_RESULTS = 1;
 
 ### Here 'networks' could also be considered related groups or families;
-my %networks
-  ; ## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
-my %id_network
-  ;  ## Regular hash; Key = IID1; Value = network that the individual belongs to
-my %id_id_scores;    ## Regular hash; Key = IID1_IID2; Value = PI_HAT value
+## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
+my %networks;
+## Regular hash; Key = IID1; Value = network that the individual
+my %id_network;
 my %id_id_all_info;
 my @trait_refs;
 my @trait_order;
@@ -109,6 +108,9 @@ sub run_IMUS {
     if ( $verbose >= 1 ) { print "Loading data...\n"; }
     if ( $verbose >= 1 ) { print $LOG "Loading data...\n"; }
     load_samples($samples_file) if defined $samples_file && $samples_file ne "";
+
+    # He we create an empty hash for the id_id_scores
+    my %id_id_scores = ();
     load_data( $relatedness_file, \%id_id_scores );
     load_trait_data();
     if ( $verbose >= 1 ) { print "done.\n"; }
@@ -124,7 +126,7 @@ sub run_IMUS {
         #print "key: $key; @{ $networks{$key} }\n";
     }
 
-    write_out_networks($relatedness_file_name);
+    write_out_networks( $relatedness_file_name, \%id_id_scores );
 
     if ( !$do_IMUS ) { return 1; }
 
@@ -134,7 +136,7 @@ sub run_IMUS {
     }
     if ( $verbose eq 1 ) { print "Checking for large networks...\n"; }
     if ( $verbose eq 1 ) { print $LOG "Checking for large networks...\n"; }
-    breakup_large_networks();
+    breakup_large_networks( \%id_id_scores );
     if ( $verbose > 0 ) { print "done.\n"; }
     if ( $verbose > 0 ) { print $LOG "done.\n"; }
 
@@ -145,14 +147,14 @@ sub run_IMUS {
     if ( $verbose >= 1 ) { print "Writing out unrelated set\n"; }
     if ( $verbose >= 1 ) { print $LOG "Writing out unrelated set\n"; }
     my %PRIMUS_unrelated_set =
-      write_out_independent_set($relatedness_file_name);
+      write_out_independent_set( $relatedness_file_name, \%id_id_scores );
     if ( $verbose >= 1 ) { print "done.\n"; }
     if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
     if ( $verbose >= 1 ) { print "Testing alternative methods...\n"; }
     if ( $verbose >= 1 ) { print $LOG "Testing alternative methods...\n"; }
     compare_alternative_methods( $relatedness_file_name,
-        \%PRIMUS_unrelated_set, %networks );
+        \%PRIMUS_unrelated_set, %networks, \%id_id_scores );
     if ( $verbose >= 1 ) { print "done.\n"; }
     if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
@@ -208,11 +210,11 @@ sub reset_values {
     $PRINT_ALTERNATE_RESULTS = 1;
 
     ### Here 'networks' could also be considered related groups or families;
-    %networks = ()
-      ; ## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
-    %id_network = ()
-      ; ## Regular hash; Key = IID1; Value = network that the individual belongs to
-    %id_id_scores   = (); ## Regular hash; Key = IID1_IID2; Value = PI_HAT value
+    ## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
+    %networks = ();
+    ## Regular hash; Key = IID1; Value = network that the individual belongs to
+    %id_network = ();
+
     %id_id_all_info = ();
     @trait_refs     = ();
     @trait_order    = ();
@@ -817,7 +819,7 @@ sub fold_trait_data {
 
 ## Network processing subroutines
 # @purpose Merge networks containing related individuals using predict_relationships_2D
-# @param $id_id_scores_ref (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
+# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (void)
 # @side_effects Merges %networks entries where individuals are related; updates %id_network
 # @uses global $THRESHOLD, %id_network, %networks, $do_PR, $IBD_file_ref, $MIN_LIKELIHOOD, $lib_dir, $output_dir
@@ -825,7 +827,7 @@ sub fold_trait_data {
 # @notes Core network construction algorithm; combines individuals into families
 
 sub colapse_networks {
-    my ($id_id_scores_ref) = @_;
+    my ($id_id_scores) = @_;
 
     # print all unique entries
     #foreach my $network (sort {$a <=> $b} keys %networks)
@@ -845,7 +847,7 @@ sub colapse_networks {
         }
     }
 
-    foreach my $id_pair ( keys $id_id_scores ) {
+    foreach my $id_pair ( keys %$id_id_scores ) {
         my ( $id1, $id2 ) = split( /\;/, $id_pair );
         my $score       = $id_id_scores->{$id_pair};
         my $id1_network = $id_network{$id1};
@@ -918,8 +920,8 @@ sub colapse_networks {
 # @calls write_out_dot_file for networks > 4 nodes
 
 sub write_out_networks {
+    my ( $file, $id_id_scores ) = @_;
     my $num_networks = keys %networks;
-    my $file         = shift;
 
     open( NETWORKS_OUT, ">$output_dir/$file\_networks" )
       or die "Can't write to $output_dir/$file\_networks; $!\n";
@@ -938,7 +940,7 @@ sub write_out_networks {
             next;
         }
         if ( @temp > 4 ) {
-            write_out_dot_file( $file, $network, $network_ctr );
+            write_out_dot_file( $file, $network, $network_ctr, $id_id_scores );
         }
         ## This will write out the .genome file for each network (if a .genome file was read in)
         open( GENOMES_OUT, ">$output_dir/$file\_network$network_ctr.genome" )
@@ -954,7 +956,7 @@ sub write_out_networks {
                 if ( $info ne "" ) {
                     print GENOMES_OUT "$info\n";
                 }
-                my $score = $id_id_scores{$key};
+                my $score = $id_id_scores->{$key};
                 if ( $score > $THRESHOLD ) {
                     print NETWORKS_OUT "$network_ctr\t$info\n";
                 }
@@ -1002,19 +1004,22 @@ sub get_connectedness {
 }
 
 sub breakup_large_networks {
+
+    my ($id_id_scores) = (@_);
+
     foreach my $network ( sort { $a <=> $b } keys %networks ) {
         my @temp = @{ $networks{$network} };
         my %P    = map { $_ => 1 } @temp;
 
         if ( keys %P > $LOWEST_MAX_NETWORK_SIZE ) {
-            my $connectedness = get_connectedness( \%P, \%id_id_scores );
+            my $connectedness = get_connectedness( \%P, $id_id_scores );
             my $size          = keys %P;
             my $MAX_NETWORK_SIZE =
               get_max_network_size( $connectedness, $size );
             if ( $size > $MAX_NETWORK_SIZE ) {
                 print "WARNING!!! " . @temp
                   . " NODES WITH CONNECTIVITY OF $connectedness WILL TAKE TOO LONG TO RUN; USING NEXT BEST SOLUTION.\n";
-                breakup_large_network( \%P, $MAX_NETWORK_SIZE );
+                breakup_large_network( \%P, $MAX_NETWORK_SIZE, $id_id_scores );
                 @{ $networks{$network} } = keys %P;
             }
         }
@@ -1023,12 +1028,12 @@ sub breakup_large_networks {
 }
 
 sub breakup_large_network {
-    my $P_ref            = shift;
-    my $MAX_NETWORK_SIZE = shift;
+
+    my ( $P_ref, $MAX_NETWORK_SIZE, $id_id_scores ) = (@_);
     my %degrees;
     my %neighbors;
 
-    load_degrees_and_neighbors( $P_ref, \%degrees, \%neighbors );
+    load_degrees_and_neighbors( $P_ref, \%degrees, \%neighbors, $id_id_scores );
 
     while ( keys %$P_ref > $MAX_NETWORK_SIZE ) {
         my ( $node_to_remove, $degree ) = get_highest_degree_node( \%degrees );
@@ -1056,7 +1061,7 @@ sub breakup_large_network {
                 ## if still too big, call this routine recursively
                 if ( keys %$hash_ref > $LOWEST_MAX_NETWORK_SIZE ) {
                     my $connectedness =
-                      get_connectedness( $hash_ref, \%id_id_scores );
+                      get_connectedness( $hash_ref, $id_id_scores );
                     my $LOCAL_MAX_NETWORK_SIZE =
                       get_max_network_size($connectedness);
                     print "Connectedness: $connectedness\n";
@@ -1064,7 +1069,7 @@ sub breakup_large_network {
                     if ( keys %$hash_ref > $LOCAL_MAX_NETWORK_SIZE ) {
                         ## DECEND RECURSIVELY
                         breakup_large_network( $hash_ref,
-                            $LOCAL_MAX_NETWORK_SIZE );
+                            $LOCAL_MAX_NETWORK_SIZE, $id_id_scores );
                     }
                 }
                 $network_ctr++;
@@ -1077,7 +1082,7 @@ sub breakup_large_network {
             # It should never get here
             die "ERROR!!! PRUNING NODE WITHOUT RELATIVES!!!\n";
         }
-        my $connectedness = get_connectedness( $P_ref, \%id_id_scores );
+        my $connectedness = get_connectedness( $P_ref, $id_id_scores );
         $MAX_NETWORK_SIZE = get_max_network_size($connectedness);
 
         #print "Connectedness: $connectedness\n";
@@ -1126,7 +1131,7 @@ sub get_connected_components {
 }
 
 sub write_out_independent_set {
-    my $file = shift;
+    my ( $file, $id_id_scores ) = (@_);
     my %unrelated_set;
     open( UNIQUE_OUT, ">$output_dir/$file\_maximum_independent_set_PRIMUS" );
     print UNIQUE_OUT "FID\tIID\n";
@@ -1146,7 +1151,8 @@ sub write_out_independent_set {
             print "Running BronKerbosh for network $network (size = " . @temp
               . ")\n";
         }
-        BronKerbosh( \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited, \%id_id_scores);
+        BronKerbosh( \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited,
+            $id_id_scores );
 
         my $maximum_clique = get_maximum_clique(@maximal_cliques);
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
@@ -1161,6 +1167,7 @@ sub write_out_independent_set {
 # @param $network_ref (hashref) - Network nodes (nodes => value)
 # @param $degree_ref (hashref) - Output: nodes => degree count
 # @param $neighbors_ref (hashref) - Output: nodes => neighbor hashref
+# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (void)
 # @side_effects Modifies $degree_ref and $neighbors_ref hashrefs
 # @uses get_actual_neighbors to find related nodes (original graph)
@@ -1168,11 +1175,11 @@ sub write_out_independent_set {
 
 sub load_degrees_and_neighbors {
 
-    my ( $network_ref, $degree_ref, $neighbors_ref ) = (@_);
+    my ( $network_ref, $degree_ref, $neighbors_ref, $id_id_scores ) = (@_);
 
     foreach my $node ( keys %$network_ref ) {
         my %neighbors =
-          get_actual_neighbors( $node, $network_ref, \%id_id_scores );
+          get_actual_neighbors( $node, $network_ref, $id_id_scores );
 
         $$neighbors_ref{$node} =
           \%neighbors;    #get_actual_neighbors($node,$network_ref);
@@ -1363,13 +1370,16 @@ sub write_out_maximum_clique_ids {
 # @algorithm Bron-Kerbosch with pivot optimization; finds maximal cliques in complement graph
 
 sub BronKerbosh {
+
     # my $maximal_cliques_ref = shift;
     # my $R_ref               = shift;
     # my $P_ref               = shift;
     # my $X_ref               = shift;
     # my $num_visited_ref     = shift;
 
-	my ($maximal_cliques_ref, $R_ref, $P_ref, $X_ref, $num_visited_ref, $id_id_scores) = (@_);
+    my ( $maximal_cliques_ref, $R_ref, $P_ref, $X_ref, $num_visited_ref,
+        $id_id_scores )
+      = (@_);
 
     $$num_visited_ref++;
     my $nodes_visited = 1;
@@ -1412,13 +1422,13 @@ sub BronKerbosh {
 # @return (list) - ($pivot_node, %pivot_neighbors)
 # @return_detail $pivot_node - Node from P with most neighbors in P
 # @return_detail %pivot_neighbors - Inverse neighbors of pivot (score <= THRESHOLD)
-# @uses get_inverse_neighbors() 
+# @uses get_inverse_neighbors()
 # @notes Pivot selection maximizes |P ∩ N(u)| to reduce search space
 
 ## Select pivot node from P union X that maximizes the cardinality of P intersection N(u);
 sub select_pivot {
 
-	my ($P_ref, $X_ref, $id_id_scores) = (@_);
+    my ( $P_ref, $X_ref, $id_id_scores ) = (@_);
 
     my $u;
     my $max_size = -1;
@@ -1449,7 +1459,7 @@ sub get_actual_neighbors {
     my ( $v, $hash_ref, $id_id_scores ) = (@_);
     my %neighbors;
 
-    foreach my $n_v ( keys $hash_ref ) {
+    foreach my $n_v ( keys %$hash_ref ) {
         if ( $n_v eq $v ) {
             next;
         }
@@ -1477,7 +1487,7 @@ sub get_inverse_neighbors {
 
     my ( $v, $hash_ref, $neighbors, $id_id_scores ) = (@_);
 
-    foreach my $n_v ( keys $hash_ref ) {
+    foreach my $n_v ( keys %$hash_ref ) {
 
         if ( $n_v eq $v ) {
             next;
@@ -1502,9 +1512,7 @@ sub get_inverse_neighbors {
 # @notes Black edges = related pairs (score > THRESHOLD); nodes for isolated individuals
 
 sub write_out_dot_file {
-    my $file        = shift;
-    my $network     = shift;
-    my $network_ctr = shift;
+	my ($file, $network, $network_ctr, $id_id_scores) = (@_);
 
     open( GRAPH_OUT, ">$output_dir/$file\_network$network_ctr.dot" );
     print GRAPH_OUT "graph network$network_ctr {\n";
@@ -1519,7 +1527,7 @@ sub write_out_dot_file {
             my $id2   = $temp[$j];
             my $key   = sort_key( $id1, $id2 );
             my $info  = $id_id_all_info{$key};
-            my $score = $id_id_scores{$key};
+            my $score = $id_id_scores->{$key};
 
             ## Change the ** delimiter between FID and IID to and _
             #$id1 =~ s/\*\*/_/;
@@ -1573,12 +1581,15 @@ sub get_max_network_size {
 
 sub compare_alternative_methods {
     ### Run alternative methods
-    my $file                 = shift;
-    my $PRIMUS_unrelated_set = shift;
-    my %networks_alt         = @_;
-    my %KING_network = write_out_independent_set_KING( $file, %networks_alt );
 
-    breakup_large_networks_PLINK( \%networks_alt );
+    my ( $file, $PRIMUS_unrelated_set, $id_id_scores ) = (@_);
+
+    my %networks_alt = @_[ 0 .. 1 ];
+
+    my %KING_network =
+      write_out_independent_set_KING( $file, %networks_alt, $id_id_scores );
+
+    breakup_large_networks_PLINK( \%networks_alt, $id_id_scores );
 
     my %PLINK_network = write_out_independent_set_PLINK( $file, %networks_alt );
 
@@ -1624,7 +1635,8 @@ sub compare_alternative_methods {
 # @uses get_maximum_clique for clique selection
 
 sub write_out_independent_set_KING {
-    my $file          = shift;
+    my ( $file, $id_id_scores ) = (@_);
+
     my %networks_king = @_;
     my %unrelated_set;
     open( UNIQUE_OUT, ">$output_dir/$file\_maximum_independent_set_KING" );
@@ -1636,7 +1648,7 @@ sub write_out_independent_set_KING {
         my %P    = map { $_ => 1 } @temp;
         my @maximal_cliques;
 
-        King_method( \@maximal_cliques, \%P );
+        King_method( \@maximal_cliques, \%P, $id_id_scores );
 
         my $maximum_clique = get_maximum_clique(@maximal_cliques);
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
@@ -1657,20 +1669,24 @@ sub write_out_independent_set_KING {
 # @notes Alternative to BronKerbosh; faster but may produce smaller independent set
 
 sub King_method {
-    my $maximal_cliques_ref = shift;
-    my $network_ref         = shift;
+
+    my ( $maximal_cliques_ref, $network_ref, $id_id_scores ) = (@_);
+
     my %actual_degrees;
     my %actual_neighbors;
     my %inverse_degrees;
     my %inverse_neighbors;
     my %i_set = ();
-    load_inverse_degrees_and_neighbors( $network_ref, \%inverse_degrees,
-        \%inverse_neighbors );
-    load_degrees_and_neighbors( $network_ref, \%actual_degrees,
-        \%actual_neighbors );
 
-    my @sorted_ids = ( sort { $inverse_degrees{$b} cmp $inverse_degrees{$a} }
-          keys %inverse_degrees );
+    load_inverse_degrees_and_neighbors( $network_ref, \%inverse_degrees,
+        \%inverse_neighbors, $id_id_scores );
+    load_degrees_and_neighbors( $network_ref, \%actual_degrees,
+        \%actual_neighbors, $id_id_scores );
+
+    my @sorted_ids = (
+        sort { $inverse_degrees{$b} cmp $inverse_degrees{$a} }
+          keys %inverse_degrees
+    );
 
     while ( keys %inverse_degrees ) {
         my ( $id, $degree ) = get_highest_degree_node( \%inverse_degrees );
@@ -1699,14 +1715,13 @@ sub King_method {
 # @notes Used by KING method; counts nodes with score <= THRESHOLD
 
 sub load_inverse_degrees_and_neighbors {
-    my $network_ref   = shift;
-    my $degree_ref    = shift;
-    my $neighbors_ref = shift;
+
+    my ( $network_ref, $degree_ref, $neighbors_ref, $id_id_scores ) = (@_);
 
     foreach my $node ( keys %$network_ref ) {
 
         my $neighbors =
-          get_inverse_neighbors( $node, $network_ref, undef, \%id_id_scores );
+          get_inverse_neighbors( $node, $network_ref, undef, $id_id_scores );
 
         $$neighbors_ref{$node} = $neighbors;
         my @temp   = keys %{ $neighbors_ref->{$node} };    # %neighbors;
@@ -1751,7 +1766,7 @@ sub write_out_independent_set_PLINK {
 # @algorithm Removes highest-degree nodes until max 1 individual per network
 
 sub breakup_large_networks_PLINK {
-    my $networks_ref = shift;
+    my ( $networks_ref, $id_id_scores ) = (@_);
     foreach my $network ( sort { $a <=> $b } keys %$networks_ref ) {
 
         my @temp = @{ $$networks_ref{$network} };
@@ -1761,7 +1776,7 @@ sub breakup_large_networks_PLINK {
         my %P = map { $_ => 1 } @temp;
 
         if ( keys %P > 0 ) {
-            breakup_large_network_PLINK( $networks_ref, \%P );
+            breakup_large_network_PLINK( $networks_ref, \%P, $id_id_scores );
             @{ $$networks_ref{$network} } = keys %P;
         }
     }
@@ -1777,12 +1792,12 @@ sub breakup_large_networks_PLINK {
 # @algorithm Removes highest-degree/lowest-trait node until one node per network
 
 sub breakup_large_network_PLINK {
-    my $networks_ref = shift;
-    my $P_ref        = shift;
+
+    my ( $networks_ref, $P_ref, $id_id_scores ) = (@_);
     my %degrees;
     my %neighbors;
 
-    load_degrees_and_neighbors( $P_ref, \%degrees, \%neighbors );
+    load_degrees_and_neighbors( $P_ref, \%degrees, \%neighbors, $id_id_scores );
 
     while ( keys %$P_ref > 1 ) {
         my @P_nodes   = keys %$P_ref;
@@ -1812,7 +1827,8 @@ sub breakup_large_network_PLINK {
 
                 ## if still too big, call this routine recursively
                 if ( keys %$hash_ref > 1 ) {
-                    breakup_large_network_PLINK( $networks_ref, $hash_ref );
+                    breakup_large_network_PLINK( $networks_ref, $hash_ref,
+                        $id_id_scores );
                 }
                 $network_ctr++;
                 @{ $$networks_ref{$network_ctr} } = keys %$hash_ref;
