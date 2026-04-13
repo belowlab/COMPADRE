@@ -1582,9 +1582,10 @@ sub get_max_network_size {
 sub compare_alternative_methods {
     ### Run alternative methods
 
-    my ( $file, $PRIMUS_unrelated_set, $id_id_scores ) = (@_);
-
-    my %networks_alt = @_[ 0 .. 1 ];
+    my $file = shift;
+    my $PRIMUS_unrelated_set = shift;
+    my $id_id_scores = pop;
+    my %networks_alt = @_;
 
     my %KING_network =
       write_out_independent_set_KING( $file, %networks_alt, $id_id_scores );
@@ -1635,8 +1636,8 @@ sub compare_alternative_methods {
 # @uses get_maximum_clique for clique selection
 
 sub write_out_independent_set_KING {
-    my ( $file, $id_id_scores ) = (@_);
-
+    my $file         = shift;
+    my $id_id_scores = pop;
     my %networks_king = @_;
     my %unrelated_set;
     open( UNIQUE_OUT, ">$output_dir/$file\_maximum_independent_set_KING" );
