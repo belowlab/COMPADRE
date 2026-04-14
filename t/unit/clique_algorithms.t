@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 12;
+use Test::More tests => 16;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -123,7 +123,7 @@ sub setup_empty_network {
 # Test BronKerbosch Algorithm
 #####################################
 
-# Test 1 and 2: Make sure the BronKerbosch code is identifying 
+# Test 1 Make sure the BronKerbosch code is identifying 
 # 1 clique for Graph K3 (3 nodes, all connected). We check to 
 # see how many cliques are identified and then what ifs and in 
 # the clique
@@ -144,7 +144,7 @@ sub setup_empty_network {
     is(scalar(@maximal_cliques), 3, "K3: Three maximal cliques found (one per node)");
 }
 
-# Test 3: Complete Graph K4 (4 nodes, all connected)
+# Test 2: Complete Graph K4 (4 nodes, all connected)
 {
     my $network_ref = setup_k4_network();
     
@@ -161,7 +161,7 @@ sub setup_empty_network {
     is(scalar(@maximal_cliques), 4, "K4: Four maximal cliques found (one per node)");
 }
 
-# Test 4: Disconnected Graph (no edges, should find multiple cliques)
+# Test 3: Disconnected Graph (no edges, should find multiple cliques)
 {
     my $network_ref = setup_disconnected_network();
     
@@ -183,7 +183,7 @@ sub setup_empty_network {
     is(scalar(@maximal_cliques), 1, "Disconnected graph: All unrelated nodes found in one clique");
 }
 
-# Test 5: checking how the algorithm performs for a bipartite 
+# Test 4,5,6: checking how the algorithm performs for a bipartite 
 # graph. In this case our graph has 2 sets of 5 nodes where there # are only connectinos between sets and not within sets. We 
 # expect the function to return 2 sets. Nodes 1-5 have no 
 # connections to each other and nodes 6-10 have no connections to 
@@ -224,7 +224,7 @@ sub setup_empty_network {
     }
 }
 
-# We need to check the case where no individuals are related to each other. This means the %id_id_score hash is empty. The complement graph should have all individuals connected to each other, so we should get one big clique.
+# Test 7,8: We need to check the case where no individuals are related to each other. This means the %id_id_score hash is empty. The complement graph should have all individuals connected to each other, so we should get one big clique.
 {
 
     my $network_ref = setup_empty_network();
@@ -242,7 +242,7 @@ sub setup_empty_network {
     is(scalar(keys %{ $maximal_cliques[0] }), 4, "Empty graph test: Maximal clique contains all individuals when all are unrelated");
 }
 
-# Test 6: Hypothesis test - verify how undefined hash values behave in comparison
+# Test 9: Hypothesis test - verify how undefined hash values behave in comparison
 # This test validates that undefined hash lookups correctly treated as <= THRESHOLD
 # when checking for inverse neighbors (complement graph edges)
 {
@@ -282,7 +282,92 @@ sub setup_empty_network {
 # Test select_pivot function
 ############################
 
-# Test 8-10: select_pivot with tied candidates (multiple nodes with same max neighbor count)
+{
+    # Test 10: Check to make sure that there are no neighbors if all individuals are related to each other. In this case the complement graph has no edges, so every node should have 0 neighbors in the complement graph. We can check that the pivot selection correctly identifies that there are no neighbors.
+    reset_imus_globals();
+
+    no strict 'refs';
+
+    ## Setup: 3 nodes where all individuals are related to each other (complete graph), so all have 0 neighbors in the complement graph. 
+    %PRIMUS::IMUS::id_id_scores = (
+        'ID01;ID02' => 0.25,
+        'ID01;ID03' => 0.28,
+        'ID02;ID03' => 0.26,
+    );
+
+    my %P = ( ID01 => 1, ID02 => 1, ID03 => 1 );
+    my %X = ();
+
+    my ($pivot, %neighbors) = PRIMUS::IMUS::select_pivot(\%P, \%X, \%PRIMUS::IMUS::id_id_scores);
+
+    my $no_neighbors_found = (scalar(keys %neighbors) == 0);    
+
+    is($no_neighbors_found, 1, "select_pivot test: No neighbors found when all individuals are related (complete graph)");
+}
+
+{
+    # Test 11: Test to make sure that if all individuals are unrelated to each other then 
+    # returned group of neighbors includes all other individuals in the candidate set.
+    reset_imus_globals();
+
+    no strict 'refs';
+
+    # Setup: 3 nodes where all individuals are unrelated to each other (no edges), so all have 2 neighbors in the complement graph.
+    %PRIMUS::IMUS::id_id_scores = ();  
+
+    my %P = ( ID01 => 1, ID02 => 1, ID03 => 1 );
+    my %X = ();
+
+    my ($pivot, %neighbors) = PRIMUS::IMUS::select_pivot(\%P, \%X, \%PRIMUS::IMUS::id_id_scores);
+
+    my $two_neighbors_found = (scalar(keys %neighbors) == 2);
+
+    is ($two_neighbors_found, 1, "select_pivot test: Two neighbors found when all individuals are unrelated (no edges)");
+}
+
+{
+    # Test 12: Test to make sure that the correct pivot is being returned.
+    reset_imus_globals();
+
+    no strict 'refs';
+
+    # Set up: 3 nodes where ID01 is unrelated to both ID02 and ID03 (2 neighbors), but ID02 and ID03 are related to each other (0 neighbors). We expect select_pivot to return ID01 as the pivot since it has the most neighbors in the complement graph.
+    %PRIMUS::IMUS::id_id_scores = (
+        'ID02;ID03' => 0.25
+    );
+
+    my %P = ( ID01 => 1, ID02 => 1, ID03 => 1 );
+    my %X = ();
+
+    my ($pivot, %neighbors) = PRIMUS::IMUS::select_pivot(\%P, \%X, \%PRIMUS::IMUS::id_id_scores);
+
+    my $correct_pivot = ($pivot eq 'ID01');
+    my $two_neighbors_found = (scalar(keys %neighbors) == 2);
+
+    is($correct_pivot && $two_neighbors_found, 1, "select_pivot test: Correct pivot (ID01) with 2 neighbors when ID01 is unrelated to both ID02 and ID03");
+}
+
+{
+    # Test 13: Test to make sure that if only 1 individual is in the candidate set then the 
+    # correct pivot is returned and the correct number of neighbors are returned
+    reset_imus_globals();
+
+    no strict 'refs';
+    # Setup: Since only 1 individual is in the candidate set then we don't need to 
+    # define any relatedness values. We do need to but one id in the %P candidate set
+    %PRIMUS::IMUS::id_id_scores = ();
+
+    my %P = ( ID01 => 1);
+    my %X = ();
+    my ($pivot, %neighbors) = PRIMUS::IMUS::select_pivot(\%P, \%X, \%PRIMUS::IMUS::id_id_scores);
+
+    my $correct_pivot = ($pivot eq 'ID01');
+    my $no_neighbors_found = (scalar(keys %neighbors) == 0);
+
+    is($correct_pivot && $no_neighbors_found, 1, "select_pivot test: Single node pivot with no neighbors when only one individual in candidate set");
+}
+
+# Test 14-15: select_pivot with tied candidates (multiple nodes with same max neighbor count)
 # This tests that select_pivot correctly identifies a max-degree node when there are ties
 {
     reset_imus_globals();
@@ -312,10 +397,10 @@ sub setup_empty_network {
     
     # Verify pivot is one of the tied max-degree nodes
     my $is_max_degree_pivot = ($pivot eq 'ID01' || $pivot eq 'ID02' || $pivot eq 'ID03');
-    is($is_max_degree_pivot, 1, "select_pivot: Pivot is one of max-degree nodes (tied at 2 neighbors)");
+    my $two_neighbors_found = (scalar(keys %neighbors) == 2);
+
+    is($is_max_degree_pivot && $two_neighbors_found, 1, "select_pivot: Pivot is one of max-degree nodes with 2 neighbors (tied at 2 neighbors)");
     
-    # Verify neighbor count is exactly 2 (the maximum)
-    is(scalar(keys %neighbors), 2, "select_pivot: Pivot has 2 neighbors (maximum degree)");
     
     # Verify neighbors are from the correct set {ID01, ID02, ID03}
     my $valid_neighbors = 1;
