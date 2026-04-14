@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 7;
+use Test::More tests => 12;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -37,7 +37,9 @@ sub reset_imus_globals {
     %PRIMUS::IMUS::id_network = ();
 }
 
-#TODO: these functions are currently storing the 
+# All setup functions return a hash that list all individuals in the graph space. 
+# This list of individuals will start as the initial candidate pool for the 
+# BronKerbosch algorithm.
 sub setup_k3_network {
     # Complete graph: 3 nodes all connected
     # Edges: 1-2, 1-3, 2-3 (all > threshold)
@@ -105,9 +107,20 @@ sub setup_bipartite_network {
     return { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1, ID06 => 1, ID07 => 1, ID08 => 1, ID09 => 1, ID10 => 1 };
 }
 
+sub setup_empty_network {
+
+    reset_imus_globals();
+    
+    no strict 'refs';
+
+    %PRIMUS::IMUS::id_id_scores = ();  # No relationships, empty hash
+
+    return { ID01 =>1, ID02 => 1, ID03 => 1, ID04 => 1};
+}
+
 
 #####################################
-# Tests
+# Test BronKerbosch Algorithm
 #####################################
 
 # Test 1 and 2: Make sure the BronKerbosch code is identifying 
@@ -211,6 +224,24 @@ sub setup_bipartite_network {
     }
 }
 
+# We need to check the case where no individuals are related to each other. This means the %id_id_score hash is empty. The complement graph should have all individuals connected to each other, so we should get one big clique.
+{
+
+    my $network_ref = setup_empty_network();
+
+    my @maximal_cliques;
+    my %R = ();
+    my %P = %$network_ref;
+    my %X = ();
+    my $num_visited = 0;
+
+    PRIMUS::IMUS::BronKerbosh(\@maximal_cliques, \%R, \%P, \%X, \$num_visited, \%PRIMUS::IMUS::id_id_scores);
+
+    is(scalar(@maximal_cliques), 1, "Empty graph test: One maximal clique identified when all individuals are unrelated (complement graph fully connected)");
+
+    is(scalar(keys %{ $maximal_cliques[0] }), 4, "Empty graph test: Maximal clique contains all individuals when all are unrelated");
+}
+
 # Test 6: Hypothesis test - verify how undefined hash values behave in comparison
 # This test validates that undefined hash lookups correctly treated as <= THRESHOLD
 # when checking for inverse neighbors (complement graph edges)
@@ -245,4 +276,54 @@ sub setup_bipartite_network {
     }
     
     is($has_node_3 > 0, 1, "Undefined scores: Node ID03 found in clique (treated as unrelated to ID01 and ID02)");
+}
+
+############################
+# Test select_pivot function
+############################
+
+# Test 8-10: select_pivot with tied candidates (multiple nodes with same max neighbor count)
+# This tests that select_pivot correctly identifies a max-degree node when there are ties
+{
+    reset_imus_globals();
+    
+    no strict 'refs';
+    
+    # Setup: 4 nodes where ID01, ID02, ID03 each have 2 unrelated neighbors
+    # (they form a triangle in the complement graph), and ID04 is only related to all three
+    # Candidates P:
+    #   ID01 unrelated to: ID02, ID03 (2 neighbors in P)
+    #   ID02 unrelated to: ID01, ID03 (2 neighbors in P)
+    #   ID03 unrelated to: ID01, ID02 (2 neighbors in P)
+    #   ID04 unrelated to: none (0 neighbors in P; related to all others)
+    # Expected: select_pivot should return one of ID01/ID02/ID03 with 2 neighbors
+    
+    %PRIMUS::IMUS::id_id_scores = (
+        'ID01;ID04' => 0.25,  # ID01 related to ID04
+        'ID02;ID04' => 0.25,  # ID02 related to ID04
+        'ID03;ID04' => 0.25,  # ID03 related to ID04
+        # ID01;ID02, ID01;ID03, ID02;ID03 undefined = unrelated
+    );
+    
+    my %P = ( ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1 );
+    my %X = ();
+    
+    my ($pivot, %neighbors) = PRIMUS::IMUS::select_pivot(\%P, \%X, \%PRIMUS::IMUS::id_id_scores);
+    
+    # Verify pivot is one of the tied max-degree nodes
+    my $is_max_degree_pivot = ($pivot eq 'ID01' || $pivot eq 'ID02' || $pivot eq 'ID03');
+    is($is_max_degree_pivot, 1, "select_pivot: Pivot is one of max-degree nodes (tied at 2 neighbors)");
+    
+    # Verify neighbor count is exactly 2 (the maximum)
+    is(scalar(keys %neighbors), 2, "select_pivot: Pivot has 2 neighbors (maximum degree)");
+    
+    # Verify neighbors are from the correct set {ID01, ID02, ID03}
+    my $valid_neighbors = 1;
+    for my $neighbor (keys %neighbors) {
+        if (!($neighbor =~ /^ID0[1-3]$/ && $neighbor ne $pivot)) {
+            $valid_neighbors = 0;
+            last;
+        }
+    }
+    is($valid_neighbors, 1, "select_pivot: All neighbors are from the tied set (excluding self)");
 }
