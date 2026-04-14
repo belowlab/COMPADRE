@@ -20,6 +20,8 @@ package PRIMUS::IMUS;
 use strict;
 use Getopt::Long qw(GetOptionsFromArray);
 use PRIMUS::predict_relationships_2D;
+use Types::IMUS_types;
+use Log::Log4perl;
 
 my $useage =
 "\n\nUSAGE: $0\t  -input [IBD_file]  -output_dir [output_dir]  -threshold [num; default = 0.1]  -[high|low|mean|tails]/[b|q]trait [trait_file]
@@ -30,7 +32,7 @@ my $do_IMUS = 1;
 my $do_PR   = 1;
 my $verbose;
 my $lib_dir;
-my $LOG;
+my $LOG = Log::Log4perl->get_logger(__PACKAGE__);
 
 my $samples_file;
 my %arg;
@@ -76,50 +78,38 @@ my %child_parents;
 
 sub run_IMUS {
 
-    print "\nRunning IMUS ...\n\n";
-
+    $LOG->info("Running IMUS");
+    my $config = PRIMUS::IMUS::Config->new();
+    my $state = PRIMUS::IMUS::State->new();
     #parseCommandLine(@_);
     reset_values();
-    set_values2(@_);
+    set_values2($config, @_);
 
-    open( $LOG, ">$output_dir/$relatedness_file_name.log" ) if ( $LOG eq "" );
-
-    print "Relatedness_file: $relatedness_file\n"            if $verbose > 0;
-    print "Threshold: $THRESHOLD\n"                          if $verbose > 0;
-    print "Selection criteria are based on the following:\n" if $verbose > 0;
-    print $LOG "Relatedness_file: $relatedness_file\n"       if $verbose > 0;
-    print $LOG "Threshold: $THRESHOLD\n"                     if $verbose > 0;
-    print $LOG "Selection criteria are based on the following:\n"
-      if $verbose > 0;
+    $LOG->info("Relatedness_file: $config->{relatedness_file}");
+    $LOG->info("Threshold: $config->{threshold}");
+    $LOG->info("Selection criteria are based on the following:");
     foreach (@trait_order) {
-        print "\t$_ ($trait_files{$_})\n"      if $verbose > 0;
-        print $LOG "\t$_ ($trait_files{$_})\n" if $verbose > 0;
+        $LOG->info("\t$_ ($trait_files{$_})");
     }
 
-    if ( $verbose >= 1 ) { print "\nIDENTIFYING FAMILY NETWORKS IN DATA\n"; }
-    if ( $verbose >= 1 ) { print "Writing network files to $output_dir/\n"; }
-    if ( $verbose >= 1 ) {
-        print $LOG "\nIDENTIFYING FAMILY NETWORKS IN DATA\n";
-    }
-    if ( $verbose >= 1 ) {
-        print $LOG "Writing network files to $output_dir/\n";
-    }
+    $LOG->debug("IDENTIFYING FAMILY NETWORKS IN DATA");
+    $LOG->debug("Writing network files to $config->{output_dir}/");
 
-    if ( $verbose >= 1 ) { print "Loading data...\n"; }
-    if ( $verbose >= 1 ) { print $LOG "Loading data...\n"; }
-    load_samples($samples_file) if defined $samples_file && $samples_file ne "";
+    $LOG->debug("Loading data...");
+    load_samples($config->{samples_file}) if defined $config->{samples_file} && $config->{samples_file} ne "";
 
     # He we create an empty hash for the id_id_scores
     my %id_id_scores = ();
-    load_data( $relatedness_file, \%id_id_scores );
+    load_data( $config->{relatedness_file}, \$state->{id_id_scores});
+    #TODO: Need to update this function to not use global values
     load_trait_data();
-    if ( $verbose >= 1 ) { print "done.\n"; }
-    if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
-    if ( $verbose >= 1 ) { print $LOG "colapsing networks...\n"; }
+    $LOG->debug("done.");
+
+    $LOG->debug("colapsing networks...");
     colapse_networks( \%id_id_scores );
-    if ( $verbose >= 1 ) { print "done.\n"; }
-    if ( $verbose >= 1 ) { print $LOG "done.\n"; }
+
+    $LOG->debug("done.");
 
     foreach my $key ( keys %networks ) {
 
@@ -130,43 +120,33 @@ sub run_IMUS {
 
     if ( !$do_IMUS ) { return 1; }
 
-    if ( $verbose > 0 ) { print "\nIDENTIFYING A MAXIMUM UNRELATED SET\n"; }
-    if ( $verbose > 0 ) {
-        print $LOG "\nIDENTIFYING A MAXIMUM UNRELATED SET\n";
-    }
-    if ( $verbose eq 1 ) { print "Checking for large networks...\n"; }
-    if ( $verbose eq 1 ) { print $LOG "Checking for large networks...\n"; }
+    $LOG->info("IDENTIFYING A MAXIMUM UNRELATED SET");
+
+    $LOG->debug("Checking for large networks...");
     breakup_large_networks( \%id_id_scores );
-    if ( $verbose > 0 ) { print "done.\n"; }
-    if ( $verbose > 0 ) { print $LOG "done.\n"; }
+
+    $LOG->debug("done.");
 
     my $num_networks = keys %networks;
 
-    if ( $verbose > 0 )  { print "# of family networks: $num_networks\n"; }
-    if ( $verbose > 0 )  { print $LOG "# of family networks: $num_networks\n"; }
-    if ( $verbose >= 1 ) { print "Writing out unrelated set\n"; }
-    if ( $verbose >= 1 ) { print $LOG "Writing out unrelated set\n"; }
+    $LOG->info("# of family networks: $num_networks");
+
+    $LOG->info("Writing out unrelated set");
     my %PRIMUS_unrelated_set =
       write_out_independent_set( $relatedness_file_name, \%id_id_scores );
-    if ( $verbose >= 1 ) { print "done.\n"; }
-    if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
-    if ( $verbose >= 1 ) { print "Testing alternative methods...\n"; }
-    if ( $verbose >= 1 ) { print $LOG "Testing alternative methods...\n"; }
+    $LOG->info("done.");
+
+    $LOG->info("Testing alternative methods...");
     compare_alternative_methods( $relatedness_file_name,
         \%PRIMUS_unrelated_set, %networks, \%id_id_scores );
-    if ( $verbose >= 1 ) { print "done.\n"; }
-    if ( $verbose >= 1 ) { print $LOG "done.\n"; }
 
-    print "unrelated_file: $relatedness_file_name\_maximum_independent_set\n"
-      if $verbose > 0;
-    print "unrelated_set size: " . ( keys %PRIMUS_unrelated_set ) . "\n"
-      if $verbose > 0;
-    print $LOG
-      "unrelated_file: $relatedness_file_name\_maximum_independent_set\n"
-      if $verbose > 0;
-    print $LOG "unrelated_set size: " . ( keys %PRIMUS_unrelated_set ) . "\n"
-      if $verbose > 0;
+    $LOG->info("done.");
+
+    $LOG->info("unrelated_file: $relatedness_file_name\_maximum_independent_set")
+    $LOG->info("unrelated_set size: " . ( keys %PRIMUS_unrelated_set ));
+    $LOG->info("unrelated_file: $relatedness_file_name\_maximum_independent_set");
+    $LOG->info("unrelated_set size: " . ( keys %PRIMUS_unrelated_set ));
 
     return ( "$output_dir/$relatedness_file_name\_maximum_independent_set",
         ( keys %PRIMUS_unrelated_set ) );
@@ -277,40 +257,40 @@ sub sort_key {
 # @side_effects Sets %arg hash with parsed options
 # @deprecated - use set_values2 instead
 
-sub parseCommandLine {
-    my $trait_ctr = 1;
-    for ( my $i = 0 ; $i <= $#ARGV ; $i++ ) {
-        if ( $ARGV[$i] =~ /^-/ ) {
-            if ( $ARGV[$i] =~ /trait/ ) {
-                if ( $ARGV[ $i + 1 ] ne "NA" && $ARGV[ $i + 1 ] !~ /^-/ ) {
-                    ## Check if user is trying to weight on a qtrait first; if so, default to weighting on size, then qtrait
-                    if ( $ARGV[$i] =~ /qtrait/ && @trait_order eq 0 ) {
-                        push( @trait_order, "size" );
-                    }
-                    push( @trait_order, $ARGV[ $i + 1 ] );
-                    $trait_files{ $ARGV[ $i + 1 ] } =
-                      $ARGV[$i];    ## Key is file and value is trait type
-                }
-            }
-            $arg{ $ARGV[$i] } = $ARGV[ $i + 1 ];
-        }
-    }
+# sub parseCommandLine {
+#     my $trait_ctr = 1;
+#     for ( my $i = 0 ; $i <= $#ARGV ; $i++ ) {
+#         if ( $ARGV[$i] =~ /^-/ ) {
+#             if ( $ARGV[$i] =~ /trait/ ) {
+#                 if ( $ARGV[ $i + 1 ] ne "NA" && $ARGV[ $i + 1 ] !~ /^-/ ) {
+#                     ## Check if user is trying to weight on a qtrait first; if so, default to weighting on size, then qtrait
+#                     if ( $ARGV[$i] =~ /qtrait/ && @trait_order eq 0 ) {
+#                         push( @trait_order, "size" );
+#                     }
+#                     push( @trait_order, $ARGV[ $i + 1 ] );
+#                     $trait_files{ $ARGV[ $i + 1 ] } =
+#                       $ARGV[$i];    ## Key is file and value is trait type
+#                 }
+#             }
+#             $arg{ $ARGV[$i] } = $ARGV[ $i + 1 ];
+#         }
+#     }
 
-    ## Append the size trait to the end of traits if it is not already in it.
-    my @arr = %trait_files;
-    if ( !grep( /size/i, @trait_order ) ) {
-        push( @trait_order, "size" );
-    }
-    $trait_files{"size"} =
-      "-size";    ## Key is supposed to be file and value is trait type
+#     ## Append the size trait to the end of traits if it is not already in it.
+#     my @arr = %trait_files;
+#     if ( !grep( /size/i, @trait_order ) ) {
+#         push( @trait_order, "size" );
+#     }
+#     $trait_files{"size"} =
+#       "-size";    ## Key is supposed to be file and value is trait type
 
-    if ( exists $arg{-help} ) {
-        help();
-        exit;
-    }
-    die("\n\nInput file required $useage") if ( !( $arg{-input} ) );
+#     if ( exists $arg{-help} ) {
+#         help();
+#         exit;
+#     }
+#     die("\n\nInput file required $useage") if ( !( $arg{-input} ) );
 
-}
+# }
 
 # @purpose Parse and validate configuration options passed as array reference
 # @param @_ - Array reference of command-line style arguments
@@ -321,27 +301,30 @@ sub parseCommandLine {
 
 sub set_values2 {
 
+    my ($config, @args) = @_;
+
     GetOptionsFromArray(
-        \@_,
+        \@args,
 
         # Diagnostic options
-        'verbose=i' => \$verbose,
+        'verbose=i' => sub { $config->{verbose} = $_[1]},
         'help|?'    => sub { help() },
 
         # Settings
-        "rel_threshold=f"         => \$THRESHOLD,
-        "int_likelihood_cutoff=f" => \$MIN_LIKELIHOOD,
-        "do_IMUS=i"               => \$do_IMUS,
-        "do_PR=i"                 => \$do_PR,
-        "missing_val=f"           => \$EXCLUDE_VALUE,
-        "output_dir=s"            => \$output_dir,
-        "samples_file=s"          => \$samples_file,
+        "rel_threshold=f"         => sub { $config->{threshold} = $_[1] },
+        "int_likelihood_cutoff=f" => sub { $config->{min_likelihood} = $_[1] },
+        "do_IMUS=i"               => sub { $config->{do_IMUS} = $_[1] },
+        "do_PR=i"                 => sub { $config->{do_PR} = $_[1] },
+        "missing_val=f"           => sub { $config->{exclude_value} = $_[1] },
+        "output_dir=s"            => sub { $config->{output_dir} = $_[1] },
+        "samples_file=s"          => sub { $config->{samples_file} = $_[1] },
 
         #"ersa_data=s" => \$ersa_data,
-        "trait_order=s"     => sub { @trait_order = @{ $_[1] } },
-        "lib=s"             => \$lib_dir,
-        "traits=s"          => sub { %trait_files = %{ $_[1] } },
-        "log_file_handle=s" => \$LOG,
+        "trait_order=s"     => sub { $config->{trait_order} = $_[1] },
+        "lib=s"             => sub { $config->{lib_dir} = $_[1] },
+        "traits=s"          => sub { $config->{trait_files} = $_[1] },
+        "log_file_handle=s" => sub { $config->{log_file_handle} = $_[1] },
+        # Need to adjust this section to wrok with the configuration object
         "ibd_estimates=s"   => sub {
             my %ibds = %{ @_[1] };
             $IBD_file_ref     = \%ibds;
@@ -364,21 +347,41 @@ sub set_values2 {
 
     ) or die "Failed to parse options for IMUS\n";
 
-    if ( !-d $output_dir ) {
-        mkdir("$output_dir") or die "Can't make $output_dir; $!\n";
+    if ( !-d $config->{output_dir} ) {
+        mkdir("$config->{output_dir}") or die "Can't make $config->{output_dir}; $!\n";
+    }
+
+    # Initialize trait_order and trait_files if not yet set
+    if ( !defined $config->{trait_order} || ref($config->{trait_order}) ne 'ARRAY' ) {
+        $config->{trait_order} = [];
+    }
+    if ( !defined $config->{trait_files} || ref($config->{trait_files}) ne 'HASH' ) {
+        $config->{trait_files} = {};
     }
 
     ## If traits were empty, then add size
-    if ( !exists $trait_files{'size'} ) {
-        $trait_files{'size'} = 'size';
-        push( @trait_order, 'size' );
+    if ( !exists $config->{trait_files}{'size'} ) {
+        $config->{trait_files}{'size'} = 'size';
+        push( @{ $config->{trait_order} }, 'size' );
     }
-    foreach my $file ( keys %trait_files ) {
+    
+    # Initialize trait column tracking in config if not present
+    if ( !defined $config->{trait_fid_columns} ) {
+        $config->{trait_fid_columns} = {};
+    }
+    if ( !defined $config->{trait_id_columns} ) {
+        $config->{trait_id_columns} = {};
+    }
+    if ( !defined $config->{trait_data_columns} ) {
+        $config->{trait_data_columns} = {};
+    }
+
+    foreach my $file ( keys %{ $config->{trait_files} } ) {
 
         #print "Trait file: $file\n";
         ## Check that trait files exist
         if ( $file eq "NA" || $file =~ /^-/ ) {
-            delete $trait_files{$file};
+            delete $config->{trait_files}{$file};
             next;
         }
         elsif ( $file =~ /size/i ) {
@@ -388,7 +391,7 @@ sub set_values2 {
             die "Trait file $file does not exist\n";
         }
 
-        my $trait_type = $trait_files{$file};
+        my $trait_type = $config->{trait_files}{$file};
 
         open( IN, $file ) or die "Trait file $file failed to open; $!\n";
         my $header = <IN>;
@@ -399,177 +402,177 @@ sub set_values2 {
         ## If there are only two columns, assume columns "ID  Trait_value"
         my @temp = split( /\s+/, $header );
         if ( @temp == 3 ) {
-            $TRAIT_FID_COLUMNS{$file}  = 0;
-            $TRAIT_ID_COLUMNS{$file}   = 1;
-            $TRAIT_DATA_COLUMNS{$file} = 2;
+            $config->{trait_fid_columns}{$file}  = 0;
+            $config->{trait_id_columns}{$file}   = 1;
+            $config->{trait_data_columns}{$file} = 2;
         }
         elsif ( $file =~ /.ped$/i ) {
-            $TRAIT_FID_COLUMNS{$file}  = 0;
-            $TRAIT_ID_COLUMNS{$file}   = 1;
-            $TRAIT_DATA_COLUMNS{$file} = 5;
+            $config->{trait_fid_columns}{$file}  = 0;
+            $config->{trait_id_columns}{$file}   = 1;
+            $config->{trait_data_columns}{$file} = 5;
         }
         else    ## get columns
         {
-            print "For $file:\n";
-            $TRAIT_FID_COLUMNS{$file} =
+            $LOG->info("For $file:");
+            $config->{trait_fid_columns}{$file} =
               get_correct_column( "Enter the column # containing the FIDs:  ",
                 $header );
-            $TRAIT_ID_COLUMNS{$file} =
+            $config->{trait_id_columns}{$file} =
               get_correct_column( "Enter the column # containing the IDs:  ",
                 $header );
-            $TRAIT_DATA_COLUMNS{$file} = get_correct_column(
+            $config->{trait_data_columns}{$file} = get_correct_column(
                 "Enter the column # containing the $trait_type data:  ",
                 $header );
         }
     }
 }
 
-sub set_values {
-    $relatedness_file = $arg{-input};
-    if ( $relatedness_file =~ /\/([^\/]+)$/
-      ) ## if there is a path to the file, ignore all the path, and select the name of the file
-    {
-        $relatedness_file_name = $1;
-    }
-    else {
-        $relatedness_file_name = $relatedness_file;
-    }
-    if ( !-e $relatedness_file ) {
-        die "input_file $relatedness_file does not exist\n";
-    }
+# sub set_values {
+#     $relatedness_file = $arg{-input};
+#     if ( $relatedness_file =~ /\/([^\/]+)$/
+#       ) ## if there is a path to the file, ignore all the path, and select the name of the file
+#     {
+#         $relatedness_file_name = $1;
+#     }
+#     else {
+#         $relatedness_file_name = $relatedness_file;
+#     }
+#     if ( !-e $relatedness_file ) {
+#         die "input_file $relatedness_file does not exist\n";
+#     }
 
-    if ( exists $arg{-BKcutoff} ) {
-        print "ERROR! -BKcutoff invalid with versions 2.7 and above\n";
-        exit;
+#     if ( exists $arg{-BKcutoff} ) {
+#         print "ERROR! -BKcutoff invalid with versions 2.7 and above\n";
+#         exit;
 
-        #$LOWEST_MAX_NETWORK_SIZE = $arg{-BKcutoff};
-    }
+#         #$LOWEST_MAX_NETWORK_SIZE = $arg{-BKcutoff};
+#     }
 
-    if ( exists $arg{-threshold} ) {
-        $THRESHOLD = $arg{-threshold};
-    }
+#     if ( exists $arg{-threshold} ) {
+#         $THRESHOLD = $arg{-threshold};
+#     }
 
-    if ( exists $arg{-missing_value} ) {
-        $EXCLUDE_VALUE = $arg{-missing_value};
-    }
+#     if ( exists $arg{-missing_value} ) {
+#         $EXCLUDE_VALUE = $arg{-missing_value};
+#     }
 
-    if ( exists $arg{-output_dir} ) {
-        $output_dir = $arg{-output_dir};
-    }
-    else {
-        $output_dir = "$relatedness_file\_results";
-    }
-    if ( !-d $output_dir ) {
-        mkdir("$output_dir") or die "Can't make $output_dir; $!\n";
-    }
+#     if ( exists $arg{-output_dir} ) {
+#         $output_dir = $arg{-output_dir};
+#     }
+#     else {
+#         $output_dir = "$relatedness_file\_results";
+#     }
+#     if ( !-d $output_dir ) {
+#         mkdir("$output_dir") or die "Can't make $output_dir; $!\n";
+#     }
 
-    ## Determine the type of intput file or column containing relatedness
-    open( IN, $relatedness_file );
-    my $header = <IN>;
-    chomp($header);
-    $header =~ s/^\s+//;
-    close IN;
-    my @h_elements = split( /\s+/, $header );
+#     ## Determine the type of intput file or column containing relatedness
+#     open( IN, $relatedness_file );
+#     my $header = <IN>;
+#     chomp($header);
+#     $header =~ s/^\s+//;
+#     close IN;
+#     my @h_elements = split( /\s+/, $header );
 
-    for ( my $col = 0 ; $col < @h_elements ; $col++ ) {
-        if ( @h_elements[$col] =~ /PI_HAT/i || @h_elements[$col] =~ /Kinship/i )
-        {
-            $RELATEDNESS_COLUMN = $col;
-        }
-        if ( @h_elements[$col] =~ /IID1/i
-            || ( @h_elements[$col] =~ /ID1/i && @h_elements[$col] =~ /FID1/i ) )
-        {
-            $ID1_COLUMN = $col;
-        }
-        if ( @h_elements[$col] =~ /IID2/i
-            || ( @h_elements[$col] =~ /ID2/i && @h_elements[$col] =~ /FID2/i ) )
-        {
-            $ID2_COLUMN = $col;
-        }
-        if ( @h_elements[$col] =~ /FID1/i || @h_elements[$col] =~ /FID$/i ) {
-            $FID1_COLUMN = $col;
-        }
-        if ( @h_elements[$col] =~ /FID2/i || @h_elements[$col] =~ /FID$/i ) {
-            $FID2_COLUMN = $col;
-        }
-    }
-    if ( $RELATEDNESS_COLUMN eq -1 ) {
-        print "Unable to identify the relatedness column in input file\n";
-        $RELATEDNESS_COLUMN = get_correct_column(
-            "Enter the column # containing the relatedness data:  ", $header );
-    }
-    if ( $ID1_COLUMN eq -1 ) {
-        print "Unable to identify the ID1 column in input file\n";
-        $ID1_COLUMN =
-          get_correct_column( "Enter the column # containing ID1:  ", $header );
-    }
-    if ( $ID2_COLUMN eq -1 ) {
-        print "Unable to identify the ID2 column in input file\n";
-        $ID2_COLUMN =
-          get_correct_column( "Enter the column # containing ID2:  ", $header );
-    }
-    if ( $FID1_COLUMN eq -1 ) {
-        print "Unable to identify the FID1 column in input file\n";
-        $FID1_COLUMN =
-          get_correct_column( "Enter the column # containing FID1:  ",
-            $header );
-    }
-    if ( $FID2_COLUMN eq -1 ) {
-        print "Unable to identify the FID2 column in input file\n";
-        $FID2_COLUMN =
-          get_correct_column( "Enter the column # containing FID2:  ",
-            $header );
-    }
+#     for ( my $col = 0 ; $col < @h_elements ; $col++ ) {
+#         if ( @h_elements[$col] =~ /PI_HAT/i || @h_elements[$col] =~ /Kinship/i )
+#         {
+#             $RELATEDNESS_COLUMN = $col;
+#         }
+#         if ( @h_elements[$col] =~ /IID1/i
+#             || ( @h_elements[$col] =~ /ID1/i && @h_elements[$col] =~ /FID1/i ) )
+#         {
+#             $ID1_COLUMN = $col;
+#         }
+#         if ( @h_elements[$col] =~ /IID2/i
+#             || ( @h_elements[$col] =~ /ID2/i && @h_elements[$col] =~ /FID2/i ) )
+#         {
+#             $ID2_COLUMN = $col;
+#         }
+#         if ( @h_elements[$col] =~ /FID1/i || @h_elements[$col] =~ /FID$/i ) {
+#             $FID1_COLUMN = $col;
+#         }
+#         if ( @h_elements[$col] =~ /FID2/i || @h_elements[$col] =~ /FID$/i ) {
+#             $FID2_COLUMN = $col;
+#         }
+#     }
+#     if ( $RELATEDNESS_COLUMN eq -1 ) {
+#         print "Unable to identify the relatedness column in input file\n";
+#         $RELATEDNESS_COLUMN = get_correct_column(
+#             "Enter the column # containing the relatedness data:  ", $header );
+#     }
+#     if ( $ID1_COLUMN eq -1 ) {
+#         print "Unable to identify the ID1 column in input file\n";
+#         $ID1_COLUMN =
+#           get_correct_column( "Enter the column # containing ID1:  ", $header );
+#     }
+#     if ( $ID2_COLUMN eq -1 ) {
+#         print "Unable to identify the ID2 column in input file\n";
+#         $ID2_COLUMN =
+#           get_correct_column( "Enter the column # containing ID2:  ", $header );
+#     }
+#     if ( $FID1_COLUMN eq -1 ) {
+#         print "Unable to identify the FID1 column in input file\n";
+#         $FID1_COLUMN =
+#           get_correct_column( "Enter the column # containing FID1:  ",
+#             $header );
+#     }
+#     if ( $FID2_COLUMN eq -1 ) {
+#         print "Unable to identify the FID2 column in input file\n";
+#         $FID2_COLUMN =
+#           get_correct_column( "Enter the column # containing FID2:  ",
+#             $header );
+#     }
 
-    foreach my $file ( keys %trait_files ) {
-        print "Trait file: $file\n";
-        ## Check that trait files exist
-        if ( $file eq "NA" || $file =~ /^-/ ) {
-            delete $trait_files{$file};
-            next;
-        }
-        elsif ( $file =~ /size/i ) {
-            next;
-        }
-        elsif ( !-e $file ) {
-            die "Trait file $file does not exist\n";
-        }
+#     foreach my $file ( keys %trait_files ) {
+#         print "Trait file: $file\n";
+#         ## Check that trait files exist
+#         if ( $file eq "NA" || $file =~ /^-/ ) {
+#             delete $trait_files{$file};
+#             next;
+#         }
+#         elsif ( $file =~ /size/i ) {
+#             next;
+#         }
+#         elsif ( !-e $file ) {
+#             die "Trait file $file does not exist\n";
+#         }
 
-        my $trait_type = $trait_files{$file};
+#         my $trait_type = $trait_files{$file};
 
-        open( IN, $file ) or die "Trait file $file failed to open; $!\n";
-        my $header = <IN>;
-        chomp($header);
-        close(IN);
-        $header =~ s/^\s+//;
+#         open( IN, $file ) or die "Trait file $file failed to open; $!\n";
+#         my $header = <IN>;
+#         chomp($header);
+#         close(IN);
+#         $header =~ s/^\s+//;
 
-        ## If there are only two columns, assume columns "ID  Trait_value"
-        my @temp = split( /\s+/, $header );
-        if ( @temp == 3 ) {
-            $TRAIT_FID_COLUMNS{$file}  = 0;
-            $TRAIT_ID_COLUMNS{$file}   = 1;
-            $TRAIT_DATA_COLUMNS{$file} = 2;
-        }
-        elsif ( $file =~ /.ped$/i ) {
-            $TRAIT_FID_COLUMNS{$file}  = 0;
-            $TRAIT_ID_COLUMNS{$file}   = 1;
-            $TRAIT_DATA_COLUMNS{$file} = 5;
-        }
-        else    ## get columns
-        {
-            print "For $file:\n";
-            $TRAIT_FID_COLUMNS{$file} =
-              get_correct_column( "Enter the column # containing the FIDs:  ",
-                $header );
-            $TRAIT_ID_COLUMNS{$file} =
-              get_correct_column( "Enter the column # containing the IDs:  ",
-                $header );
-            $TRAIT_DATA_COLUMNS{$file} = get_correct_column(
-                "Enter the column # containing the $trait_type data:  ",
-                $header );
-        }
-    }
-}
+#         ## If there are only two columns, assume columns "ID  Trait_value"
+#         my @temp = split( /\s+/, $header );
+#         if ( @temp == 3 ) {
+#             $TRAIT_FID_COLUMNS{$file}  = 0;
+#             $TRAIT_ID_COLUMNS{$file}   = 1;
+#             $TRAIT_DATA_COLUMNS{$file} = 2;
+#         }
+#         elsif ( $file =~ /.ped$/i ) {
+#             $TRAIT_FID_COLUMNS{$file}  = 0;
+#             $TRAIT_ID_COLUMNS{$file}   = 1;
+#             $TRAIT_DATA_COLUMNS{$file} = 5;
+#         }
+#         else    ## get columns
+#         {
+#             print "For $file:\n";
+#             $TRAIT_FID_COLUMNS{$file} =
+#               get_correct_column( "Enter the column # containing the FIDs:  ",
+#                 $header );
+#             $TRAIT_ID_COLUMNS{$file} =
+#               get_correct_column( "Enter the column # containing the IDs:  ",
+#                 $header );
+#             $TRAIT_DATA_COLUMNS{$file} = get_correct_column(
+#                 "Enter the column # containing the $trait_type data:  ",
+#                 $header );
+#         }
+#     }
+# }
 
 ## Method used for setting the data column of interest
 # @purpose Prompt user to select correct column from file header
@@ -588,9 +591,9 @@ sub get_correct_column {
 
     while ( $column eq -1 ) {
         for ( my $col = 1 ; $col <= @h_elements ; $col++ ) {
-            print "$col: @h_elements[$col-1]\n";
+            $LOG->info("$col: @h_elements[$col-1]");
         }
-        print "$question\n";
+        $LOG->info("$question");
         ## READ IN RESPONSE, and check if valid. set it as the column
         my $answer = <STDIN>;
         chomp $answer;
@@ -599,7 +602,7 @@ sub get_correct_column {
             $column = $answer;
         }
         else {
-            print "Invalid response\n\n";
+            $LOG->warn("Invalid response\n\n");
         }
     }
 
@@ -615,11 +618,11 @@ sub get_correct_column {
 
 sub load_samples {
     my $file = shift;
-    if ( $verbose >= 1 ) { print $LOG "Loading all samples from $file...\n"; }
+    $LOG->info("Loading all samples from $file...");
 
     if ( !open( IN, $file ) ) {
         my $msg = "ERROR!!! Samples file $file cannot be read; $!\n";
-        print $LOG $msg if defined $LOG;
+        $LOG->warn($msg);
         die $msg;
     }
     while ( my $line = <IN> ) {
@@ -771,7 +774,7 @@ sub load_trait_data {
             }
 
             my $selection_val = fold_trait_data( $trait_type, \%trait_hash );
-            print "Selection value for $file: " . $selection_val . "\n";
+            $LOG->info("Selection value for $file: " . $selection_val);
         }
         push( @trait_refs, \%trait_hash )
           ; ## The hash references are loaded onto this array in the order of selection
@@ -842,7 +845,7 @@ sub colapse_networks {
                 $IBD_file_ref, $MIN_LIKELIHOOD, 0, $lib_dir, $output_dir );
         };
         if ($@) {
-            print "ERROR running predict_relationships_2d.pm: $@\n";
+            $LOG->warn("ERROR running predict_relationships_2d.pm: $@");
             die;
         }
     }
@@ -903,8 +906,8 @@ sub colapse_networks {
         foreach my $id (@network2) {
             my $old_network = $id_network{$id};
             if ( $old_network ne $id2_network ) {
-                print
-"ERROR!!! $id claims to be in $old_network; actually in $id2_network\n";
+                $LOG->warn(
+"ERROR!!! $id claims to be in $old_network; actually in $id2_network");
                 exit;
             }
             $id_network{$id} = $id1_network;
@@ -1017,8 +1020,8 @@ sub breakup_large_networks {
             my $MAX_NETWORK_SIZE =
               get_max_network_size( $connectedness, $size );
             if ( $size > $MAX_NETWORK_SIZE ) {
-                print "WARNING!!! " . @temp
-                  . " NODES WITH CONNECTIVITY OF $connectedness WILL TAKE TOO LONG TO RUN; USING NEXT BEST SOLUTION.\n";
+                $LOG->warn("WARNING!!! " . @temp
+                  . " NODES WITH CONNECTIVITY OF $connectedness WILL TAKE TOO LONG TO RUN; USING NEXT BEST SOLUTION.");
                 breakup_large_network( \%P, $MAX_NETWORK_SIZE, $id_id_scores );
                 @{ $networks{$network} } = keys %P;
             }
@@ -1064,8 +1067,8 @@ sub breakup_large_network {
                       get_connectedness( $hash_ref, $id_id_scores );
                     my $LOCAL_MAX_NETWORK_SIZE =
                       get_max_network_size($connectedness);
-                    print "Connectedness: $connectedness\n";
-                    print "LOCAL_MAX_NETWORK_SIZE: $LOCAL_MAX_NETWORK_SIZE\n";
+                    $LOG->info("Connectedness: $connectedness");
+                    $LOG->info("LOCAL_MAX_NETWORK_SIZE: $LOCAL_MAX_NETWORK_SIZE");
                     if ( keys %$hash_ref > $LOCAL_MAX_NETWORK_SIZE ) {
                         ## DECEND RECURSIVELY
                         breakup_large_network( $hash_ref,
@@ -1085,8 +1088,6 @@ sub breakup_large_network {
         my $connectedness = get_connectedness( $P_ref, $id_id_scores );
         $MAX_NETWORK_SIZE = get_max_network_size($connectedness);
 
-        #print "Connectedness: $connectedness\n";
-        #print "MAX_NETWORK_SIZE: $MAX_NETWORK_SIZE\n";
     }
 }
 
@@ -1148,13 +1149,12 @@ sub write_out_independent_set {
 
         my $nodes_visited = 0;
         if ( @temp > 45 ) {
-            print "Running BronKerbosh for network $network (size = " . @temp
-              . ")\n";
+            $LOG->info("Running BronKerbosh for network $network (size = " . @temp . ")");
         }
         BronKerbosh( \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited,
             $id_id_scores );
 
-        my $maximum_clique = get_maximum_clique(@maximal_cliques);
+        my $maximum_clique = get_maximum_clique(@maximal_cliques, \@trait_refs);
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
         write_out_maximum_clique_ids(@maximum_ids);
         foreach (@maximum_ids) { $unrelated_set{$_} = 1; }
@@ -1246,16 +1246,18 @@ sub get_highest_degree_node {
     return ( $max_node, $max_degree );
 }
 
-# @purpose Select the best clique from all maximal cliques by trait scores
-# @param @maximal_cliques - Array of clique hashrefs
-# @return (scalar) - Index of best clique
+# @purpose Select the best clique/result based on trait scores; supports both selecting from multiple cliques and comparing method results
+# @param @maximal_cliques - Variable number of clique hashrefs (array of hashes) OR independent sets (hashes) when comparing methods
+# @param $trait_refs (array reference) - Reference to @trait_refs array, where each element is a hashref mapping ID => trait_value
+# @return (scalar) - Index of best clique/method (0=PLINK, 1=KING, 2=PRIMUS for comparisons; array index for clique selection)
 # @side_effects None (read-only)
-# @algorithm Calculates trait score sum for each clique; uses weighted_comparison to select best
-# @uses @trait_order, @trait_refs to evaluate clique quality
-# @globals %trait_files, %trait_order
+# @algorithm Calculates trait score sum for each clique/set; uses weighted_comparison to select best
+# @uses $trait_refs_ref, @trait_order, %trait_files to evaluate quality
+# @notes Handles both: (1) selecting best from multiple cliques within a network, (2) comparing independent sets from different methods
 
 sub get_maximum_clique {
-    my @maximal_cliques = @_;
+    my ($trait_refs) = pop;
+    my (@maximal_cliques) = @_;
     my @max_values      = qw(NA);
     my $maximum_clique;
 
@@ -1266,8 +1268,8 @@ sub get_maximum_clique {
             $ctr++;
             for ( my $i = 0 ; $i < @trait_order ; $i++ ) {
                 my $trait_type = $trait_files{ $trait_order[$i] };
-                my $trait_val  = $trait_refs[$i]{$id};
-                if ( exists $trait_refs[$i]{$id} ) {
+                my $trait_val  = $trait_refs->[$i]{$id};
+                if ( exists $trait_refs->[$i]{$id} ) {
                     @temp_values[$i] += $trait_val;
                 }
             }
@@ -1282,8 +1284,7 @@ sub get_maximum_clique {
         }
 
         ## Compare
-        my $max = weighted_comparison( \@max_values, \@temp_values )
-          ;    ## returns 1 for max  and 2 for temp
+        my $max = weighted_comparison( \@max_values, \@temp_values );    ## returns 1 for max  and 2 for temp
 
         ## Update max if necessary
         if ( $max eq 2 ) {
@@ -1596,7 +1597,7 @@ sub compare_alternative_methods {
 
     ### Compare KING, PLINK, and PRIMUS
     my $val = get_maximum_clique( \%PLINK_network, \%KING_network,
-        $PRIMUS_unrelated_set );
+        $PRIMUS_unrelated_set, \@trait_ref );
 
     if ( $val eq 0 ) {
         ## PLINK performed the best
@@ -1651,7 +1652,7 @@ sub write_out_independent_set_KING {
 
         King_method( \@maximal_cliques, \%P, $id_id_scores );
 
-        my $maximum_clique = get_maximum_clique(@maximal_cliques);
+        my $maximum_clique = get_maximum_clique(@maximal_cliques, \@trait_ref);
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
         write_out_maximum_clique_ids(@maximum_ids);
         foreach (@maximum_ids) { $unrelated_set{$_} = 1; }
