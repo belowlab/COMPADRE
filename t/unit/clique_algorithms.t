@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More tests => 7;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -105,6 +105,7 @@ sub setup_bipartite_network {
     return { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1, ID06 => 1, ID07 => 1, ID08 => 1, ID09 => 1, ID10 => 1 };
 }
 
+
 #####################################
 # Tests
 #####################################
@@ -189,6 +190,25 @@ sub setup_bipartite_network {
 
     # Just verify we're finding the expected 2 cliques from the bipartite structure
     is (scalar(@maximal_cliques), 2, "Bipartite graph: Two maximal cliques found");
+    
+    # Verify correct nodes are in each clique (the unrelated sets)
+    my @clique1_nodes = sort keys %{ $maximal_cliques[0] };
+    my @clique2_nodes = sort keys %{ $maximal_cliques[1] };
+    
+    my @group_a_expected = qw(ID01 ID02 ID03 ID04 ID05);
+    my @group_b_expected = qw(ID06 ID07 ID08 ID09 ID10);
+    
+    # Check if clique 1 matches group A or group B
+    my $clique1_is_group_a = (@clique1_nodes == @group_a_expected && 
+                              join(",", @clique1_nodes) eq join(",", @group_a_expected));
+    
+    if ($clique1_is_group_a) {
+        cmp_deeply(\@clique1_nodes, \@group_a_expected, "Bipartite graph: Clique 1 contains unrelated set (ID01-ID05)");
+        cmp_deeply(\@clique2_nodes, \@group_b_expected, "Bipartite graph: Clique 2 contains unrelated set (ID06-ID10)");
+    } else {
+        cmp_deeply(\@clique1_nodes, \@group_b_expected, "Bipartite graph: Clique 1 contains unrelated set (ID06-ID10)");
+        cmp_deeply(\@clique2_nodes, \@group_a_expected, "Bipartite graph: Clique 2 contains unrelated set (ID01-ID05)");
+    }
 }
 
 # Test 6: Hypothesis test - verify how undefined hash values behave in comparison
