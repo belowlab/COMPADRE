@@ -126,16 +126,18 @@ sub get_relationship_likelihood_vectors {
 
 	open(IN,$IBD_file) or die "Can't open $IBD_file; $!";
 	my $header = <IN>;
+
 	while (my $line = <IN>) {
+		
 		$line =~ s/^\s+//;
 		chomp($line);
 		my @temp = split(/\s+/,$line);
 		## Multiple by resultion of KDE density values and round to the nearest integer
-		my $FID1 = @temp[$$IBD_file_ref{'FID1'}-1]; 
-		my $IID1 = @temp[$$IBD_file_ref{'IID1'}-1];
-		my $FID2 = @temp[$$IBD_file_ref{'FID2'}-1];
-		my $IID2 = @temp[$$IBD_file_ref{'IID2'}-1];
-		my $PI_HAT = @temp[$$IBD_file_ref{'PI_HAT'}-1];
+		my $FID1 = $temp[$$IBD_file_ref{'FID1'}-1]; 
+		my $IID1 = $temp[$$IBD_file_ref{'IID1'}-1];
+		my $FID2 = $temp[$$IBD_file_ref{'FID2'}-1];
+		my $IID2 = $temp[$$IBD_file_ref{'IID2'}-1];
+		my $PI_HAT = $temp[$$IBD_file_ref{'PI_HAT'}-1];
 		$total++;
 		#my $name1 = "$FID1\__$IID1";
 		#my $name2 = "$FID2\__$IID2";
@@ -146,9 +148,9 @@ sub get_relationship_likelihood_vectors {
 
 		my @vector;
 
-		my $k0 = int(@temp[$$IBD_file_ref{'IBD0'}-1] * $KDE_density_resolution);
-		my $k1 = int(@temp[$$IBD_file_ref{'IBD1'}-1] * $KDE_density_resolution);
-		my $k2 = int(@temp[$$IBD_file_ref{'IBD2'}-1] * $KDE_density_resolution);
+		my $k0 = int($temp[$$IBD_file_ref{'IBD0'}-1] * $KDE_density_resolution);
+		my $k1 = int($temp[$$IBD_file_ref{'IBD1'}-1] * $KDE_density_resolution);
+		my $k2 = int($temp[$$IBD_file_ref{'IBD2'}-1] * $KDE_density_resolution);
 		
 		## Make sure all IBD proportions are between 0 and 1, rounding up and down, respectively.
 		if ($k2 > 1 * $KDE_density_resolution) {
@@ -177,7 +179,7 @@ sub get_relationship_likelihood_vectors {
 			$k2 = 0;
 		}
 
-		my $relationship = @temp[14];
+		my $relationship = $temp[14];
 		$relationship //= '';
 		$relationship =~ s/^AV$/HAG/;
 		$relationship =~ s/^GG$/HAG/;
@@ -203,34 +205,34 @@ sub get_relationship_likelihood_vectors {
 		my @density_vector = ($PC->[$k0][$k1],$FS->[$k0][$k1],$HAG->[$k0][$k1],$CGH->[$k0][$k1],$DR->[$k0][$k1],$UN->[$k0][$k1]);
 		## Hard coded cutoffs to try to catch poor IBD estimates that fall outside the trained KDE regions.
         if ($k1 > .8 * $KDE_density_resolution) { ## Corrects the 2nd degree splash up near PO
-            @density_vector[0] += 1
+            $density_vector[0] += 1;
         }
-        
+ 
     	## Check of IBD estimates that fall outside the range of the KDE
 		if (sum(0,@density_vector) < 0.000001) {
 			## MZ test
 			if ($k2 > .8 * $KDE_density_resolution) {
-				@density_vector[1] = 100;
-				@density_vector[6] = 100;
+				$density_vector[1] = 100;
+				$density_vector[6] = 100;
 			}
 			elsif ($verbose > 0) {
 				$LOG->warn("WARNING!!! Probability vector confidence too low. This is likely due to messy IBD estinates. Applying hard relationship cuttoffs to relationship prediction of $line.\n");
-				$LOG->info("density vector: @density_vector\n");
+				$LOG->warn("density vector: @density_vector\n");
 			
                 if ($k1 > .8 * $KDE_density_resolution) {
                     if ($k2 < .01 * $KDE_density_resolution && $k1 < .9 * $KDE_density_resolution) {
                         ## Could be a very inflated but true IBD1 value for 2nd degree relatives 
-						@density_vector[2] = 100;
+						$density_vector[2] = 100;
                     }
                     else { # It is possibly noise from a parent/offspring relationship
-                        @density_vector[0] = 100;
+                        $density_vector[0] = 100;
                     }
                 }
                 elsif ($k1 < (.1 * $KDE_density_resolution) && ($k0+$k2) > (.9 * $KDE_density_resolution)) {
-                    @density_vector[5] = 100;
+                    $density_vector[5] = 100;
                 }
                 elsif ($k1 > (.6 * $KDE_density_resolution) && $k1 < (.8 * $KDE_density_resolution) && ($k0+$k1) > (.9 * $KDE_density_resolution)) {
-                    @density_vector[2] = 100;
+                    $density_vector[2] = 100;
                 }
                 else {
                     $LOG->info("$name1 <-> $name2 = $k0:$k1:$k2 (IBD 0:1:2)\n");
@@ -294,7 +296,7 @@ sub get_relationship_likelihood_vectors {
 		}
 
 		## If the intial_likelihood_cutoff is dropped low enough, the FS will overlap with HAG (2nd degree), 
-		if (@vector[1] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
+		if ($vector[1] > $MIN_LIKELIHOOD && $vector[2] > $MIN_LIKELIHOOD) {
 			#if($verbose > -1)
 			#{
 			#}
@@ -304,10 +306,10 @@ sub get_relationship_likelihood_vectors {
 
 
 		## If the initial_likelihood_cutoff is dropped low enough, the HAG (2nd degree) will overlap with PC, 
-		if (@vector[0] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
+		if ($vector[0] > $MIN_LIKELIHOOD && $vector[2] > $MIN_LIKELIHOOD) {
       $LOG->info("WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n");
-			@vector[0] += @vector[2];
-			@vector[2] =  0;
+			$vector[0] += $vector[2];
+			$vector[2] =  0;
 			
 		}
 
@@ -408,23 +410,23 @@ sub load_likelihood_vectors_from_file {
 		my ($first, $second) = ($name1 lt $name2) ? ($name1, $name2) : ($name2, $name1);
 
 		## Check if MZ twins
-		if (@vector[6] > 0) {
+		if ($vector[6] > 0) {
 			print MZ_OUT "$first\tMZ-$second\n";
 			print MZ_OUT "$second\tMZ-$first\n";
 		}
   
 		## If the intial_likelihood_cutoff is dropped low enough, the FS will overlap with HAG (2nd degree); should probably change the reconstruction code to split FS and HAG out from eachother like I do with 2nd and 3rd degree, and 3rd and unrelated 
-		if (@vector[1] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
+		if ($vector[1] > $MIN_LIKELIHOOD && $vector[2] > $MIN_LIKELIHOOD) {
       $LOG->warn("WARNING!!! Both FS and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the HAG relationship.\n");
-			@vector[2] += @vector[1];
-			@vector[1] =  0;
+			$vector[2] += $vector[1];
+			$vector[1] =  0;
 			
 		}
 		## If the intial_likelihood_cutoff is dropped low enough, the HAG (2nd degree) will overlap with PC, 
-		if (@vector[0] > $MIN_LIKELIHOOD && @vector[2] > $MIN_LIKELIHOOD) {
+		if ($vector[0] > $MIN_LIKELIHOOD && $vector[2] > $MIN_LIKELIHOOD) {
       $LOG->warn("WARNING!!! Both PC and HAG have sufficiently high likelihoods to be considered. PRIMUS will only reconstruction with the PC relationship.\n");
-			@vector[0] += @vector[2];
-			@vector[2] =  0;
+			$vector[0] += $vector[2];
+			$vector[2] =  0;
 			
 		}
 
@@ -483,8 +485,8 @@ sub predict_relationship {
 	my @possibilities;
 	
 	for (my $i = 0; $i < 6; $i++) {
-		if (@probs[$i] > $MIN_LIKELIHOOD) {							
-			push(@possibilities, @likelihood_names[$i]);
+		if ($probs[$i] > $MIN_LIKELIHOOD) {							
+			push(@possibilities, $likelihood_names[$i]);
 		}
 	}
 	return @possibilities;
@@ -496,15 +498,15 @@ sub get_maximum_relationship {
 	my $max_val = 0;
 	my $max_pos = -1;
 	for (my $i = 0; $i < @vector; $i++) {
-		if (@vector[$i] >= $max_val) {
-			$max_val = @vector[$i];
+		if ($vector[$i] >= $max_val) {
+			$max_val = $vector[$i];
 			$max_pos = $i;
 		}
 	}
 	if ($max_val < $MIN_LIKELIHOOD) {
 		return "FAIL"
 	}
-	my $max_rel = @likelihood_names[$max_pos];
+	my $max_rel = $likelihood_names[$max_pos];
 	return $max_rel;
 }
 

@@ -34,41 +34,8 @@ my $verbose;
 my $lib_dir;
 my $LOG = Log::Log4perl->get_logger(__PACKAGE__);
 
-my $samples_file;
-my %arg;
-my $relatedness_file;
-my $relatedness_file_name;
-my $ped_file         = "none";
-my $missingness_file = "none";
-my $output_dir;
-my $ersa_data;
-my $network_ctr;        # the next network # to add to %networks hash
-my $LOWEST_MAX_NETWORK_SIZE = 60;
-our $THRESHOLD = .1;    # default is .1
-my $MIN_LIKELIHOOD = .1;
-my $EXCLUDE_VALUE  = 0;
-my $OUTFILE_HEADER;
-my $IBD_file_ref;
-my $RELATEDNESS_COLUMN      = -1;
-my $ID1_COLUMN              = -1;
-my $ID2_COLUMN              = -1;
-my $FID1_COLUMN             = -1;
-my $FID2_COLUMN             = -1;
-my %TRAIT_FID_COLUMNS       = -1;
-my %TRAIT_ID_COLUMNS        = -1;
-my %TRAIT_DATA_COLUMNS      = -1;
-my $PRINT_ALTERNATE_RESULTS = 1;
 
-### Here 'networks' could also be considered related groups or families;
-## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
-my %networks;
-## Regular hash; Key = IID1; Value = network that the individual
-my %id_network;
-my %id_id_all_info;
-my @trait_refs;
-my @trait_order;
-my %trait_files; ## Key = file name; Value = trait type (quantitative or binary)
-my %child_parents;
+
 
 # @purpose Main entry point for IMUS (Independent set of Maximally Unrelated Samples)
 # @param @_ - Hash of configuration parameters (passed to set_values2)
@@ -81,74 +48,70 @@ sub run_IMUS {
     $LOG->info("Running IMUS");
     my $config = PRIMUS::IMUS::Config->new();
     my $state = PRIMUS::IMUS::State->new();
-    #parseCommandLine(@_);
-    reset_values();
+
+    # reset_values();
     set_values2($config, @_);
 
     $LOG->info("Relatedness_file: $config->{relatedness_file}");
     $LOG->info("Threshold: $config->{threshold}");
     $LOG->info("Selection criteria are based on the following:");
-    foreach (@trait_order) {
-        $LOG->info("\t$_ ($trait_files{$_})");
+    foreach (@{$config->{trait_order}}) {
+        $LOG->info("\t$_ ($config->{trait_files}->{$_})");
     }
 
     $LOG->debug("IDENTIFYING FAMILY NETWORKS IN DATA");
     $LOG->debug("Writing network files to $config->{output_dir}/");
 
     $LOG->debug("Loading data...");
-    load_samples($config->{samples_file}) if defined $config->{samples_file} && $config->{samples_file} ne "";
+    load_samples($config, $state, $config->{samples_file}) if defined $config->{samples_file} && $config->{samples_file} ne "";
 
     # He we create an empty hash for the id_id_scores
-    my %id_id_scores = ();
-    load_data( $config->{relatedness_file}, \$state->{id_id_scores});
-    #TODO: Need to update this function to not use global values
-    load_trait_data();
+    load_data( $config, $state, $config->{relatedness_file});
+    load_trait_data($config, $state);
 
     $LOG->debug("done.");
 
     $LOG->debug("colapsing networks...");
-    colapse_networks( \%id_id_scores );
+    colapse_networks( $config, $state, $state->{id_id_scores} );
 
     $LOG->debug("done.");
 
-    foreach my $key ( keys %networks ) {
+    # foreach my $key ( keys %networks ) {
 
-        #print "key: $key; @{ $networks{$key} }\n";
-    }
+    #     #print "key: $key; @{ $networks{$key} }\n";
+    # }
 
-    write_out_networks( $relatedness_file_name, \%id_id_scores );
+    write_out_networks( $config, $state );
 
     if ( !$do_IMUS ) { return 1; }
 
     $LOG->info("IDENTIFYING A MAXIMUM UNRELATED SET");
 
     $LOG->debug("Checking for large networks...");
-    breakup_large_networks( \%id_id_scores );
+    breakup_large_networks( $config, $state );
 
     $LOG->debug("done.");
 
-    my $num_networks = keys %networks;
+    my $num_networks = keys %{$state->{networks}};
 
     $LOG->info("# of family networks: $num_networks");
 
     $LOG->info("Writing out unrelated set");
     my %PRIMUS_unrelated_set =
-      write_out_independent_set( $relatedness_file_name, \%id_id_scores );
+      write_out_independent_set( $config, $state );
 
     $LOG->info("done.");
 
     $LOG->info("Testing alternative methods...");
-    compare_alternative_methods( $relatedness_file_name,
-        \%PRIMUS_unrelated_set, %networks, \%id_id_scores );
+    compare_alternative_methods( $config, $state, $config->{relatedness_file_name},
+        \%PRIMUS_unrelated_set, $state->{networks} );
 
     $LOG->info("done.");
 
-    $LOG->info("unrelated_file: $relatedness_file_name\_maximum_independent_set")
-    $LOG->info("unrelated_set size: " . ( keys %PRIMUS_unrelated_set ));
-    $LOG->info("unrelated_file: $relatedness_file_name\_maximum_independent_set");
+    $LOG->info("unrelated_file: $config->{relatedness_file_name}_maximum_independent_set");
     $LOG->info("unrelated_set size: " . ( keys %PRIMUS_unrelated_set ));
 
-    return ( "$output_dir/$relatedness_file_name\_maximum_independent_set",
+    return ( "$config->{output_dir}/$config->{relatedness_file_name}_maximum_independent_set",
         ( keys %PRIMUS_unrelated_set ) );
 }
 
@@ -160,54 +123,54 @@ sub run_IMUS {
 # @return (void)
 # @side_effects Clears all package global variables including %id_id_scores, %networks, etc.
 
-sub reset_values {
-    $do_IMUS = 1;
-    $do_PR   = 1;
-    $verbose = 1;
-    $lib_dir = "";
+# sub reset_values {
+#     $do_IMUS = 1;
+#     $do_PR   = 1;
+#     $verbose = 1;
+#     $lib_dir = "";
 
-    %arg                     = ();
-    $relatedness_file        = "";
-    $relatedness_file_name   = "";
-    $ped_file                = "none";
-    $missingness_file        = "none";
-    $output_dir              = "";
-    $network_ctr             = 0;  # the next network # to add to %networks hash
-    $LOWEST_MAX_NETWORK_SIZE = 60;
-    $THRESHOLD               = .1; # default is .1
-    $MIN_LIKELIHOOD          = .1;
-    $EXCLUDE_VALUE           = 0;
-    $OUTFILE_HEADER          = "";
-    $IBD_file_ref            = "";
-    $RELATEDNESS_COLUMN      = -1;
-    $ID1_COLUMN              = -1;
-    $ID2_COLUMN              = -1;
-    $FID1_COLUMN             = -1;
-    $FID2_COLUMN             = -1;
-    %TRAIT_FID_COLUMNS       = -1;
-    %TRAIT_ID_COLUMNS        = -1;
-    %TRAIT_DATA_COLUMNS      = -1;
-    $PRINT_ALTERNATE_RESULTS = 1;
+#     %arg                     = ();
+#     $relatedness_file        = "";
+#     $relatedness_file_name   = "";
+#     $ped_file                = "none";
+#     $missingness_file        = "none";
+#     $output_dir              = "";
+#     $network_ctr             = 0;  # the next network # to add to %networks hash
+#     $LOWEST_MAX_NETWORK_SIZE = 60;
+#     $THRESHOLD               = .1; # default is .1
+#     $MIN_LIKELIHOOD          = .1;
+#     $EXCLUDE_VALUE           = 0;
+#     $OUTFILE_HEADER          = "";
+#     $IBD_file_ref            = "";
+#     $RELATEDNESS_COLUMN      = -1;
+#     $ID1_COLUMN              = -1;
+#     $ID2_COLUMN              = -1;
+#     $FID1_COLUMN             = -1;
+#     $FID2_COLUMN             = -1;
+#     %TRAIT_FID_COLUMNS       = -1;
+#     %TRAIT_ID_COLUMNS        = -1;
+#     %TRAIT_DATA_COLUMNS      = -1;
+#     $PRINT_ALTERNATE_RESULTS = 1;
 
-    ### Here 'networks' could also be considered related groups or families;
-    ## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
-    %networks = ();
-    ## Regular hash; Key = IID1; Value = network that the individual belongs to
-    %id_network = ();
+#     ### Here 'networks' could also be considered related groups or families;
+#     ## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
+#     %networks = ();
+#     ## Regular hash; Key = IID1; Value = network that the individual belongs to
+#     %id_network = ();
 
-    %id_id_all_info = ();
-    @trait_refs     = ();
-    @trait_order    = ();
-    %trait_files =
-      ();    ## Key = file name; Value = trait type (quantitative or binary)
-    %child_parents = ();
+#     %id_id_all_info = ();
+#     @trait_refs     = ();
+#     @trait_order    = ();
+#     %trait_files =
+#       ();    ## Key = file name; Value = trait type (quantitative or binary)
+#     %child_parents = ();
 
-}
+# }
 
-# @purpose Print help/usage information to console
-# @param (none)
-# @return (void) - prints to STDOUT
-# @side_effects Clears screen and displays command-line usage
+# # @purpose Print help/usage information to console
+# # @param (none)
+# # @return (void) - prints to STDOUT
+# # @side_effects Clears screen and displays command-line usage
 
 sub help {
     system("clear");
@@ -293,9 +256,10 @@ sub sort_key {
 # }
 
 # @purpose Parse and validate configuration options passed as array reference
-# @param @_ - Array reference of command-line style arguments
+# @param $config (hashref) - Config object to populate with parsed options
+# @param @_ - Array of command-line style arguments
 # @return (void)
-# @side_effects Sets numerous global variables: $THRESHOLD, $output_dir, %trait_files, etc.
+# @side_effects Populates $config with parsed values and validated settings
 # @calls GetOptionsFromArray, die on validation errors
 # @uses Getopt::Long module
 
@@ -324,24 +288,23 @@ sub set_values2 {
         "lib=s"             => sub { $config->{lib_dir} = $_[1] },
         "traits=s"          => sub { $config->{trait_files} = $_[1] },
         "log_file_handle=s" => sub { $config->{log_file_handle} = $_[1] },
-        # Need to adjust this section to wrok with the configuration object
+        # Parse IBD estimates and extract file path and column indices
         "ibd_estimates=s"   => sub {
-            my %ibds = %{ @_[1] };
-            $IBD_file_ref     = \%ibds;
-            $relatedness_file = $ibds{'FILE'};
-            if ( $relatedness_file =~ /\/([^\/]+)$/
-              ) ## if there is a path to the file, ignore all the path, and select the name of the file
-            {
-                $relatedness_file_name = $1;
+            my %ibds = %{ $_[1] };
+            $config->{ibd_file_ref}        = \%ibds;
+            $config->{relatedness_file}    = $ibds{'FILE'};
+            ## Extract just the filename from the path if present
+            if ( $config->{relatedness_file} =~ /\/([^\/]+)$/) {
+                $config->{relatedness_file_name} = $1;
             }
             else {
-                $relatedness_file_name = $relatedness_file;
+                $config->{relatedness_file_name} = $config->{relatedness_file};
             }
-            $FID1_COLUMN        = $ibds{'FID1'} - 1;
-            $ID1_COLUMN         = $ibds{'IID1'} - 1;
-            $FID2_COLUMN        = $ibds{'FID2'} - 1;
-            $ID2_COLUMN         = $ibds{'IID2'} - 1;
-            $RELATEDNESS_COLUMN = $ibds{'PI_HAT'} - 1;
+            $config->{fid1_column}        = $ibds{'FID1'} - 1;
+            $config->{id1_column}         = $ibds{'IID1'} - 1;
+            $config->{fid2_column}        = $ibds{'FID2'} - 1;
+            $config->{id2_column}         = $ibds{'IID2'} - 1;
+            $config->{relatedness_column} = $ibds{'PI_HAT'} - 1;
 
         },
 
@@ -617,7 +580,7 @@ sub get_correct_column {
 # @notes Supports .fam format (FID IID ...) or single column format
 
 sub load_samples {
-    my $file = shift;
+    my ($config, $state, $file) = @_;
     $LOG->info("Loading all samples from $file...");
 
     if ( !open( IN, $file ) ) {
@@ -643,38 +606,36 @@ sub load_samples {
             $iid = $temp[0];    # Single column format
         }
 
-        if ( !exists $id_network{$iid} ) {
-            $id_network{$iid} = $network_ctr;
-            push @{ $networks{$network_ctr} }, "$iid";
-            $network_ctr++;
+        if ( !exists $state->{id_network}{$iid} ) {
+            $state->{id_network}{$iid} = $state->{network_ctr};
+            push @{ $state->{networks}{$state->{network_ctr}} }, "$iid";
+            $state->{network_ctr}++;
         }
     }
     close(IN);
 }
 
 # @purpose Load relatedness/IBD data from file into %id_id_scores and %id_id_all_info
+# @param $config (hashref) - Config object with column indices and threshold
+# @param $state (hashref) - State object to populate with network data
 # @param $file (scalar) - Path to relatedness file
-# @param $id_id_scores_ref (hashref) - Reference to %id_id_scores hash to populate
 # @return (void)
-# @side_effects Populates hash referenced by $id_id_scores_ref (key => PI_HAT value) and %id_id_all_info
-# @side_effects Populates %networks and %id_network with IID pairs
-# @uses global $THRESHOLD, $RELATEDNESS_COLUMN, $ID1_COLUMN, $ID2_COLUMN, $FID1_COLUMN, $FID2_COLUMN
-# @notes Only stores pairs with score > THRESHOLD in hash
+# @side_effects Populates $state->{id_id_scores}, $state->{id_id_all_info}, $state->{networks}, $state->{id_network}, increments $state->{network_ctr}
 
 sub load_data {
-    my ( $file, $id_id_scores_ref ) = (@_);
+    my ( $config, $state, $file ) = (@_);
     open( IN, $file )
       or die "ERROR!!! Relatedness input file $file cannot be read in; $!\n";
-    $OUTFILE_HEADER = <IN>;    ## skip header
+    $state->{outfile_header} = <IN>;    ## skip header
     while ( my $line = <IN> ) {
         $line =~ s/^\s+//;
         chomp($line);
-        if ( $line =~ /^FID/ ) { $OUTFILE_HEADER = $line; next; } ## skip header
+        if ( $line =~ /^FID/ ) { $state->{outfile_header} = $line; next; } ## skip header
         my @temp = split( /\s+/, $line );
-        my $FID1 = @temp[$FID1_COLUMN];
-        my $FID2 = @temp[$FID2_COLUMN];
-        my $IID1 = @temp[$ID1_COLUMN];
-        my $IID2 = @temp[$ID2_COLUMN];
+        my $FID1 = @temp[$config->{fid1_column}];
+        my $FID2 = @temp[$config->{fid2_column}];
+        my $IID1 = @temp[$config->{id1_column}];
+        my $IID2 = @temp[$config->{id2_column}];
 
         #if($IID1 eq "."){$IID1 = $FID1;}
         #if($IID2 eq "."){$IID2 = $FID2;}
@@ -688,47 +649,50 @@ sub load_data {
         # copies of the key
         my $key = sort_key( $name1, $name2 );
 
-        my $PI_HAT = @temp[$RELATEDNESS_COLUMN];
-        if ( $PI_HAT > $THRESHOLD ) {
-            $id_id_scores_ref->{$key} = $PI_HAT;
+        my $PI_HAT = @temp[$config->{relatedness_column}];
+        if ( $PI_HAT > $config->{threshold} ) {
+            $state->{id_id_scores}->{$key} = $PI_HAT;
         }
 
-        $id_id_all_info{$key} = $line;
+        $state->{id_id_all_info}->{$key} = $line;
 
-        if ( !exists $id_network{$name1} ) {
-            $id_network{$name1} = $network_ctr;
-            push @{ $networks{$network_ctr} }, "$name1";
-            $network_ctr++;
+        if ( !exists $state->{id_network}{$name1} ) {
+            $state->{id_network}{$name1} = $state->{network_ctr};
+            push @{ $state->{networks}{$state->{network_ctr}} }, "$name1";
+            $state->{network_ctr}++;
         }
-        if ( !exists $id_network{$name2} ) {
-            $id_network{$name2} = $network_ctr;
-            push @{ $networks{$network_ctr} }, "$name2";
-            $network_ctr++;
+        if ( !exists $state->{id_network}{$name2} ) {
+            $state->{id_network}{$name2} = $state->{network_ctr};
+            push @{ $state->{networks}{$state->{network_ctr}} }, "$name2";
+            $state->{network_ctr}++;
         }
     }
     close(IN);
 }
 
-# @purpose Load trait data from files into @trait_refs array of hashes
-# @param (none)
+# @purpose Load trait data from files into trait_refs array of hashes
+# @param $config (hashref) - Config object with trait_order, trait_files, exclude_value, trait_fid_columns, trait_id_columns, trait_data_columns
+# @param $state (hashref) - State object with id_network and trait_refs
 # @return (void)
-# @side_effects Populates @trait_refs with trait hash references for each trait in @trait_order
-# @uses global @trait_order, %trait_files, @trait_refs, %trait_refs
+# @side_effects Populates $state->{trait_refs} with trait hash references for each trait in $config->{trait_order}
+# @uses $config->{trait_order}, $config->{trait_files}, $config->{exclude_value}, $config->{trait_fid_columns}, $config->{trait_id_columns}, $config->{trait_data_columns}
 # @notes Special handling for 'size' trait (always added); supports binary and quantitative traits
 
 sub load_trait_data {
-    foreach my $file (@trait_order) {
+    my ($config, $state) = @_;
+    
+    foreach my $file (@{$config->{trait_order}}) {
 
         #print "Loading trait data: $file\n";
-        my $trait_type = $trait_files{$file};
+        my $trait_type = $config->{trait_files}->{$file};
         my %trait_hash;
 
         ## input the trait size values of 1 for each ID from the input file
         if ( $file =~ /size/i ) {
-            foreach my $ID ( keys %id_network ) {
+            foreach my $ID ( keys %{$state->{id_network}} ) {
                 $trait_hash{$ID} = 1;
             }
-            push( @trait_refs, \%trait_hash )
+            push( @{$state->{trait_refs}}, \%trait_hash )
               ; ## The hash references are loaded onto this array in the order of selection
             next;
         }
@@ -738,17 +702,17 @@ sub load_trait_data {
             chomp($line);
             my @temp = split( /\s+/, $line );
 
-            my $FID_COLUMN = $TRAIT_FID_COLUMNS{$file};
-            my $IID_COLUMN = $TRAIT_ID_COLUMNS{$file};
+            my $FID_COLUMN = $config->{trait_fid_columns}->{$file};
+            my $IID_COLUMN = $config->{trait_id_columns}->{$file};
             my $FID        = @temp[$FID_COLUMN];
             my $IID        = @temp[$IID_COLUMN];
 
             #my $ID = "$FID**$IID";
             my $ID          = "$IID";
-            my $DATA_COLUMN = $TRAIT_DATA_COLUMNS{$file};
+            my $DATA_COLUMN = $config->{trait_data_columns}->{$file};
             my $trait_val   = @temp[$DATA_COLUMN];
 
-            if ( $trait_val == $EXCLUDE_VALUE ) {
+            if ( $trait_val == $config->{exclude_value} ) {
                 $trait_val = "NA";
             }
             elsif ( $trait_type =~ /btrait/i ) {
@@ -776,7 +740,7 @@ sub load_trait_data {
             my $selection_val = fold_trait_data( $trait_type, \%trait_hash );
             $LOG->info("Selection value for $file: " . $selection_val);
         }
-        push( @trait_refs, \%trait_hash )
+        push( @{$state->{trait_refs}}, \%trait_hash )
           ; ## The hash references are loaded onto this array in the order of selection
     }
 }
@@ -822,27 +786,24 @@ sub fold_trait_data {
 
 ## Network processing subroutines
 # @purpose Merge networks containing related individuals using predict_relationships_2D
-# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
+# @param $config (hashref) - Config object with threshold, do_PR, ibd_file_ref, min_likelihood, lib_dir, output_dir
+# @param $state (hashref) - State object with id_network and networks
+# @param $id_id_scores (hashref) - Reference to id_id_scores hash (pair_key => PI_HAT)
 # @return (void)
-# @side_effects Merges %networks entries where individuals are related; updates %id_network
-# @uses global $THRESHOLD, %id_network, %networks, $do_PR, $IBD_file_ref, $MIN_LIKELIHOOD, $lib_dir, $output_dir
+# @side_effects Merges $state->{networks} entries where individuals are related; updates $state->{id_network}
 # @calls PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors
 # @notes Core network construction algorithm; combines individuals into families
 
 sub colapse_networks {
-    my ($id_id_scores) = @_;
+    my ($config, $state, $id_id_scores) = @_;
 
     # print all unique entries
-    #foreach my $network (sort {$a <=> $b} keys %networks)
-    #{
-    #	my @temp = @{ $networks{$network} };
-    #}
     my $relationships_ref;
-    if ($do_PR) {
+    if ($config->{do_PR}) {
         eval {
             ($relationships_ref) =
               PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors(
-                $IBD_file_ref, $MIN_LIKELIHOOD, 0, $lib_dir, $output_dir );
+                $config->{ibd_file_ref}, $config->{min_likelihood}, 0, $config->{lib_dir}, $config->{output_dir} );
         };
         if ($@) {
             $LOG->warn("ERROR running predict_relationships_2d.pm: $@");
@@ -853,12 +814,12 @@ sub colapse_networks {
     foreach my $id_pair ( keys %$id_id_scores ) {
         my ( $id1, $id2 ) = split( /\;/, $id_pair );
         my $score       = $id_id_scores->{$id_pair};
-        my $id1_network = $id_network{$id1};
-        my $id2_network = $id_network{$id2};
+        my $id1_network = $state->{id_network}{$id1};
+        my $id2_network = $state->{id_network}{$id2};
 
         #if unrelated, do nothing
-        if ( !$do_PR ) {
-            if ( $score <= $THRESHOLD ) {
+        if ( !$config->{do_PR} ) {
+            if ( $score <= $config->{threshold} ) {
                 next;
             }
         }
@@ -897,45 +858,48 @@ sub colapse_networks {
         }
 
         # combine $id1_network and $id2_network
-        my @network1  = @{ $networks{$id1_network} };
-        my @network2  = @{ $networks{$id2_network} };
+        my @network1  = @{ $state->{networks}{$id1_network} };
+        my @network2  = @{ $state->{networks}{$id2_network} };
         my @new_array = ( @network1, @network2 );
-        $networks{$id1_network} = [@new_array];
-        delete $networks{$id2_network};
+        $state->{networks}{$id1_network} = [@new_array];
+        delete $state->{networks}{$id2_network};
 
         foreach my $id (@network2) {
-            my $old_network = $id_network{$id};
+            my $old_network = $state->{id_network}{$id};
             if ( $old_network ne $id2_network ) {
                 $LOG->warn(
 "ERROR!!! $id claims to be in $old_network; actually in $id2_network");
                 exit;
             }
-            $id_network{$id} = $id1_network;
+            $state->{id_network}{$id} = $id1_network;
         }
     }
 }
 
-# @purpose Write formatted network data to output files
-# @param $file (scalar) - Base filename for output files
+
+# @purpose Write network assignments, unrelated samples, and per-network genome files
+# @param $config (hashref) - Config object with output_dir and relatedness_file_name
+# @param $state (hashref) - State object with networks, id_id_all_info, id_id_scores, outfile_header
 # @return (void)
 # @side_effects Creates output files: ${file}_networks, ${file}_unrelated_samples.txt, ${file}_network*.genome, ${file}_network*.dot
 # @uses global %networks, %id_id_all_info, %id_id_scores, $THRESHOLD, $output_dir
 # @calls write_out_dot_file for networks > 4 nodes
 
 sub write_out_networks {
-    my ( $file, $id_id_scores ) = @_;
-    my $num_networks = keys %networks;
+    my ( $config, $state ) = @_;
+    my $num_networks = keys %{ $state->{networks} };
 
-    open( NETWORKS_OUT, ">$output_dir/$file\_networks" )
-      or die "Can't write to $output_dir/$file\_networks; $!\n";
-    open( UNREL_OUT, ">$output_dir/$file\_unrelated_samples.txt" )
-      or die "Can't write to $output_dir/$file\_unrelateds; $!\n";
-    print NETWORKS_OUT "Network\t$OUTFILE_HEADER";
+    open( NETWORKS_OUT, ">$config->{output_dir}/$config->{relatedness_file_name}\_networks" )
+      or die "Can't write to $config->{output_dir}/$config->{relatedness_file_name}\_networks; $!\n";
+    open( UNREL_OUT, ">$config->{output_dir}/$config->{relatedness_file_name}\_unrelated_samples.txt" )
+      or die "Can't write to $config->{output_dir}/$config->{relatedness_file_name}\_unrelateds; $!\n";
+    # The outfile_header has a newline at the end already
+    print NETWORKS_OUT "Network\t$state->{outfile_header}"; 
     print UNREL_OUT "FID\tIID\n";
     my $network_ctr = 1;
-    foreach my $network ( sort { $a <=> $b } keys %networks ) {
+    foreach my $network ( sort { $a <=> $b } keys %{ $state->{networks} } ) {
 
-        my @temp = @{ $networks{$network} };
+        my @temp = @{ $state->{networks}{$network} };
         if ( @temp < 2 ) {
             my $name = @temp[0];
             $name =~ s/\*\*/\t/;
@@ -943,24 +907,25 @@ sub write_out_networks {
             next;
         }
         if ( @temp > 4 ) {
-            write_out_dot_file( $file, $network, $network_ctr, $id_id_scores );
+            write_out_dot_file( $config, $state, $network, $network_ctr );
         }
         ## This will write out the .genome file for each network (if a .genome file was read in)
-        open( GENOMES_OUT, ">$output_dir/$file\_network$network_ctr.genome" )
-          or die "Can't write to $output_dir/$file\_networks; $!\n";
-        print GENOMES_OUT "$OUTFILE_HEADER";
+        open( GENOMES_OUT, ">$config->{output_dir}/$config->{relatedness_file_name}\_network$network_ctr.genome" )
+          or die "Can't write to $config->{output_dir}/$config->{relatedness_file_name}\_networks; $!\n";
+        # The outfile_header has a newline at the end already
+        print GENOMES_OUT "$state->{outfile_header}";
 
         for my $i ( 0 .. @temp - 1 ) {
             for ( my $j = 0 ; $j < $i ; $j++ ) {
                 my $id1  = $temp[$i];
                 my $id2  = $temp[$j];
                 my $key  = sort_key( $id1, $id2 );
-                my $info = $id_id_all_info{$key};
+                my $info = $state->{id_id_all_info}{$key};
                 if ( $info ne "" ) {
                     print GENOMES_OUT "$info\n";
                 }
-                my $score = $id_id_scores->{$key};
-                if ( $score > $THRESHOLD ) {
+                my $score = $state->{id_id_scores}->{$key};
+                if ( $score > $config->{threshold} ) {
                     print NETWORKS_OUT "$network_ctr\t$info\n";
                 }
             }
@@ -981,7 +946,7 @@ sub write_out_networks {
 # @notes Used to determine algorithm parameters for large networks
 
 sub get_connectedness {
-    my ( $network_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $network_ref ) = (@_);
     my $num_connections;
     my %visited;
     my @ids             = keys %$network_ref;
@@ -993,8 +958,8 @@ sub get_connectedness {
             my $key2       = @ids[$j];
             my $sorted_key = sort_key( $key, $key2 );
             $max_connections++;
-            my $PI_HAT = $id_id_scores->{$sorted_key};
-            if ( $PI_HAT > $THRESHOLD ) {
+            my $PI_HAT = $state->{id_id_scores}->{$sorted_key};
+            if ( $PI_HAT > $config->{threshold} ) {
                 $num_connections++;
             }
         }
@@ -1006,40 +971,61 @@ sub get_connectedness {
     return $connectedness;
 }
 
+# @purpose Split large networks into smaller components to make BronKerbosh feasible
+# @param $config (hashref) - Config object with lowest_max_network_size, threshold
+# @param $state (hashref) - State object with networks, id_id_scores
+# @return (void)
+# @side_effects Modifies $state->{networks} by splitting networks exceeding size threshold
+# @uses get_connectedness, get_max_network_size, breakup_large_network
+# @algorithm Recursively breaks up largest networks using degree-based node removal
+# @notes Threshold adjusted based on network connectivity
+
 sub breakup_large_networks {
 
-    my ($id_id_scores) = (@_);
+    my ($config, $state) = (@_);
 
-    foreach my $network ( sort { $a <=> $b } keys %networks ) {
-        my @temp = @{ $networks{$network} };
+    foreach my $network ( sort { $a <=> $b } keys %{ $state->{networks} } ) {
+        my @temp = @{ $state->{networks}{$network} };
         my %P    = map { $_ => 1 } @temp;
 
-        if ( keys %P > $LOWEST_MAX_NETWORK_SIZE ) {
-            my $connectedness = get_connectedness( \%P, $id_id_scores );
+        if ( keys %P > $config->{lowest_max_network_size} ) {  # Default max network size threshold
+            my $connectedness = get_connectedness( $config, $state, \%P );
             my $size          = keys %P;
             my $MAX_NETWORK_SIZE =
               get_max_network_size( $connectedness, $size );
             if ( $size > $MAX_NETWORK_SIZE ) {
                 $LOG->warn("WARNING!!! " . @temp
                   . " NODES WITH CONNECTIVITY OF $connectedness WILL TAKE TOO LONG TO RUN; USING NEXT BEST SOLUTION.");
-                breakup_large_network( \%P, $MAX_NETWORK_SIZE, $id_id_scores );
-                @{ $networks{$network} } = keys %P;
+                breakup_large_network( $config, $state, \%P, $MAX_NETWORK_SIZE, $state->{id_id_scores} );
+                @{ $state->{networks}{$network} } = keys %P;
             }
         }
     }
 
 }
 
+# @purpose Recursively break network into connected components by removing high-degree nodes
+# @param $config (hashref) - Config object with lowest_max_network_size, threshold
+# @param $state (hashref) - State object with networks, id_id_scores, network_ctr, trait_refs
+# @param $P_ref (hashref) - Current network nodes (nodes => 1)
+# @param $MAX_NETWORK_SIZE (scalar) - Target maximum size for this network
+# @param $id_id_scores (hashref) - Reference to id_id_scores hash
+# @return (void)
+# @side_effects Modifies $state->{networks} and splits components into new networks; updates $state->{network_ctr}
+# @calls load_degrees_and_neighbors, get_highest_degree_node, get_connected_components, reduce_neighbors
+# @algorithm Greedy removal of highest-degree nodes until network fits size limit
+# @notes Recursive: calls itself for components still exceeding threshold
+
 sub breakup_large_network {
 
-    my ( $P_ref, $MAX_NETWORK_SIZE, $id_id_scores ) = (@_);
+    my ( $config, $state, $P_ref, $MAX_NETWORK_SIZE, $id_id_scores ) = (@_);
     my %degrees;
     my %neighbors;
 
-    load_degrees_and_neighbors( $P_ref, \%degrees, \%neighbors, $id_id_scores );
+    load_degrees_and_neighbors( $config, $state, $P_ref, \%degrees, \%neighbors );
 
     while ( keys %$P_ref > $MAX_NETWORK_SIZE ) {
-        my ( $node_to_remove, $degree ) = get_highest_degree_node( \%degrees );
+        my ( $node_to_remove, $degree ) = get_highest_degree_node( $config, $state, \%degrees );
         if ( $degree > 0 ) {
             delete $$P_ref{$node_to_remove};
             delete $degrees{$node_to_remove};
@@ -1052,7 +1038,7 @@ sub breakup_large_network {
             %{$P_ref} = %{ $component_refs[0] };
             shift(@component_refs);
 
-# Add smaller connected components to end of $networks{$network_ctr}
+# Add smaller connected components to end of $state->{networks}
 #foreach my $hash_ref (sort {keys %{ $component_refs[$a] } <=> keys %{ $component_refs[$b]} } @component_refs)
             foreach my $hash_ref (@component_refs) {
                 my @temp = keys %$hash_ref;
@@ -1062,21 +1048,21 @@ sub breakup_large_network {
                 }
 
                 ## if still too big, call this routine recursively
-                if ( keys %$hash_ref > $LOWEST_MAX_NETWORK_SIZE ) {
+                if ( keys %$hash_ref > $config->{lowest_max_network_size} ) {  # Default max network size threshold
                     my $connectedness =
-                      get_connectedness( $hash_ref, $id_id_scores );
+                      get_connectedness( $config, $state, $hash_ref );
                     my $LOCAL_MAX_NETWORK_SIZE =
                       get_max_network_size($connectedness);
                     $LOG->info("Connectedness: $connectedness");
                     $LOG->info("LOCAL_MAX_NETWORK_SIZE: $LOCAL_MAX_NETWORK_SIZE");
                     if ( keys %$hash_ref > $LOCAL_MAX_NETWORK_SIZE ) {
-                        ## DECEND RECURSIVELY
-                        breakup_large_network( $hash_ref,
+                        ## DESCEND RECURSIVELY
+                        breakup_large_network( $config, $state, $hash_ref,
                             $LOCAL_MAX_NETWORK_SIZE, $id_id_scores );
                     }
                 }
-                $network_ctr++;
-                @{ $networks{$network_ctr} } = keys %$hash_ref;
+                $state->{network_ctr}++;
+                @{ $state->{networks}{$state->{network_ctr}} } = keys %$hash_ref;
             }
 
 # proceed with larger network %P until it is smaller than its $MAX_NETWORK_SIZE for its connectivity
@@ -1085,7 +1071,7 @@ sub breakup_large_network {
             # It should never get here
             die "ERROR!!! PRUNING NODE WITHOUT RELATIVES!!!\n";
         }
-        my $connectedness = get_connectedness( $P_ref, $id_id_scores );
+        my $connectedness = get_connectedness( $config, $state, $P_ref );
         $MAX_NETWORK_SIZE = get_max_network_size($connectedness);
 
     }
@@ -1132,13 +1118,13 @@ sub get_connected_components {
 }
 
 sub write_out_independent_set {
-    my ( $file, $id_id_scores ) = (@_);
+    my ( $config, $state ) = (@_);
     my %unrelated_set;
-    open( UNIQUE_OUT, ">$output_dir/$file\_maximum_independent_set_PRIMUS" );
+    open( UNIQUE_OUT, ">$config->{output_dir}/$config->{relatedness_file_name}\_maximum_independent_set_PRIMUS" );
     print UNIQUE_OUT "FID\tIID\n";
     ## get most unrelateds in each network with Bron-Kerbosch Algorithm
-    foreach my $network ( sort { $a <=> $b } keys %networks ) {
-        my @temp = @{ $networks{$network} };
+    foreach my $network ( sort { $a <=> $b } keys %{ $state->{networks} } ) {
+        my @temp = @{ $state->{networks}{$network} };
 
         my %P = map { $_ => 1 } @temp;
         my %R;
@@ -1151,10 +1137,9 @@ sub write_out_independent_set {
         if ( @temp > 45 ) {
             $LOG->info("Running BronKerbosh for network $network (size = " . @temp . ")");
         }
-        BronKerbosh( \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited,
-            $id_id_scores );
+        BronKerbosh( $config, $state, \@maximal_cliques, \%R, \%P, \%X, \$nodes_visited );
 
-        my $maximum_clique = get_maximum_clique(@maximal_cliques, \@trait_refs);
+        my $maximum_clique = get_maximum_clique($config, $state, @maximal_cliques, $state->{trait_refs});
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
         write_out_maximum_clique_ids(@maximum_ids);
         foreach (@maximum_ids) { $unrelated_set{$_} = 1; }
@@ -1175,11 +1160,11 @@ sub write_out_independent_set {
 
 sub load_degrees_and_neighbors {
 
-    my ( $network_ref, $degree_ref, $neighbors_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $network_ref, $degree_ref, $neighbors_ref ) = (@_);
 
     foreach my $node ( keys %$network_ref ) {
         my %neighbors =
-          get_actual_neighbors( $node, $network_ref, $id_id_scores );
+          get_actual_neighbors( $config, $state, $node, $network_ref );
 
         $$neighbors_ref{$node} =
           \%neighbors;    #get_actual_neighbors($node,$network_ref);
@@ -1215,6 +1200,8 @@ sub reduce_neighbors {
 # @uses get highest-degree node; breaks ties by trait values to prefer nodes to keep
 
 sub get_highest_degree_node {
+    my $config = shift;
+    my $state = shift;
     my $degrees_ref = shift;
     my $max_degree  = -1;
     my $max_node;
@@ -1229,12 +1216,11 @@ sub get_highest_degree_node {
         }
         elsif ( $degree == $max_degree ) {
             my @temp_values;
-            for ( my $i = 0 ; $i < @trait_order ; $i++ ) {
-                @temp_values[$i] = $trait_refs[$i]{$node};
+            for ( my $i = 0 ; $i < @{$config->{trait_order}} ; $i++ ) {
+                @temp_values[$i] = $state->{trait_refs}[$i]{$node};
             }
 
-            my $max = weighted_comparison( \@max_trait_values, \@temp_values )
-              ;    ## return 1 for max, and 2 for temp
+            my $max = weighted_comparison( $config, \@max_trait_values, \@temp_values );    ## return 1 for max, and 2 for temp
             ## We want the lower of the two to remove; therefore if max has higher trait values, switch max to temp
             if ( $max == 1 || @max_trait_values[0] eq "NA" ) {
                 $max_degree       = $degree;
@@ -1256,6 +1242,8 @@ sub get_highest_degree_node {
 # @notes Handles both: (1) selecting best from multiple cliques within a network, (2) comparing independent sets from different methods
 
 sub get_maximum_clique {
+    my $config = shift;
+    my $state = shift;
     my ($trait_refs) = pop;
     my (@maximal_cliques) = @_;
     my @max_values      = qw(NA);
@@ -1266,8 +1254,8 @@ sub get_maximum_clique {
         my $ctr = 0;
         foreach my $id ( keys %{ $maximal_cliques[$i] } ) {
             $ctr++;
-            for ( my $i = 0 ; $i < @trait_order ; $i++ ) {
-                my $trait_type = $trait_files{ $trait_order[$i] };
+            for ( my $i = 0 ; $i < @{$config->{trait_order}} ; $i++ ) {
+                my $trait_type = $config->{trait_files}{ $config->{trait_order}[$i] };
                 my $trait_val  = $trait_refs->[$i]{$id};
                 if ( exists $trait_refs->[$i]{$id} ) {
                     @temp_values[$i] += $trait_val;
@@ -1276,15 +1264,15 @@ sub get_maximum_clique {
         }
 
         ## Average  non-binary trait values
-        for ( my $i = 0 ; $i < @trait_order ; $i++ ) {
-            my $trait_type = $trait_files{ $trait_order[$i] };
+        for ( my $i = 0 ; $i < @{$config->{trait_order}} ; $i++ ) {
+            my $trait_type = $config->{trait_files}{ $config->{trait_order}[$i] };
             if ( $trait_type =~ /qtrait/i && $ctr ne 0 ) {
                 @temp_values[$i] = @temp_values[$i] / $ctr;
             }
         }
 
         ## Compare
-        my $max = weighted_comparison( \@max_values, \@temp_values );    ## returns 1 for max  and 2 for temp
+        my $max = weighted_comparison( $config, \@max_values, \@temp_values );    ## returns 1 for max  and 2 for temp
 
         ## Update max if necessary
         if ( $max eq 2 ) {
@@ -1305,6 +1293,7 @@ sub get_maximum_clique {
 # @globals %trait_files, @trait_order
 
 sub weighted_comparison {
+    my $config = shift;
     my $a_ref = shift;
     my $b_ref = shift;
 
@@ -1315,7 +1304,7 @@ sub weighted_comparison {
     ## This will loop through the traits in order and returns the proper number of array once a difference is found.
     ##If no differences, the first array # is returned.
     for ( my $i = 0 ; $i < @$a_ref ; $i++ ) {
-        my $trait_type = $trait_files{ $trait_order[$i] };
+        my $trait_type = $config->{trait_files}{ $config->{trait_order}[$i] };
         if (   $trait_type =~ /high/i
             || $trait_type =~ /ped/i
             || $trait_type =~ /size/i
@@ -1360,15 +1349,18 @@ sub write_out_maximum_clique_ids {
 }
 
 ### BronKerbosh Algorithm subroutines
+# @purpose Find all maximal cliques in complement graph using Bron-Kerbosch algorithm
+# @param $config (hashref) - Config object with threshold
+# @param $state (hashref) - State object with id_id_scores
 # @param $maximal_cliques_ref (arrayref) - Will be populated with maximal cliques found
 # @param $R_ref (hashref) - Current clique being built (nodes => 1)
 # @param $P_ref (hashref) - Candidate set of nodes that could extend R (nodes => 1)
 # @param $X_ref (hashref) - Already processed nodes to avoid duplicate cliques (nodes => 1)
 # @param $num_visited_ref (scalarref) - Reference to counter tracking recursive calls
 # @return (scalar) - Number of nodes visited in this recursion level
-# @uses %id_id_scores (global - REFACTOR: should be parameter)
-# @uses $THRESHOLD (global - for determining neighbors)
+# @side_effects Populates $maximal_cliques_ref with maximal independent sets
 # @algorithm Bron-Kerbosch with pivot optimization; finds maximal cliques in complement graph
+# @notes Operates on unrelated pairs (kinship <= threshold); cliques = maximal independent sets
 
 sub BronKerbosh {
 
@@ -1378,8 +1370,7 @@ sub BronKerbosh {
     # my $X_ref               = shift;
     # my $num_visited_ref     = shift;
 
-    my ( $maximal_cliques_ref, $R_ref, $P_ref, $X_ref, $num_visited_ref,
-        $id_id_scores )
+    my ( $config, $state, $maximal_cliques_ref, $R_ref, $P_ref, $X_ref, $num_visited_ref )
       = (@_);
 
     $$num_visited_ref++;
@@ -1391,7 +1382,7 @@ sub BronKerbosh {
     }
 
     ## Select pivot node from P union X that maximizes the cardinality of P intersection N(u);
-    my ( $u, %u_neighbors ) = select_pivot( $P_ref, $X_ref, $id_id_scores );
+    my ( $u, %u_neighbors ) = select_pivot( $config, $state, $P_ref, $X_ref );
 
     foreach my $v ( keys %$P_ref ) {
         ## Use the pivot node: continue only if $v is not a neighbor of the pivot $u
@@ -1401,35 +1392,39 @@ sub BronKerbosh {
         $temp_R{$v} = $$P_ref{$v};    # Load temp_R = R union v
 
         my %temp_P;
-        get_inverse_neighbors( $v, $P_ref, \%temp_P, $id_id_scores )
+        get_inverse_neighbors( $config, $state, $v, $P_ref, \%temp_P )
           ;                           # Load temp_P = P intersection N(v)
         my @temp_arr = keys %temp_P;
 
         my %temp_X;
-        get_inverse_neighbors( $v, $X_ref, \%temp_X, $id_id_scores )
+        get_inverse_neighbors( $config, $state, $v, $X_ref, \%temp_X )
           ;                           # Load temp_X = X intersect N(v)
 
-        BronKerbosh( $maximal_cliques_ref, \%temp_R, \%temp_P, \%temp_X,
-            $num_visited_ref, $id_id_scores );
+        BronKerbosh( $config, $state, $maximal_cliques_ref, \%temp_R, \%temp_P, \%temp_X,
+            $num_visited_ref );
         $$X_ref{$v} = $$P_ref{$v};
         delete( $$P_ref{$v} );
     }
     return $nodes_visited;
 }
 
+# @purpose Select pivot node from P∪X that maximizes |P ∩ N(u)| to reduce search space
+# @param $config (hashref) - Config object with threshold
+# @param $state (hashref) - State object with id_id_scores
 # @param $P_ref (hashref) - Candidate set of nodes (nodes => 1)
 # @param $X_ref (hashref) - Already processed nodes (nodes => 1)
-# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (list) - ($pivot_node, %pivot_neighbors)
 # @return_detail $pivot_node - Node from P with most neighbors in P
 # @return_detail %pivot_neighbors - Inverse neighbors of pivot (score <= THRESHOLD)
+# @side_effects None (read-only)
 # @uses get_inverse_neighbors()
-# @notes Pivot selection maximizes |P ∩ N(u)| to reduce search space
+# @algorithm Selects node from P maximizing |P ∩ N(u)| cardinality
+# @notes Pivot selection minimizes BronKerbosh recursion; used for algorithm optimization
 
 ## Select pivot node from P union X that maximizes the cardinality of P intersection N(u);
 sub select_pivot {
 
-    my ( $P_ref, $X_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $P_ref, $X_ref ) = (@_);
 
     my $u;
     my $max_size = -1;
@@ -1437,7 +1432,7 @@ sub select_pivot {
 
     foreach my $key ( keys %$P_ref ) {
         my %neighbors;
-        get_inverse_neighbors( $key, $P_ref, \%neighbors, $id_id_scores );
+        get_inverse_neighbors( $config, $state, $key, $P_ref, \%neighbors );
         if ( $max_size < keys %neighbors ) {
             $max_size    = keys %neighbors;
             $u           = $key;
@@ -1450,14 +1445,18 @@ sub select_pivot {
 # @purpose Find all related neighbors of a node (where score > THRESHOLD)
 # @param $v (scalar) - Node ID to find related neighbors for
 # @param $hash_ref (hashref) - Candidate nodes to check against (nodes => value)
-# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
+# @purpose Find all related neighbors of a node (where kinship > THRESHOLD)
+# @param $config (hashref) - Config object with threshold
+# @param $state (hashref) - State object with id_id_scores
+# @param $v (scalar) - Node ID to find neighbors for
+# @param $hash_ref (hashref) - Candidate nodes to check against (nodes => value)
 # @return (hash) - Hash of related neighbors (nodes => value)
 # @side_effects None (read-only operation on parameters)
-# @uses global $THRESHOLD
+# @uses sort_key for consistent pair ordering
 # @notes Related = kinship coefficient > THRESHOLD (typically > 0.1); opposite of get_inverse_neighbors
 
 sub get_actual_neighbors {
-    my ( $v, $hash_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $v, $hash_ref ) = (@_);
     my %neighbors;
 
     foreach my $n_v ( keys %$hash_ref ) {
@@ -1465,8 +1464,8 @@ sub get_actual_neighbors {
             next;
         }
         my $key   = sort_key( $v, $n_v );
-        my $score = $id_id_scores->{$key};
-        if ( $score > $THRESHOLD ) {
+        my $score = $state->{id_id_scores}->{$key};
+        if ( $score > $config->{threshold} ) {
             $neighbors{$n_v} = $$hash_ref{$n_v};
         }
     }
@@ -1486,7 +1485,7 @@ sub get_actual_neighbors {
 
 sub get_inverse_neighbors {
 
-    my ( $v, $hash_ref, $neighbors, $id_id_scores ) = (@_);
+    my ( $config, $state, $v, $hash_ref, $neighbors ) = (@_);
 
     foreach my $n_v ( keys %$hash_ref ) {
 
@@ -1494,8 +1493,8 @@ sub get_inverse_neighbors {
             next;
         }
         my $key   = sort_key( $v, $n_v );
-        my $score = $id_id_scores->{$key};
-        if ( $score <= $THRESHOLD ) {
+        my $score = $state->{id_id_scores}->{$key};
+        if ( $score <= $config->{threshold} ) {
             $$neighbors{$n_v} = $$hash_ref{$n_v};
         }
     }
@@ -1513,13 +1512,13 @@ sub get_inverse_neighbors {
 # @notes Black edges = related pairs (score > THRESHOLD); nodes for isolated individuals
 
 sub write_out_dot_file {
-	my ($file, $network, $network_ctr, $id_id_scores) = (@_);
+	my ($config, $state, $network, $network_ctr) = (@_);
 
-    open( GRAPH_OUT, ">$output_dir/$file\_network$network_ctr.dot" );
+    open( GRAPH_OUT, ">$config->{output_dir}/$config->{relatedness_file_name}\_network$network_ctr.dot" );
     print GRAPH_OUT "graph network$network_ctr {\n";
     print GRAPH_OUT "\tnode [shape=circle];\n\n";
 
-    my @temp = @{ $networks{$network} };
+    my @temp = @{ $state->{networks}{$network} };
 
     ## Write out all connections
     for my $i ( 0 .. @temp - 1 ) {
@@ -1527,14 +1526,14 @@ sub write_out_dot_file {
             my $id1   = $temp[$i];
             my $id2   = $temp[$j];
             my $key   = sort_key( $id1, $id2 );
-            my $info  = $id_id_all_info{$key};
-            my $score = $id_id_scores->{$key};
+            my $info  = $state->{id_id_all_info}{$key};
+            my $score = $state->{id_id_scores}->{$key};
 
             ## Change the ** delimiter between FID and IID to and _
             #$id1 =~ s/\*\*/_/;
             #$id2 =~ s/\*\*/_/;
 
-            if ( $score > $THRESHOLD ) {
+            if ( $score > $config->{threshold} ) {
                 my $color = "black";
                 print GRAPH_OUT "\t\"$id1\" -- \"$id2\" [color=$color];\n";
             }
@@ -1583,48 +1582,50 @@ sub get_max_network_size {
 sub compare_alternative_methods {
     ### Run alternative methods
 
+    my $config = shift;
+    my $state = shift;
     my $file = shift;
     my $PRIMUS_unrelated_set = shift;
-    my $id_id_scores = pop;
-    my %networks_alt = @_;
+    my $networks_ref = shift;
+    my %networks_alt = %$networks_ref;
 
     my %KING_network =
-      write_out_independent_set_KING( $file, %networks_alt, $id_id_scores );
+      write_out_independent_set_KING( $config, $state, $file, \%networks_alt );
 
-    breakup_large_networks_PLINK( \%networks_alt, $id_id_scores );
+    breakup_large_networks_PLINK( $config, $state, \%networks_alt );
 
-    my %PLINK_network = write_out_independent_set_PLINK( $file, %networks_alt );
+    my %PLINK_network = write_out_independent_set_PLINK( $config, $file, \%networks_alt );
 
     ### Compare KING, PLINK, and PRIMUS
-    my $val = get_maximum_clique( \%PLINK_network, \%KING_network,
-        $PRIMUS_unrelated_set, \@trait_ref );
+    my $val = get_maximum_clique( $config, $state, \%PLINK_network, \%KING_network,
+        $PRIMUS_unrelated_set, $state->{trait_refs} );
 
     if ( $val eq 0 ) {
         ## PLINK performed the best
         system(
-"cp $output_dir/$file\_maximum_independent_set_PLINK $output_dir/$file\_maximum_independent_set"
+"cp $config->{output_dir}/$file\_maximum_independent_set_PLINK $config->{output_dir}/$file\_maximum_independent_set"
         );
     }
     elsif ( $val eq 1 ) {
         ## KING performed the best
         system(
-"cp $output_dir/$file\_maximum_independent_set_KING $output_dir/$file\_maximum_independent_set"
+"cp $config->{output_dir}/$file\_maximum_independent_set_KING $config->{output_dir}/$file\_maximum_independent_set"
         );
     }
     elsif ( $val eq 2 ) {
         ## PRIMUS performed the best
         system(
-"cp $output_dir/$file\_maximum_independent_set_PRIMUS $output_dir/$file\_maximum_independent_set"
+"cp $config->{output_dir}/$file\_maximum_independent_set_PRIMUS $config->{output_dir}/$file\_maximum_independent_set"
         );
     }
     else {
         die "ERROR!!!!!\n";
     }
 
-    if ( $PRINT_ALTERNATE_RESULTS eq 0 ) {
-        system("rm $output_dir/$file\_maximum_independent_set_PLINK");
-        system("rm $output_dir/$file\_maximum_independent_set_KING");
-        system("rm $output_dir/$file\_maximum_independent_set_PRIMUS");
+    if ( $config->{print_alternate_results} eq 0 ) {
+        system("rm $config->{output_dir}/$file\_maximum_independent_set_PLINK");
+        system("rm $config->{output_dir}/$file\_maximum_independent_set_KING");
+        system("rm $config->{output_dir}/$file\_maximum_independent_set_PRIMUS");
     }
 }
 
@@ -1637,42 +1638,53 @@ sub compare_alternative_methods {
 # @uses get_maximum_clique for clique selection
 
 sub write_out_independent_set_KING {
+    my $config = shift;
+    my $state = shift;
     my $file         = shift;
-    my $id_id_scores = pop;
-    my %networks_king = @_;
+    my $networks_ref = shift;
+    my %networks_king = %$networks_ref;
     my %unrelated_set;
-    open( UNIQUE_OUT, ">$output_dir/$file\_maximum_independent_set_KING" );
+    open( UNIQUE_OUT, ">$config->{output_dir}/$file\_maximum_independent_set_KING" );
     print UNIQUE_OUT "FID\tIID\ta_status\n";
-
     ## get most unrelateds in each network
+    my $size = scalar(keys %networks_king);
+    $LOG->info("Size of networks_king hash: $size");
     foreach my $network ( sort { $a <=> $b } keys %networks_king ) {
+
         my @temp = @{ $networks_king{$network} };
+
         my %P    = map { $_ => 1 } @temp;
         my @maximal_cliques;
 
-        King_method( \@maximal_cliques, \%P, $id_id_scores );
+        King_method( $config, $state, \@maximal_cliques, \%P );
 
-        my $maximum_clique = get_maximum_clique(@maximal_cliques, \@trait_ref);
+
+        my $maximum_clique = get_maximum_clique($config, $state, @maximal_cliques, $state->{trait_refs});
+
         my @maximum_ids    = keys %{ $maximal_cliques[$maximum_clique] };
         write_out_maximum_clique_ids(@maximum_ids);
         foreach (@maximum_ids) { $unrelated_set{$_} = 1; }
     }
     close(UNIQUE_OUT);
+
     return %unrelated_set;
 }
 
-# @purpose KING method: greedy independent set selection based on inverse neighbors
-# @param $maximal_cliques_ref (arrayref) - Output array (single clique)
-# @param $network_ref (hashref) - Network nodes (nodes => 1)
+
+# @purpose King_method: Find maximum independent set using KING greedy algorithm (highest degree removal)
+# @param $config (hashref) - Config object with threshold, trait_order
+# @param $state (hashref) - State object with id_id_scores, trait_refs
+# @param $maximal_cliques_ref (arrayref) - Will be populated with result clique
+# @param $network_ref (hashref) - Network nodes to process (nodes => value)
 # @return (void)
-# @side_effects Pushes result clique into $maximal_cliques_ref
+# @side_effects Pushes result clique (independent set) into $maximal_cliques_ref
 # @algorithm Greedy: iteratively select highest degree unrelated node
-# @uses load_inverse_degrees_and_neighbors, load_degrees_and_neighbors, get_highest_degree_node
+# @uses load_inverse_degrees_and_neighbors, load_degrees_and_neighbors, get_highest_degree_node, weighted_comparison
 # @notes Alternative to BronKerbosh; faster but may produce smaller independent set
 
 sub King_method {
 
-    my ( $maximal_cliques_ref, $network_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $maximal_cliques_ref, $network_ref ) = (@_);
 
     my %actual_degrees;
     my %actual_neighbors;
@@ -1680,10 +1692,12 @@ sub King_method {
     my %inverse_neighbors;
     my %i_set = ();
 
-    load_inverse_degrees_and_neighbors( $network_ref, \%inverse_degrees,
-        \%inverse_neighbors, $id_id_scores );
-    load_degrees_and_neighbors( $network_ref, \%actual_degrees,
-        \%actual_neighbors, $id_id_scores );
+
+    load_inverse_degrees_and_neighbors( $config, $state, $network_ref, \%inverse_degrees,
+        \%inverse_neighbors );
+    
+    load_degrees_and_neighbors( $config, $state, $network_ref, \%actual_degrees,
+        \%actual_neighbors );
 
     my @sorted_ids = (
         sort { $inverse_degrees{$b} cmp $inverse_degrees{$a} }
@@ -1691,7 +1705,7 @@ sub King_method {
     );
 
     while ( keys %inverse_degrees ) {
-        my ( $id, $degree ) = get_highest_degree_node( \%inverse_degrees );
+        my ( $id, $degree ) = get_highest_degree_node( $config, $state, \%inverse_degrees );
         delete $inverse_degrees{$id};
         my $add = 1;
         foreach my $test_id ( keys %i_set ) {
@@ -1704,26 +1718,31 @@ sub King_method {
             $i_set{$id} = 1;
         }
     }
+
     push( @$maximal_cliques_ref, \%i_set );
+
 }
 
-# @purpose Calculate inverse degree (unrelated neighbor count) for each node
+
+# @purpose Calculate inverse degree (unrelated neighbors) for each node in network for KING method
+# @param $config (hashref) - Config object with threshold
+# @param $state (hashref) - State object with id_id_scores
 # @param $network_ref (hashref) - Network nodes (nodes => value)
 # @param $degree_ref (hashref) - Output: nodes => inverse_degree_count
 # @param $neighbors_ref (hashref) - Output: nodes => unrelated_neighbors_hashref
 # @return (void)
 # @side_effects Modifies $degree_ref and $neighbors_ref hashrefs
 # @uses get_inverse_neighbors to find unrelated nodes (complement graph)
-# @notes Used by KING method; counts nodes with score <= THRESHOLD
+# @notes Used by KING method; counts nodes with score <= THRESHOLD; inverse of load_degrees_and_neighbors
 
 sub load_inverse_degrees_and_neighbors {
 
-    my ( $network_ref, $degree_ref, $neighbors_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $network_ref, $degree_ref, $neighbors_ref ) = (@_);
 
     foreach my $node ( keys %$network_ref ) {
 
         my $neighbors =
-          get_inverse_neighbors( $node, $network_ref, undef, $id_id_scores );
+          get_inverse_neighbors( $config, $state, $node, $network_ref, undef );
 
         $$neighbors_ref{$node} = $neighbors;
         my @temp   = keys %{ $neighbors_ref->{$node} };    # %neighbors;
@@ -1740,10 +1759,12 @@ sub load_inverse_degrees_and_neighbors {
 # @notes PLINK method outputs one individual per network (very conservative/small independent set)
 
 sub write_out_independent_set_PLINK {
+    my $config   = shift;
     my $file     = shift;
-    my %networks = @_;
+    my $networks_ref = shift;
+    my %networks = %$networks_ref;
     my %unrelated_set;
-    open( UNIQUE_OUT, ">$output_dir/$file\_maximum_independent_set_PLINK" );
+    open( UNIQUE_OUT, ">$config->{output_dir}/$file\_maximum_independent_set_PLINK" );
     print UNIQUE_OUT "FID\tIID\n";
 
     ## get most unrelateds in each network
@@ -1768,7 +1789,7 @@ sub write_out_independent_set_PLINK {
 # @algorithm Removes highest-degree nodes until max 1 individual per network
 
 sub breakup_large_networks_PLINK {
-    my ( $networks_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $networks_ref ) = (@_);
     foreach my $network ( sort { $a <=> $b } keys %$networks_ref ) {
 
         my @temp = @{ $$networks_ref{$network} };
@@ -1778,7 +1799,7 @@ sub breakup_large_networks_PLINK {
         my %P = map { $_ => 1 } @temp;
 
         if ( keys %P > 0 ) {
-            breakup_large_network_PLINK( $networks_ref, \%P, $id_id_scores );
+            breakup_large_network_PLINK( $config, $state, $networks_ref, \%P );
             @{ $$networks_ref{$network} } = keys %P;
         }
     }
@@ -1795,11 +1816,11 @@ sub breakup_large_networks_PLINK {
 
 sub breakup_large_network_PLINK {
 
-    my ( $networks_ref, $P_ref, $id_id_scores ) = (@_);
+    my ( $config, $state, $networks_ref, $P_ref, $id_id_scores ) = (@_);
     my %degrees;
     my %neighbors;
 
-    load_degrees_and_neighbors( $P_ref, \%degrees, \%neighbors, $id_id_scores );
+    load_degrees_and_neighbors( $config, $state, $P_ref, \%degrees, \%neighbors );
 
     while ( keys %$P_ref > 1 ) {
         my @P_nodes   = keys %$P_ref;
@@ -1807,7 +1828,7 @@ sub breakup_large_network_PLINK {
         my @neighbors = keys %neighbors;
 
         my ( $node_to_remove, $degree ) =
-          get_node_to_remove( \%degrees, \%neighbors );
+          get_node_to_remove( $config, $state, \%degrees, \%neighbors );
         if ( $degree > 0 ) {
             delete $$P_ref{$node_to_remove};
             reduce_neighbors( $node_to_remove, \%neighbors, \%degrees );
@@ -1829,11 +1850,10 @@ sub breakup_large_network_PLINK {
 
                 ## if still too big, call this routine recursively
                 if ( keys %$hash_ref > 1 ) {
-                    breakup_large_network_PLINK( $networks_ref, $hash_ref,
-                        $id_id_scores );
+                    breakup_large_network_PLINK( $config, $state, $networks_ref, $hash_ref );
                 }
-                $network_ctr++;
-                @{ $$networks_ref{$network_ctr} } = keys %$hash_ref;
+                $state->{network_ctr}++;
+                @{ $$networks_ref{$state->{network_ctr}} } = keys %$hash_ref;
             }
 
             # proceed with network %P until it is smaller than $MAX_NETWORK_SIZE
@@ -1849,16 +1869,21 @@ sub breakup_large_network_PLINK {
     # Replace $networks{$network} with keys %P
 }
 
-# @purpose Select node to remove from network (PLINK method)
-# @param $degrees_ref (hashref) - Node => degree count (inverse neighbors)
+
+# @purpose Select node to remove from network in PLINK method (preserves best traits)
+# @param $config (hashref) - Config object with trait_order, trait_files
+# @param $state (hashref) - State object with trait_refs
+# @param $degrees_ref (hashref) - Node degree information (node => degree)
 # @param $neighbors_ref (hashref) - Adjacency information
 # @return (list) - ($node_to_remove, $degree)
 # @side_effects None (read-only)
 # @algorithm Selects node with lowest trait values from highest degree's neighbor
-# @uses get_highest_degree_node, weighted_comparison
-# @notes PLINK uses inverse degree; breaks ties by trait preference
+# @uses weighted_comparison for trait-based selection
+# @notes PLINK method removes lower-quality node to preserve best individuals; inverse of King_method
 
 sub get_node_to_remove {
+    my $config = shift;
+    my $state = shift;
     my $degrees_ref   = shift;
     my $neighbors_ref = shift;
     my @nodes         = sort keys %$degrees_ref;
@@ -1873,14 +1898,14 @@ sub get_node_to_remove {
     my @node_values;
     my @neighbor_values;
 
-    for ( my $i = 0 ; $i < @trait_order ; $i++ ) {
-        @node_values[$i] = $trait_refs[$i]{$node};
+    for ( my $i = 0 ; $i < @{$config->{trait_order}} ; $i++ ) {
+        @node_values[$i] = $state->{trait_refs}[$i]{$node};
     }
-    for ( my $i = 0 ; $i < @trait_order ; $i++ ) {
-        @neighbor_values[$i] = $trait_refs[$i]{$neighbor};
+    for ( my $i = 0 ; $i < @{$config->{trait_order}} ; $i++ ) {
+        @neighbor_values[$i] = $state->{trait_refs}[$i]{$neighbor};
     }
 
-    my $max = weighted_comparison( \@node_values, \@neighbor_values )
+    my $max = weighted_comparison( $config, \@node_values, \@neighbor_values )
       ;    ## return 1 for node, and 2 for neighbor
     if ( $max == 2 ) {
         return ( $node, $degree );
