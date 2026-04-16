@@ -23,6 +23,7 @@ use PRIMUS::predict_relationships_2D;
 use Types::IMUS_types;
 use Log::Log4perl;
 use Scalar::Util qw(looks_like_number);
+use List::Util qw(max);
 
 my $useage =
 "\n\nUSAGE: $0\t  -input [IBD_file]  -output_dir [output_dir]  -threshold [num; default = 0.1]  -[high|low|mean|tails]/[b|q]trait [trait_file]
@@ -632,10 +633,34 @@ sub load_data {
     while ( my $line = <IN> ) {
         $line =~ s/^\s+//;
         chomp($line);
+        ## skip empty lines
+        if ($line eq "") { 
+            my $err_msg = "ERROR: Detected an empty line in the genome file: $file. This error likely indicates that the file is likely malformed. Please check this file before rerunning COMPADRE";
+            $LOG->warn($err_msg); 
+            die $err_msg;
+        }    
         # We specifically want to capture the header line that starts with FID1, this 
         # code makes sure that we capture that line and store it in the state object
         if ( $line =~ /^FID/ ) { $state->{outfile_header} = $line; next; } ## skip header
         my @temp = split( /\s+/, $line );
+        
+        # Validate that all required column indices are within bounds
+        my $max_col = max(
+            $config->{fid1_column},
+            $config->{id1_column},
+            $config->{fid2_column},
+            $config->{id2_column},
+            $config->{relatedness_column}
+        );
+        # We need to die if the line has the incorrect number of columns because it 
+        # probably indicates a malformed file.
+        if (scalar(@temp) <= $max_col) {
+            my $err_msg = "ERROR: Line in file $file has insufficient columns. " .
+                "Expected at least " . ($max_col + 1) . " columns, but got " . scalar(@temp) . "\n";
+            $LOG->warn($err_msg);   
+            die $err_msg;
+        }
+
         my $FID1 = @temp[$config->{fid1_column}];
         my $FID2 = @temp[$config->{fid2_column}];
         my $IID1 = @temp[$config->{id1_column}];
@@ -654,9 +679,11 @@ sub load_data {
         # number. Plink can represent PI-HAT as nan according to this discussion 
         # thread: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1
         if (!looks_like_number($PI_HAT) && $PI_HAT ne "nan") {
-            $LOG->warn("PI_HAT!!! PI_HAT value $PI_HAT for pair $name1, $name2 in file $file is not a number\n");
+            $LOG->warn("WARNING: PI_HAT value $PI_HAT for pair $name1, $name2 in file $file is not a number. Skipping this pair.\n");
+            next;
         } elsif ($PI_HAT eq "nan") {
-            $LOG->warn("PI_HAT!!! PI_HAT value is 'nan' for pair $name1, $name2 in file $file. This occurence generate indicates a problem with the minor allele frequencies used in the method of moments calculation. Read more about this here: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1.\n");
+            $LOG->warn("ERROR: PI_HAT value is 'nan' for pair $name1, $name2 in file $file. This occurence generate indicates a problem with the minor allele frequencies used in the method of moments calculation. Read more about this here: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1.\n");
+            die "ERROR: Terminating program since PI_HAT of nan could indicate a problem with the input .genome file data. Please investigate the issue and fix the input data before running COMPADRE.\n";
         }
         if ( $PI_HAT > $config->{threshold} ) {
             $state->{id_id_scores}->{$key} = $PI_HAT;
