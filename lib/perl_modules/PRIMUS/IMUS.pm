@@ -22,6 +22,7 @@ use Getopt::Long qw(GetOptionsFromArray);
 use PRIMUS::predict_relationships_2D;
 use Types::IMUS_types;
 use Log::Log4perl;
+use Scalar::Util qw(looks_like_number);
 
 my $useage =
 "\n\nUSAGE: $0\t  -input [IBD_file]  -output_dir [output_dir]  -threshold [num; default = 0.1]  -[high|low|mean|tails]/[b|q]trait [trait_file]
@@ -653,7 +654,7 @@ sub load_data {
         # number. Plink can represent PI-HAT as nan according to this discussion 
         # thread: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1
         if (!looks_like_number($PI_HAT) && $PI_HAT ne "nan") {
-            $LOG->warn("PI_HAT!!! PI_HAT value $PI_HAT for pair $name1, $name2 in file $file is not a number\n";
+            $LOG->warn("PI_HAT!!! PI_HAT value $PI_HAT for pair $name1, $name2 in file $file is not a number\n");
         } elsif ($PI_HAT eq "nan") {
             $LOG->warn("PI_HAT!!! PI_HAT value is 'nan' for pair $name1, $name2 in file $file. This occurence generate indicates a problem with the minor allele frequencies used in the method of moments calculation. Read more about this here: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1.\n");
         }
