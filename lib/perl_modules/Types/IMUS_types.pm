@@ -6,6 +6,7 @@
 package PRIMUS::IMUS::Config;
 use strict;
 use warnings;
+use Scalar::Util qw(looks_like_number);
 
 # @purpose Data class for IMUS configuration parameters
 # @param %args - Named parameters for configuration
@@ -13,10 +14,16 @@ use warnings;
 
 sub new {
     my ($class, %args) = @_;
+
+    my $threshold_val = $args{threshold} // 0.1; # Default threshold value
+
+    if (!looks_like_number($threshold_val) || $threshold_val < 0 || $threshold_val > 1) {
+        die "ERROR: Threshold value '$threshold_val' is not a valid number. Values should be between 0 and 1.\n";
+    }
     return bless {
         # Threshold settings
-        threshold            => $args{threshold} // 0.1,
-        min_likelihood       => $args{min_likelihood} // 0.1,
+        threshold            => ($args{threshold} // 0.1) + 0, # We are forcing the threshold value to be a number
+        min_likelihood       => ($args{min_likelihood} // 0.1) + 0,
         exclude_value        => $args{exclude_value} // 0,
         lowest_max_network_size => $args{lowest_max_network_size} // 60,
         

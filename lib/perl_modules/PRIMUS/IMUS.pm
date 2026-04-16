@@ -274,9 +274,10 @@ sub set_values2 {
         'verbose=i' => sub { $config->{verbose} = $_[1]},
         'help|?'    => sub { help() },
 
-        # Settings
-        "rel_threshold=f"         => sub { $config->{threshold} = $_[1] },
-        "int_likelihood_cutoff=f" => sub { $config->{min_likelihood} = $_[1] },
+        # Settings (adding +0 to things like the threshold and min_likelihood force 
+        # the values to be numeric and not strings)
+        "rel_threshold=f"         => sub { $config->{threshold} = $_[1] + 0 },
+        "int_likelihood_cutoff=f" => sub { $config->{min_likelihood} = $_[1] + 0},
         "do_IMUS=i"               => sub { $config->{do_IMUS} = $_[1] },
         "do_PR=i"                 => sub { $config->{do_PR} = $_[1] },
         "missing_val=f"           => sub { $config->{exclude_value} = $_[1] },
@@ -630,26 +631,32 @@ sub load_data {
     while ( my $line = <IN> ) {
         $line =~ s/^\s+//;
         chomp($line);
+        # We specifically want to capture the header line that starts with FID1, this 
+        # code makes sure that we capture that line and store it in the state object
         if ( $line =~ /^FID/ ) { $state->{outfile_header} = $line; next; } ## skip header
         my @temp = split( /\s+/, $line );
         my $FID1 = @temp[$config->{fid1_column}];
         my $FID2 = @temp[$config->{fid2_column}];
         my $IID1 = @temp[$config->{id1_column}];
         my $IID2 = @temp[$config->{id2_column}];
+        
 
-        #if($IID1 eq "."){$IID1 = $FID1;}
-        #if($IID2 eq "."){$IID2 = $FID2;}
-
-        #my $name1 = "$FID1**$IID1";
-        #my $name2 = "$FID2**$IID2";
         my $name1 = "$IID1";
         my $name2 = "$IID2";
 
-        # Lets sort the names so that we dont have to store both
-        # copies of the key
+        # Lets sort the names so that we dont have to store both copies of the key
         my $key = sort_key( $name1, $name2 );
 
         my $PI_HAT = @temp[$config->{relatedness_column}];
+
+        # we should perform a check here and make sure that the PI_HAT value is a 
+        # number. Plink can represent PI-HAT as nan according to this discussion 
+        # thread: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1
+        if (!looks_like_number($PI_HAT) && $PI_HAT ne "nan") {
+            $LOG->warn("PI_HAT!!! PI_HAT value $PI_HAT for pair $name1, $name2 in file $file is not a number\n";
+        } elsif ($PI_HAT eq "nan") {
+            $LOG->warn("PI_HAT!!! PI_HAT value is 'nan' for pair $name1, $name2 in file $file. This occurence generate indicates a problem with the minor allele frequencies used in the method of moments calculation. Read more about this here: https://groups.google.com/g/plink2-users/c/YwrYPbcIGmo?pli=1.\n");
+        }
         if ( $PI_HAT > $config->{threshold} ) {
             $state->{id_id_scores}->{$key} = $PI_HAT;
         }
