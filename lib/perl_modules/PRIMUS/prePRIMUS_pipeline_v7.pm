@@ -132,6 +132,7 @@ sub run_prePRIMUS_main {
 	my $keep_intermediate_files = 1;
 	my $max_memory = 0;
 	my $min_pihat_threshold = 0;
+	my $gzip_genome = 0;
 
 	GetOptionsFromArray(
 		\@_,
@@ -169,6 +170,7 @@ sub run_prePRIMUS_main {
 		"no_y=i" => \$NO_Y,
 		"max_memory=i" => \$max_memory,
 		"min_pihat_threshold=f" => \$min_pihat_threshold,
+		"gzip_genome=i" => \$gzip_genome,
 
 		# IMUS Settings
 		"rel_threshold=f" => \$THRESHOLD, 
@@ -233,7 +235,7 @@ sub run_prePRIMUS_main {
 		
 		## Use all samples
 		my $cleaned_all_samples_stem = remove_SNPs($no_dup_stem,\@AIMs,"$data_stem\_cleaned");
-		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs);
+		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs, $min_pihat_threshold, $gzip_genome);
 		$IBD0_vs_IBD1_plot = make_IBD0_vs_IBD1_plot($genome_file,$study_name);
 		call_callrate($cleaned_all_samples_stem);
 		call_het($cleaned_all_samples_stem,$allele_freqs);
@@ -261,7 +263,7 @@ sub run_prePRIMUS_main {
 		#$cleaned_all_samples_stem = flip_SNPs($cleaned_all_samples_stem,$cleaned_all_samples_stem,@$flipped_SNP_arr_ref);
 		## Remove homozyous SNPs so the .frq file from the merge data will work
 		#$cleaned_all_samples_stem = remove_homozygous_SNPs($cleaned_all_samples_stem,$cleaned_all_samples_stem); ## This is necessary until --read-freq will allow homozygosity in the dataset (currently, 0/A in data fails if C/A in .frq);
-		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs);
+		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs, $min_pihat_threshold, $gzip_genome);
 		$IBD0_vs_IBD1_plot = make_IBD0_vs_IBD1_plot($genome_file,$study_name);
 		call_callrate($cleaned_all_samples_stem);
 		call_het($cleaned_all_samples_stem,$allele_freqs);
@@ -343,7 +345,7 @@ sub run_prePRIMUS_main {
 
 		# calculate_IBD_estimates subroutine must take the stem with the reference people merged in 
 
-		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs, $min_pihat_threshold);
+		$genome_file = calculate_IBD_estimates($cleaned_all_samples_stem,"",$allele_freqs, $min_pihat_threshold, $gzip_genome);
 		$IBD0_vs_IBD1_plot = make_IBD0_vs_IBD1_plot($genome_file,$study_name);
 
 
@@ -1298,6 +1300,7 @@ sub calculate_IBD_estimates {
 	my $new_stem_name = shift;
 	my $freq_file = shift;
 	my $min_pihat_threshold = shift;
+	my $gzip_genome = shift;
 
 	$new_stem_name = "$stem_name" if $new_stem_name eq "";
 	$LOG->info("\nCalculating IBDs for $stem_name (.frq = $freq_file) => $new_stem_name.genome\n");
@@ -1318,7 +1321,13 @@ sub calculate_IBD_estimates {
 		$min_pihat_threshold = 0;
 	}
 
-	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min $min_pihat_threshold $memory_flag");
+	# Set gzip modifier if gzip_genome flag is set
+	my $gzip_modifier = "";
+	if (defined $gzip_genome && $gzip_genome == 1) {
+		$gzip_modifier = "gz";
+	}
+
+	my $temp = system("$PLINK --noweb --bfile $stem_name\_temp $read_freq --genome $gzip_modifier --maf $MAF --geno $GENO --mind $MIND $plink_silent --out $new_stem_name --min $min_pihat_threshold $memory_flag");
 	if($temp > 0)
 	{
 		die "ERROR!!! PLINK failed to calculate IBD estimates; check log file: $new_stem_name.log\n";
