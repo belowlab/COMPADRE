@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 12;
+use Test::More tests => 17;
 use Test::Deep;
 use Path::Tiny; # This library we allow us to make temp files that we can use for testing
 use lib 'lib/perl_modules';
@@ -237,5 +237,102 @@ use Types::IMUS_types;
     my $id02_id03_not_in_scores = !exists $state->{id_id_scores}->{"ID02;ID03"};
 
     ok($only_2_pairs_in_scores && $id02_id03_not_in_scores, "Only pairs with PI_HAT above the threshold are included in id_id_scores");
+}
+
+# Test 7: load_samples with .fam format (FID IID ... → extract IID)
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.fam');
+    
+    # .fam format: FID IID PID MID SEX PHENO ...
+    my $test_file_str = "FAM1 ID01 0 0 1 -9\n" .
+                        "FAM2 ID02 0 0 2 -9\n" .
+                        "FAM3 ID03 0 0 1 -9\n";
+    
+    $temp->spew($test_file_str);
+    
+    my $config = PRIMUS::IMUS::Config->new();
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Load the samples
+    PRIMUS::IMUS::load_samples($config, $state, $temp);
+    
+    # Verify that 3 individuals were initialized with unique networks
+    is(scalar keys %{$state->{id_network}}, 3, ".fam format: 3 samples loaded with unique networks");
+}
+
+# Test 8: load_samples with single column format (IID only)
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.txt');
+    
+    # Single column format: just IID
+    my $test_file_str = "ID04\n" .
+                        "ID05\n" .
+                        "ID06\n";
+    
+    $temp->spew($test_file_str);
+    
+    my $config = PRIMUS::IMUS::Config->new();
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Load the samples
+    PRIMUS::IMUS::load_samples($config, $state, $temp);
+    
+    # Verify that 3 individuals were initialized
+    is(scalar keys %{$state->{id_network}}, 3, "Single column format: 3 samples loaded");
+}
+
+# Test 9: load_samples skips header lines
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.fam');
+    
+    # File with header and data
+    my $test_file_str = "FID IID PID MID SEX PHENO\n" .
+                        "FAM1 ID07 0 0 1 -9\n" .
+                        "FAM2 ID08 0 0 2 -9\n";
+    
+    $temp->spew($test_file_str);
+    
+    my $config = PRIMUS::IMUS::Config->new();
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Load the samples
+    PRIMUS::IMUS::load_samples($config, $state, $temp);
+    
+    # Verify that only 2 data rows were loaded (header skipped)
+    is(scalar keys %{$state->{id_network}}, 2, "Header line skipped correctly");
+}
+
+# Test 10: load_samples adds new ids not in original networks
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.fam');
+    
+    # Because the program reads through line by line, they will 
+    # be encountered sequentially. 
+    my $test_file_str = "FAM1 ID09 0 0 1 -9\n" .
+                        "FAM2 ID10 0 0 2 -9\n" .
+                        "FAM3 ID11 0 0 1 -9\n";
+    
+    $temp->spew($test_file_str);
+    
+    my $config = PRIMUS::IMUS::Config->new();
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Pre-populate with one ID
+    $state->{id_network}{"ID09"} = 0;
+    push @{ $state->{networks}{0} }, "ID09";
+    $state->{network_ctr} = 1;
+    
+    # Load samples (some already in network, some new)
+    PRIMUS::IMUS::load_samples($config, $state, $temp);
+    
+    # Verify that all 3 samples are now in networks
+    is(scalar keys %{$state->{id_network}}, 3, "All 3 samples have networks after load_samples");
+    
+    # Verify all 3 individuals are actually in the networks array
+    my $id09_in_networks = grep { $_ eq "ID09" } @{ $state->{networks}{0} };
+    my $id10_in_networks = grep { $_ eq "ID10" } @{ $state->{networks}{1} };
+    my $id11_in_networks = grep { $_ eq "ID11" } @{ $state->{networks}{2} };
+    
+    ok($id09_in_networks && $id10_in_networks && $id11_in_networks, "All 3 individuals are in their respective networks arrays");
 }
 
