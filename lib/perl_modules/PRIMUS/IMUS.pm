@@ -120,56 +120,11 @@ sub run_IMUS {
 #############################################################################################
 #### SUBROUTINES ############################################################################
 #############################################################################################
-# @purpose Reset all global variables to initial state between test runs or invocations
-# @param (none)
-# @return (void)
-# @side_effects Clears all package global variables including %id_id_scores, %networks, etc.
 
-# sub reset_values {
-#     $do_IMUS = 1;
-#     $do_PR   = 1;
-#     $verbose = 1;
-#     $lib_dir = "";
 
-#     %arg                     = ();
-#     $relatedness_file        = "";
-#     $relatedness_file_name   = "";
-#     $ped_file                = "none";
-#     $missingness_file        = "none";
-#     $output_dir              = "";
-#     $network_ctr             = 0;  # the next network # to add to %networks hash
-#     $LOWEST_MAX_NETWORK_SIZE = 60;
-#     $THRESHOLD               = .1; # default is .1
-#     $MIN_LIKELIHOOD          = .1;
-#     $EXCLUDE_VALUE           = 0;
-#     $OUTFILE_HEADER          = "";
-#     $IBD_file_ref            = "";
-#     $RELATEDNESS_COLUMN      = -1;
-#     $ID1_COLUMN              = -1;
-#     $ID2_COLUMN              = -1;
-#     $FID1_COLUMN             = -1;
-#     $FID2_COLUMN             = -1;
-#     %TRAIT_FID_COLUMNS       = -1;
-#     %TRAIT_ID_COLUMNS        = -1;
-#     %TRAIT_DATA_COLUMNS      = -1;
-#     $PRINT_ALTERNATE_RESULTS = 1;
-
-#     ### Here 'networks' could also be considered related groups or families;
-#     ## Hash of arrays: Key = network; Value = array (list) of IIDs in that network
-#     %networks = ();
-#     ## Regular hash; Key = IID1; Value = network that the individual belongs to
-#     %id_network = ();
-
-#     %id_id_all_info = ();
-#     @trait_refs     = ();
-#     @trait_order    = ();
-#     %trait_files =
-#       ();    ## Key = file name; Value = trait type (quantitative or binary)
-#     %child_parents = ();
-
-# }
-
-# # @purpose Print help/usage information to console
+# # @purpose Print help/usage information to console if IMUS 
+# # is being run as its own module. These are not the 
+# # parameters if running COMPADRE as a whole
 # # @param (none)
 # # @return (void) - prints to STDOUT
 # # @side_effects Clears screen and displays command-line usage
@@ -716,37 +671,42 @@ sub load_data {
 sub load_trait_data {
     my ($config, $state) = @_;
     
-    foreach my $file (@{$config->{trait_order}}) {
+    foreach my $trait_source (@{$config->{trait_order}}) {
 
-        #print "Loading trait data: $file\n";
-        my $trait_type = $config->{trait_files}->{$file};
+        #print "Loading trait data: $trait_source\n";
+        my $trait_type = $config->{trait_files}->{$trait_source};
         my %trait_hash;
 
         ## input the trait size values of 1 for each ID from the input file
-        if ( $file =~ /size/i ) {
+        ## This trait is added to the trait_order array if the 
+        # user doesn't provided any trait value or any trait. 
+        # This selection provides a default state wher all 
+        # individuals are weighted equally.
+        if ( $trait_source =~ /size/i ) {
             foreach my $ID ( keys %{$state->{id_network}} ) {
                 $trait_hash{$ID} = 1;
             }
             push( @{$state->{trait_refs}}, \%trait_hash )
               ; ## The hash references are loaded onto this array in the order of selection
-            next;
+            # We don't continue on to the while loop in this 
+            # case
+            next; 
         }
-        open( IN, $file ) or die "Trait file $file failed to open; $!\n";
+        open( IN, $trait_source ) or die "Trait file $trait_source failed to open; $!\n";
         while ( my $line = <IN> ) {
             $line =~ s/^\s+//;
             chomp($line);
             my @temp = split( /\s+/, $line );
 
-            my $FID_COLUMN = $config->{trait_fid_columns}->{$file};
-            my $IID_COLUMN = $config->{trait_id_columns}->{$file};
+            my $FID_COLUMN = $config->{trait_fid_columns}->{$trait_source};
+            my $IID_COLUMN = $config->{trait_id_columns}->{$trait_source};
             my $FID        = @temp[$FID_COLUMN];
             my $IID        = @temp[$IID_COLUMN];
 
-            #my $ID = "$FID**$IID";
             my $ID          = "$IID";
-            my $DATA_COLUMN = $config->{trait_data_columns}->{$file};
+            my $DATA_COLUMN = $config->{trait_data_columns}->{$trait_source};
             my $trait_val   = @temp[$DATA_COLUMN];
-
+            # We can exclude people on specific cases
             if ( $trait_val == $config->{exclude_value} ) {
                 $trait_val = "NA";
             }
@@ -758,22 +718,27 @@ sub load_trait_data {
                     $trait_val = 0;
                 }
                 else {
-                    die
-"Binary trait file $file contains a binary value other than 1 or 2 in the data column $DATA_COLUMN:\n\t$line\n";
+                    my $msg = "ERROR: Binary trait file $trait_source contains a binary value other than 1 or 2 in the data column $DATA_COLUMN:\n\t$line";
+                    $LOG->error($msg);
+                    die $msg . "\n";
                 }
             }
             $trait_hash{$ID} = $trait_val;
         }
         close(IN);
-
+        # If running COMPADRE, there is actually no way to hit 
+        # this block. Trait type could only be 1 value at a 
+        # time and there is no flag that would mix mean or 
+        # tail with btrait
         if ( $trait_type =~ /(mean|tail|\d+)/ ) {
             if ( $trait_type =~ /btrait/i ) {
-                die
-"INVALID TRAIT OPTION: $trait_type for file $file.\nOnly options 'high' and 'low' are valid with binary traits\n\n";
+                my $err_msg = "ERROR: INVALID TRAIT OPTION: $trait_type for file $trait_source.\nOnly options 'high' and 'low' are valid with binary traits";
+                $LOG->error($err_msg);
+                die $err_msg . "\n\n";
             }
 
             my $selection_val = fold_trait_data( $trait_type, \%trait_hash );
-            $LOG->info("Selection value for $file: " . $selection_val);
+            $LOG->info("Selection value for $trait_source: " . $selection_val);
         }
         push( @{$state->{trait_refs}}, \%trait_hash )
           ; ## The hash references are loaded onto this array in the order of selection
