@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 17;
+use Test::More tests => 23;
 use Test::Deep;
 use Path::Tiny; # This library we allow us to make temp files that we can use for testing
 use lib 'lib/perl_modules';
@@ -239,6 +239,10 @@ use Types::IMUS_types;
     ok($only_2_pairs_in_scores && $id02_id03_not_in_scores, "Only pairs with PI_HAT above the threshold are included in id_id_scores");
 }
 
+#################################
+## Following test check the 
+## load_samples function
+#################################
 # Test 7: load_samples with .fam format (FID IID ... → extract IID)
 {
     my $temp = Path::Tiny->tempfile(SUFFIX => '.fam');
@@ -336,3 +340,192 @@ use Types::IMUS_types;
     ok($id09_in_networks && $id10_in_networks && $id11_in_networks, "All 3 individuals are in their respective networks arrays");
 }
 
+###################################
+## Thest functions check the 
+## load_trait_data subroutine
+###################################
+
+# Test 18-19: load_trait_data binary trait conversion (1 and 2 → 0 and 1)
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.txt');
+    
+    # Binary trait file: header + 3 individuals with trait values of 1 and 2
+    # Values of 1 should convert to 0, and 2 should convert to 1
+    my $test_file_str = "FAM1 ID01 1\n" .
+                        "FAM2 ID02 2\n" .
+                        "FAM3 ID03 1\n";
+    
+    $temp->spew($test_file_str);
+    my $temp_str = $temp->stringify;
+    # Create config with pre-configured column indices
+    # (column detection happens in set_values2, not load_trait_data)
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => [$temp_str],
+        trait_files => {$temp_str => 'btrait'},
+        trait_fid_columns => { $temp_str => 0},
+        trait_id_columns => { $temp_str => 1},
+        trait_data_columns => { $temp_str => 2},
+        exclude_value => -9,
+    );
+    
+    # Create state with id_network populated 
+    # (load_trait_data needs this to know which IDs to process)
+    my $state = PRIMUS::IMUS::State->new();
+    $state->{id_network}{"ID01"} = 0;
+    $state->{id_network}{"ID02"} = 1;
+    $state->{id_network}{"ID03"} = 2;
+    
+    # Call load_trait_data
+    PRIMUS::IMUS::load_trait_data($config, $state);
+    
+    # Verify trait_refs array has one hash reference
+    is(scalar @{$state->{trait_refs}}, 1, "One trait hash stored in trait_refs");
+    
+    # Get the trait hash from trait_refs
+    my $trait_hash = $state->{trait_refs}->[0];
+    
+    # Verify binary conversion: 1 → 0, 2 → 1
+    my $binary_conversion_correct = 
+        $trait_hash->{ID01} == 0 && 
+        $trait_hash->{ID02} == 1 && 
+        $trait_hash->{ID03} == 0;
+    ok($binary_conversion_correct, "Binary trait values correctly converted (1→0, 2→1)");
+}
+
+# Test 20: load_trait_data exclude_value conversion to NA
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.txt');
+    
+    # Trait file with some individuals having -9 (exclude_value) and others with valid values
+    my $test_file_str = "FAM1 ID01 100\n" .
+                        "FAM2 ID02 -9\n" .
+                        "FAM3 ID03 50\n" .
+                        "FAM4 ID04 -9\n";
+    
+    $temp->spew($test_file_str);
+    my $temp_str = $temp->stringify;
+    
+    # Create config with exclude_value set to -9 (default)
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => [$temp_str],
+        trait_files => {$temp_str => 'qtrait'},
+        trait_fid_columns => { $temp_str => 0},
+        trait_id_columns => { $temp_str => 1},
+        trait_data_columns => { $temp_str => 2},
+        exclude_value => -9,
+    );
+    
+    # Create state with id_network populated
+    my $state = PRIMUS::IMUS::State->new();
+    $state->{id_network}{"ID01"} = 0;
+    $state->{id_network}{"ID02"} = 1;
+    $state->{id_network}{"ID03"} = 2;
+    $state->{id_network}{"ID04"} = 3;
+    
+    # Call load_trait_data
+    PRIMUS::IMUS::load_trait_data($config, $state);
+    
+    # Get the trait hash from trait_refs
+    my $trait_hash = $state->{trait_refs}->[0];
+    
+    # Verify exclude_value conversion to NA and normal values preserved
+    my $exclude_values_correct = 
+        $trait_hash->{ID01} == 100 &&
+        $trait_hash->{ID02} eq "NA" &&
+        $trait_hash->{ID03} == 50 &&
+        $trait_hash->{ID04} eq "NA";
+    ok($exclude_values_correct, "Quantitative trait values matching with excluded IDs (-9) converted to NA string");
+}
+
+# Test 21: load_trait_data binary trait with excluded individuals
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.txt');
+    
+    # Binary trait file with a mix of valid values (1, 2) and excluded values (-9)
+    my $test_file_str = "FAM1 ID01 2\n" .
+                        "FAM2 ID02 -9\n" .
+                        "FAM3 ID03 1\n" .
+                        "FAM4 ID04 -9\n" .
+                        "FAM5 ID05 2\n";
+    
+    $temp->spew($test_file_str);
+    my $temp_str = $temp->stringify;
+    
+    # Create config with exclude_value set to -9 and binary trait type
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => [$temp_str],
+        trait_files => {$temp_str => 'btrait'},
+        trait_fid_columns => { $temp_str => 0},
+        trait_id_columns => { $temp_str => 1},
+        trait_data_columns => { $temp_str => 2},
+        exclude_value => -9,
+    );
+    
+    # Create state with id_network populated
+    my $state = PRIMUS::IMUS::State->new();
+    $state->{id_network}{"ID01"} = 0;
+    $state->{id_network}{"ID02"} = 1;
+    $state->{id_network}{"ID03"} = 2;
+    $state->{id_network}{"ID04"} = 3;
+    $state->{id_network}{"ID05"} = 4;
+    
+    # Call load_trait_data
+    PRIMUS::IMUS::load_trait_data($config, $state);
+    
+    # Get the trait hash from trait_refs
+    my $trait_hash = $state->{trait_refs}->[0];
+    
+    # Verify binary conversion AND exclude_value handling:
+    # 2→1, 1→0 for valid values; -9→"NA" for excluded values
+    my $binary_and_exclude_correct = 
+        $trait_hash->{ID01} == 1 &&
+        $trait_hash->{ID02} eq "NA" &&
+        $trait_hash->{ID03} == 0 &&
+        $trait_hash->{ID04} eq "NA" &&
+        $trait_hash->{ID05} == 1;
+    ok($binary_and_exclude_correct, "Binary trait values converted (2→1, 1→0) with excluded individuals as NA");
+}
+
+# Test 22-23: load_trait_data dies when binary trait contains invalid value (not 1 or 2)
+{
+    my $temp = Path::Tiny->tempfile(SUFFIX => '.txt');
+    
+    # Binary trait file with an invalid value (3 is not 1 or 2)
+    my $test_file_str = "FID IID TRAIT\n" .
+                        "FAM1 ID01 1\n" .
+                        "FAM2 ID02 3\n" .
+                        "FAM3 ID03 2\n";
+    
+    $temp->spew($test_file_str);
+    my $temp_str = $temp->stringify;
+    
+    # Create config with binary trait type
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => [$temp_str],
+        trait_files => {$temp_str => 'btrait'},
+        trait_fid_columns => { $temp_str => 0},
+        trait_id_columns => { $temp_str => 1},
+        trait_data_columns => { $temp_str => 2},
+        exclude_value => -9,
+    );
+    
+    # Create state with id_network populated
+    my $state = PRIMUS::IMUS::State->new();
+    $state->{id_network}{"ID01"} = 0;
+    $state->{id_network}{"ID02"} = 1;
+    $state->{id_network}{"ID03"} = 2;
+    
+    # Verify that load_trait_data dies when encountering invalid binary value
+    my $died = 0;
+    my $error_msg = "";
+    eval {
+        PRIMUS::IMUS::load_trait_data($config, $state);
+    };
+    if ($@) {
+        $died = 1;
+        $error_msg = $@;
+    }
+    
+    ok($died, "load_trait_data dies when binary trait contains value other than 1 or 2");
+    like($error_msg, qr/Binary trait file.*contains a binary value other than 1 or 2/, "Error message mentions binary value requirement");
+}
