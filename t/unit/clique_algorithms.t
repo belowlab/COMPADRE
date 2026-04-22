@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 19;
+use Test::More tests => 23;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -445,4 +445,126 @@ sub setup_empty_network {
     }
     
     ok($is_independent, "King_method: No two nodes in selected set are related (independence property satisfied)");
+}
+
+############################
+# Test get_maximum_clique function
+############################
+
+# Test 20: get_maximum_clique with single clique (edge case)
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1'],
+        trait_files => {'trait_file_1' => 'size'},
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Create 1 clique with 2 individuals
+    my %clique1 = (ID01 => 1, ID02 => 1);
+    my @cliques = (\%clique1);
+    
+    # Create trait data: 1 trait with values for both individuals
+    my %trait_data = (ID01 => 5, ID02 => 3);
+    my @trait_refs = (\%trait_data);
+    
+    # Call get_maximum_clique
+    my $result = PRIMUS::IMUS::get_maximum_clique($config, $state, @cliques, \@trait_refs);
+    
+    is($result, 0, "get_maximum_clique single clique: Returns index 0");
+}
+
+# Test 21: get_maximum_clique with three cliques and high preference
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1'],
+        trait_files => {'trait_file_1' => 'high_qtrait'},
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Create 3 cliques with different trait averages
+    my %clique1 = (ID01 => 1, ID02 => 1);  # avg = 5
+    my %clique2 = (ID03 => 1, ID04 => 1);  # avg = 7.5 (sum=15)
+    my %clique3 = (ID05 => 1, ID06 => 1);  # avg = 15
+    my @cliques = (\%clique1, \%clique2, \%clique3);
+    
+    # Trait data for each clique
+    my %trait_data = (
+        ID01 => 5, ID02 => 5,        # Clique 1: sum=10, avg=5
+        ID03 => 7.5, ID04 => 7.5,    # Clique 2: sum=15, avg=7.5
+        ID05 => 15, ID06 => 15,      # Clique 3: sum=30, avg=15
+    );
+    my @trait_refs = (\%trait_data);
+    
+    # Call get_maximum_clique
+    my $result = PRIMUS::IMUS::get_maximum_clique($config, $state, @cliques, \@trait_refs);
+    
+    is($result, 2, "get_maximum_clique high preference: Selects clique with highest average (index 2)");
+}
+
+# Test 22: get_maximum_clique with three cliques and low preference
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1'],
+        trait_files => {'trait_file_1' => 'low_qtrait'},
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Create 3 cliques (same as Test 21)
+    my %clique1 = (ID01 => 1, ID02 => 1);  # avg = 5
+    my %clique2 = (ID03 => 1, ID04 => 1);  # avg = 7.5 (sum=15)
+    my %clique3 = (ID05 => 1, ID06 => 1);  # avg = 15
+    my @cliques = (\%clique1, \%clique2, \%clique3);
+    
+    # Trait data for each clique
+    my %trait_data = (
+        ID01 => 5, ID02 => 5,        # Clique 1: sum=10, avg=5
+        ID03 => 7.5, ID04 => 7.5,    # Clique 2: sum=15, avg=7.5
+        ID05 => 15, ID06 => 15,      # Clique 3: sum=30, avg=15
+    );
+    my @trait_refs = (\%trait_data);
+    
+    # Call get_maximum_clique
+    my $result = PRIMUS::IMUS::get_maximum_clique($config, $state, @cliques, \@trait_refs);
+    
+    is($result, 0, "get_maximum_clique low preference: Selects clique with lowest average (index 0)");
+}
+
+# Test 23: get_maximum_clique with multiple traits and priority ordering
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1', 'trait_file_2'],
+        trait_files => {
+            'trait_file_1' => 'high_qtrait',
+            'trait_file_2' => 'low_qtrait',
+        },
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Create 3 cliques
+    my %clique1 = (ID01 => 1, ID02 => 1);
+    my %clique2 = (ID03 => 1, ID04 => 1);
+    my %clique3 = (ID05 => 1, ID06 => 1);
+    my @cliques = (\%clique1, \%clique2, \%clique3);
+    
+    # Trait data: 2 traits
+    my %trait_data_1 = (
+        ID01 => 5, ID02 => 5,        # Clique 1: high avg = 5
+        ID03 => 8, ID04 => 8,        # Clique 2: high avg = 8 (WINNER for first trait)
+        ID05 => 3, ID06 => 3,        # Clique 3: high avg = 3
+    );
+    my %trait_data_2 = (
+        ID01 => 10, ID02 => 10,      # Clique 1: low avg = 10
+        ID03 => 8, ID04 => 8,        # Clique 2: low avg = 8
+        ID05 => 9, ID06 => 9,        # Clique 3: low avg = 9
+    );
+    my @trait_refs = (\%trait_data_1, \%trait_data_2);
+    
+    # Call get_maximum_clique
+    my $result = PRIMUS::IMUS::get_maximum_clique($config, $state, @cliques, \@trait_refs);
+    
+    is($result, 1, "get_maximum_clique multiple traits: First trait priority selects index 1 (highest high value)");
 }
