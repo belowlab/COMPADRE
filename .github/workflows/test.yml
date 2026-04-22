@@ -32,7 +32,14 @@ jobs:
           cp -r /tmp/compadre_extract/compadre_data/* lib/ || \
             { echo "Failed to copy compadre_data to lib/"; exit 1; }
 
-      - name: Run test suite
+      - name: Run unit test suite
         shell: bash -l {0}
         run: |
-          prove -r t/ -v
+          prove -r t/unit -v
+
+      - name: Run integration test suite
+        shell: bash -l {0}
+        run: |
+          prove -r t/integration -v
+
+      
