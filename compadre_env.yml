@@ -27,6 +27,8 @@ dependencies:
   - plink2=2.0.0a.6.9
   - r-base=4.5.3
   - r-kernsmooth=2.23_26
+  - perl-path-tiny=0.122
+  - perl-test-deep=1.130
   - pip:
       - aiodns==2.0.0
       - aiohappyeyeballs==2.4.3

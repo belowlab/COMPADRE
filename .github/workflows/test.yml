@@ -2,10 +2,9 @@ name: Test Suite
 
 on:
   push:
-  pull_request:
 
 jobs:
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     
     steps:
@@ -20,7 +19,7 @@ jobs:
           auto-activate: true
           activate-environment: compadre
           environment-file: compadre_env.yml
-          channels: conda-forge,bioconda,defaults
+          channels: conda-forge,bioconda
           channel-priority: flexible
       
       - name: Download and extract required reference data
@@ -33,7 +32,43 @@ jobs:
           cp -r /tmp/compadre_extract/compadre_data/* lib/ || \
             { echo "Failed to copy compadre_data to lib/"; exit 1; }
 
-      - name: Run test suite
+      - name: Run unit test suite
         shell: bash -l {0}
         run: |
-          prove -r t/ -v
+          prove -r t/unit -v
+
+  test-integration:
+    runs-on: ubuntu-latest
+    needs: test-unit
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      
+      - name: Set up Mamba environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          use-mamba: true
+          auto-activate: true
+          activate-environment: compadre
+          environment-file: compadre_env.yml
+          channels: conda-forge,bioconda
+          channel-priority: flexible
+      
+      - name: Download and extract required reference data
+        run: |
+          curl -fL -o /tmp/compadre_data.zip \
+            https://github.com/belowlab/COMPADRE/releases/download/pre-release-0.2.0/compadre_data.zip || \
+            { echo "Failed to download compadre_data.zip"; exit 1; }
+          unzip -o /tmp/compadre_data.zip -d /tmp/compadre_extract/ || \
+            { echo "Failed to extract compadre_data.zip"; exit 1; }
+          cp -r /tmp/compadre_extract/compadre_data/* lib/ || \
+            { echo "Failed to copy compadre_data to lib/"; exit 1; }
+
+      - name: Run integration test suite
+        shell: bash -l {0}
+        run: |
+          prove -r t/integration -v
+
+      
