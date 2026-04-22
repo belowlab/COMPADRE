@@ -531,41 +531,6 @@ sub get_correct_column {
       1;   # needs to be zero based, not one based like printed out to the user.
 }
 
-sub load_samples
-{
-	my $file = shift;
-	if($verbose >= 1){print $LOG "Loading all samples from $file...\n";}
-	
-	if(!open(IN,$file))
-	{
-		my $msg = "ERROR!!! Samples file $file cannot be read; $!\n";
-		print $LOG $msg if defined $LOG;
-		die $msg;
-	}
-	while(my $line = <IN>)
-	{
-		$line =~ s/^\s+//;
-		chomp($line);
-		next if $line eq "" || $line =~ /^FID/; # Skip empty and header
-
-		my @temp = split(/\s+/, $line);
-		my $iid;
-		if (@temp >= 2) {
-			$iid = $temp[1]; # Standard .fam format: FID IID ...
-		} else {
-			$iid = $temp[0]; # Single column format
-		}
-		my $name = "$iid";
-
-		if (!exists $id_network{$name}) {
-			$id_network{$name} = $network_ctr;
-			push @{ $networks{$network_ctr} }, "$name";
-			$network_ctr++;
-		}
-	}
-	close(IN);
-}
-
 # @purpose Load sample IDs from file into %id_network and %networks
 # @param $file (scalar) - Path to sample file
 # @return (void)
