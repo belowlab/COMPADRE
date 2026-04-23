@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 31;
+use Test::More tests => 33;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -720,3 +720,38 @@ sub setup_empty_network {
     
     is(scalar(@components), 2, "Connected components bipartite: Returns 2 components (one for each group)");
 }
+
+# Test reduce_neighbors function
+############################
+
+# Test 32-33: Remove node with degree 3 - all neighbors lose 1 degree
+{
+    my $node = 'ID01';
+    my %neighbors = (
+        ID01 => { ID02 => 1, ID03 => 1, ID04 => 1 },  # ID01 has 3 neighbors
+        ID02 => { ID01 => 1, ID05 => 1 },
+        ID03 => { ID01 => 1, ID05 => 1 },
+        ID04 => { ID01 => 1 },
+        ID05 => { ID02 => 1, ID03 => 1 },
+    );
+    
+    my %degrees = (
+        ID01 => 3,
+        ID02 => 2,
+        ID03 => 2,
+        ID04 => 1,
+        ID05 => 2,
+    );
+    
+    # Remove ID01 from network
+    PRIMUS::IMUS::reduce_neighbors($node, \%neighbors, \%degrees);
+    
+    # All 3 neighbors should have degree reduced by 1 and ID01 removed from their neighbor lists
+    cmp_deeply(\%degrees, { ID01 => 3, ID02 => 1, ID03 => 1, ID04 => 0, ID05 => 2 }, "reduce_neighbors: All degrees updated correctly");
+
+    # Check that ID01 was removed correctly from the neighbors' hashes
+    my $neighbors_removed = !exists $neighbors{ID02}{ID01} && !exists $neighbors{ID03}{ID01} && !exists $neighbors{ID04}{ID01};
+    ok($neighbors_removed, "reduce_neighbors: ID01 removed from all neighbor hashes");
+}
+
+
