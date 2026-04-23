@@ -1207,7 +1207,7 @@ sub get_highest_degree_node {
     my $max_node;
     my @max_trait_values = qw(NA);
 
-    foreach my $node ( keys %$degrees_ref ) {
+    foreach my $node ( sort keys %$degrees_ref ) {
         my $degree = $$degrees_ref{$node};
 
         if ( $degree > $max_degree ) {

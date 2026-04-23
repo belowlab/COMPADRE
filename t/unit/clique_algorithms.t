@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 23;
+use Test::More tests => 31;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -567,4 +567,156 @@ sub setup_empty_network {
     my $result = PRIMUS::IMUS::get_maximum_clique($config, $state, @cliques, \@trait_refs);
     
     is($result, 1, "get_maximum_clique multiple traits: First trait priority selects index 1 (highest high value)");
+}
+
+# Test get_highest_degree_node function
+############################
+
+# Test 24-25: get_highest_degree_node with single maximum degree
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1'],
+        trait_files => {'trait_file_1' => 'size'},
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Set up trait data
+    my %trait_data = (ID01 => 10, ID02 => 5, ID03 => 8);
+    $state->{trait_refs} = [\%trait_data];
+    
+    # Create degrees: ID01 has degree 3 (highest), others have 1-2
+    my %degrees = (ID01 => 3, ID02 => 2, ID03 => 1);
+    
+    # Call get_highest_degree_node
+    my ($node, $degree) = PRIMUS::IMUS::get_highest_degree_node($config, $state, \%degrees);
+    
+    is($node, 'ID01', "get_highest_degree_node single max: Returns node with highest degree (ID01 with degree 3)");
+    
+    is($degree, 3, "get_highest_degree_node single max: Returns correct degree value (3)");
+}
+
+# Test 26: get_highest_degree_node with tied degrees using trait tiebreaker
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1'],
+        trait_files => {'trait_file_1' => 'high_qtrait'},  # Higher trait wins
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Set up trait data: ID01 and ID02 are tied in degree, but ID02 has better traits
+    my %trait_data = (ID01 => 5, ID02 => 10, ID03 => 3);
+    $state->{trait_refs} = [\%trait_data];
+    
+    # Create degrees: ID01 and ID02 both have degree 2 (tie)
+    my %degrees = (ID01 => 2, ID02 => 2, ID03 => 1);
+    
+    # Call get_highest_degree_node
+    my ($node, $degree) = PRIMUS::IMUS::get_highest_degree_node($config, $state, \%degrees);
+    
+    is($node, 'ID02', "get_highest_degree_node tied degrees: Tiebreaker selects node with better traits (ID02 with trait 10 > 5)");
+}
+
+# Test 27: get_highest_degree_node with low trait preference (lower value should win)
+{
+    my $config = PRIMUS::IMUS::Config->new(
+        trait_order => ['trait_file_1'],
+        trait_files => {'trait_file_1' => 'low_qtrait'},  # Lower trait wins (prefer to remove)
+    );
+    
+    my $state = PRIMUS::IMUS::State->new();
+    
+    # Set up trait data: ID01 and ID03 are tied in degree
+    # With low_qtrait, ID03 with lower value (3) should be preferred for removal
+    my %trait_data = (ID01 => 8, ID02 => 4, ID03 => 3);
+    $state->{trait_refs} = [\%trait_data];
+    
+    # Create degrees: ID01 and ID03 both have degree 2 (tie)
+    my %degrees = (ID01 => 2, ID02 => 1, ID03 => 2);
+    
+    # Call get_highest_degree_node
+    my ($node, $degree) = PRIMUS::IMUS::get_highest_degree_node($config, $state, \%degrees);
+    
+    is($node, 'ID03', "get_highest_degree_node low preference tiebreaker: Selects node with lower trait value for removal (ID03 with trait 3)");
+}
+
+# Test get_connected_components function
+############################
+
+# Test 28: Single connected component - all 5 nodes connected
+{
+    # Build a fully connected network (all nodes connected to each other)
+    my %neighbors = (
+        ID01 => { ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 },
+        ID02 => { ID01 => 1, ID03 => 1, ID04 => 1, ID05 => 1 },
+        ID03 => { ID01 => 1, ID02 => 1, ID04 => 1, ID05 => 1 },
+        ID04 => { ID01 => 1, ID02 => 1, ID03 => 1, ID05 => 1 },
+        ID05 => { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1 },
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    
+    # Call get_connected_components
+    my @components = PRIMUS::IMUS::get_connected_components($network_ref, \%neighbors);
+    
+    is(scalar(@components), 1, "Connected component single: Returns 1 component for fully connected network (5 nodes)");
+}
+
+# Test 29: Multiple components - 3 isolated nodes + 2 connected nodes
+{
+    # Build network with 3 isolated nodes and 2 that are connected to each other
+    my %neighbors = (
+        ID01 => { ID02 => 1 },        # ID01 connected to ID02
+        ID02 => { ID01 => 1 },        # ID02 connected to ID01
+        ID03 => {},                   # ID03 isolated
+        ID04 => {},                   # ID04 isolated
+        ID05 => {},                   # ID05 isolated
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    
+    # Call get_connected_components
+    my @components = PRIMUS::IMUS::get_connected_components($network_ref, \%neighbors);
+    
+    is(scalar(@components), 4, "Connected components multiple: Returns 4 components (1 pair + 3 isolated)");
+}
+
+# Test 30: All isolated nodes - 5 nodes with no edges
+{
+    # Build network where all nodes are isolated (no connections)
+    my %neighbors = (
+        ID01 => {},
+        ID02 => {},
+        ID03 => {},
+        ID04 => {},
+        ID05 => {},
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    
+    # Call get_connected_components
+    my @components = PRIMUS::IMUS::get_connected_components($network_ref, \%neighbors);
+    
+    is(scalar(@components), 5, "Connected components all isolated: Returns 5 components (one per node)");
+}
+
+# Test 31: Bipartite structure - 2 groups with connections only within groups
+{
+    # Build bipartite network: Group A (ID01-ID03) connected within, Group B (ID04-ID05) connected within
+    # No connections between groups
+    my %neighbors = (
+        ID01 => { ID02 => 1, ID03 => 1 },     # Group A: ID01 connects to ID02, ID03
+        ID02 => { ID01 => 1, ID03 => 1 },     # Group A: ID02 connects to ID01, ID03
+        ID03 => { ID01 => 1, ID02 => 1 },     # Group A: ID03 connects to ID01, ID02
+        ID04 => { ID05 => 1 },                # Group B: ID04 connects to ID05
+        ID05 => { ID04 => 1 },                # Group B: ID05 connects to ID04
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    
+    # Call get_connected_components
+    my @components = PRIMUS::IMUS::get_connected_components($network_ref, \%neighbors);
+    
+    is(scalar(@components), 2, "Connected components bipartite: Returns 2 components (one for each group)");
 }
