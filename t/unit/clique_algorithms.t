@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 47;
+use Test::More tests => 55;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -936,6 +936,106 @@ sub setup_empty_network {
     
     # Should return empty hash (no neighbors > threshold)
     is(scalar(keys %neighbors), 0, "get_actual_neighbors empty: Returns empty hash when no neighbors above threshold");
+}
+
+# Test get_inverse_neighbors function
+############################
+
+# Test 41: Simple case - 1 node with 2 unrelated neighbors (both <= threshold)
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.05,  # Both <= threshold (default 0.1)
+            'ID01;ID03' => 0.08,
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1 };
+    
+    # Call get_inverse_neighbors for ID01
+    my $neighbors_ref = {};
+    PRIMUS::IMUS::get_inverse_neighbors($config, $state, 'ID01', $network_ref, $neighbors_ref);
+    
+    # Should return 2 unrelated neighbors
+    is(scalar(keys %{$neighbors_ref}), 2, "get_inverse_neighbors simple: Returns 2 unrelated neighbors for ID01");
+    ok(exists $neighbors_ref->{ID02} && exists $neighbors_ref->{ID03}, 
+       "get_inverse_neighbors simple: Both ID02 and ID03 in unrelated neighbors");
+}
+
+# Test 42: With threshold filtering - 1 node with 5 neighbors, 2 <= threshold
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  # > threshold (related)
+            'ID01;ID03' => 0.28,  # > threshold (related)
+            'ID01;ID04' => 0.30,  # > threshold (related)
+            'ID01;ID05' => 0.05,  # <= threshold (unrelated)
+            'ID01;ID06' => 0.08,  # <= threshold (unrelated)
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1, ID06 => 1 };
+    
+    # Call get_inverse_neighbors for ID01
+    my $neighbors_ref = {};
+    PRIMUS::IMUS::get_inverse_neighbors($config, $state, 'ID01', $network_ref, $neighbors_ref);
+    
+    # Should return only 2 unrelated neighbors (those <= threshold)
+    is(scalar(keys %{$neighbors_ref}), 2, "get_inverse_neighbors threshold: Returns 2 neighbors (<= threshold)");
+    ok(exists $neighbors_ref->{ID05} && exists $neighbors_ref->{ID06}, 
+       "get_inverse_neighbors threshold: ID05, ID06 in unrelated neighbors (below threshold)");
+    ok(!exists $neighbors_ref->{ID02} && !exists $neighbors_ref->{ID03} && !exists $neighbors_ref->{ID04}, 
+       "get_inverse_neighbors threshold: ID02, ID03, ID04 not in neighbors (above threshold)");
+}
+
+# Test 43: Self-reference exclusion - Node should not be its own unrelated neighbor
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.05,  # <= threshold (unrelated)
+            'ID01;ID03' => 0.08,  # <= threshold (unrelated)
+            'ID01;ID04' => 0.09,  # <= threshold (unrelated)
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1};
+    
+    # Call get_inverse_neighbors for ID01
+    my $neighbors_ref = {};
+    PRIMUS::IMUS::get_inverse_neighbors($config, $state, 'ID01', $network_ref, $neighbors_ref);
+    
+    # ID01 should not be in its own unrelated neighbors hash
+    ok(!exists $neighbors_ref->{ID01}, "get_inverse_neighbors self-exclusion: ID01 not in its own unrelated neighbors");
+    
+    # Should still have the 3 unrelated neighbors
+    is(scalar(keys %{$neighbors_ref}), 3, "get_inverse_neighbors self-exclusion: Has 3 neighbors excluding self");
+}
+
+# Test 44: Empty unrelated neighbors - Node with no neighbors <= threshold
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  # > threshold (related)
+            'ID01;ID03' => 0.28,  # > threshold (related)
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1 };
+    
+    # Call get_inverse_neighbors for ID01
+    my $neighbors_ref = {};
+    PRIMUS::IMUS::get_inverse_neighbors($config, $state, 'ID01', $network_ref, $neighbors_ref);
+    
+    # Should return empty hash (no neighbors <= threshold)
+    is(scalar(keys %{$neighbors_ref}), 0, "get_inverse_neighbors empty: Returns empty hash when no neighbors below threshold");
 }
 
 

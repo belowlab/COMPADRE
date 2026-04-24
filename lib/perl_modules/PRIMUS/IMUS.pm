@@ -1486,16 +1486,16 @@ sub get_inverse_neighbors {
 
     my ( $config, $state, $v, $hash_ref, $neighbors ) = (@_);
 
-    foreach my $n_v ( keys %$hash_ref ) {
+    for my $n_v ( keys $hash_ref->%* ) {
+        # safeguard against self-comparison
+        next if $n_v eq $v;
 
-        if ( $n_v eq $v ) {
-            next;
-        }
         my $key   = sort_key( $v, $n_v );
         my $score = $state->{id_id_scores}->{$key};
-        if ( $score <= $config->{threshold} ) {
-            $$neighbors{$n_v} = $$hash_ref{$n_v};
-        }
+
+        # We are updating the $neighbor hash which is why we have to 
+        # do the double dereference by $neighbors->{$n_v}
+        $neighbors->{$n_v} = $hash_ref->{$n_v} if $score <= $config->{threshold};
     }
     return $neighbors;
 }
