@@ -1152,7 +1152,6 @@ sub write_out_independent_set {
 # @param $network_ref (hashref) - Network nodes (nodes => value)
 # @param $degree_ref (hashref) - Output: nodes => degree count
 # @param $neighbors_ref (hashref) - Output: nodes => neighbor hashref
-# @param $id_id_scores (hashref) - Reference to %id_id_scores hash (pair_key => PI_HAT)
 # @return (void)
 # @side_effects Modifies $degree_ref and $neighbors_ref hashrefs
 # @uses get_actual_neighbors to find related nodes (original graph)
@@ -1168,8 +1167,10 @@ sub load_degrees_and_neighbors {
 
         $$neighbors_ref{$node} =
           \%neighbors;    #get_actual_neighbors($node,$network_ref);
-        my @temp   = keys %{ $neighbors_ref->{$node} };    # %neighbors;
-        my $degree = @temp;
+        
+        # Count the number of neighbors for this node to get the 
+        # "degree"
+        my $degree = keys $neighbors_ref->{$node}->%*;
         $$degree_ref{$node} = $degree;
     }
 }
@@ -1442,9 +1443,6 @@ sub select_pivot {
     return ( $u, %u_neighbors );
 }
 
-# @purpose Find all related neighbors of a node (where score > THRESHOLD)
-# @param $v (scalar) - Node ID to find related neighbors for
-# @param $hash_ref (hashref) - Candidate nodes to check against (nodes => value)
 # @purpose Find all related neighbors of a node (where kinship > THRESHOLD)
 # @param $config (hashref) - Config object with threshold
 # @param $state (hashref) - State object with id_id_scores
@@ -1459,15 +1457,16 @@ sub get_actual_neighbors {
     my ( $config, $state, $v, $hash_ref ) = (@_);
     my %neighbors;
 
-    foreach my $n_v ( keys %$hash_ref ) {
-        if ( $n_v eq $v ) {
-            next;
-        }
+    for my $n_v ( keys $hash_ref->%*) {
+        # guard against self-comparison
+        next if $n_v eq $v;
+
+        # Get the PI_HAT value for the pair
         my $key   = sort_key( $v, $n_v );
         my $score = $state->{id_id_scores}->{$key};
-        if ( $score > $config->{threshold} ) {
-            $neighbors{$n_v} = $$hash_ref{$n_v};
-        }
+        # Create neighbors hash 
+        $neighbors{$n_v} = $hash_ref->{$n_v} if $score > $config->{threshold};
+            
     }
 
     return %neighbors;

@@ -12,7 +12,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 33;
+use Test::More tests => 47;
 use Test::Deep;
 use lib 'lib/perl_modules';
 use lib 't/lib';
@@ -721,10 +721,99 @@ sub setup_empty_network {
     is(scalar(@components), 2, "Connected components bipartite: Returns 2 components (one for each group)");
 }
 
+# Test load_degrees_and_neighbors function
+############################
+
+# Test 32: Complete graph - all nodes have degree = n-1
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    # Create complete graph K5: all 5 nodes connected to each other
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  'ID01;ID03' => 0.28,  'ID01;ID04' => 0.30,  'ID01;ID05' => 0.26,
+            'ID02;ID03' => 0.27,  'ID02;ID04' => 0.25,  'ID02;ID05' => 0.29,
+            'ID03;ID04' => 0.26,  'ID03;ID05' => 0.28,
+            'ID04;ID05' => 0.27,
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    my %degrees;
+    my %neighbors;
+    
+    # Call load_degrees_and_neighbors
+    PRIMUS::IMUS::load_degrees_and_neighbors($config, $state, $network_ref, \%degrees, \%neighbors);
+    
+    # In complete graph: each node connects to all others, so degree = 4
+    ok($degrees{ID01} == 4 && $degrees{ID02} == 4 && $degrees{ID03} == 4 && $degrees{ID04} == 4 && $degrees{ID05} == 4, "load_degrees_and_neighbors complete graph: All 5 nodes have degree 4");
+    
+    # Verify neighbors hash populated correctly
+    is(scalar(keys %{ $neighbors{ID01} }), 4, "load_degrees_and_neighbors complete graph: ID01 neighbors hash has 4 entries");
+}
+
+# Test 33: Small network with varying degrees
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    # Create small network with mixed connectivity
+    # ID01 connected to ID02, ID03 (degree 2)
+    # ID02 connected to ID01 (degree 1)
+    # ID03 connected to ID01, ID04 (degree 2)
+    # ID04 connected to ID03, ID05 (degree 2)
+    # ID05 connected to ID04 only (degree 1)
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  # Above threshold
+            'ID01;ID03' => 0.28,  # Above threshold
+            'ID03;ID04' => 0.26,  # Above threshold
+            'ID04;ID05' => 0.27,  # Above threshold
+            # ID02;ID03, ID02;ID04, ID02;ID05, ID01;ID04, ID01;ID05, ID03;ID05 = undefined (below threshold)
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    my %degrees;
+    my %neighbors;
+    
+    # Call load_degrees_and_neighbors
+    PRIMUS::IMUS::load_degrees_and_neighbors($config, $state, $network_ref, \%degrees, \%neighbors);
+    
+    # Verify degrees match expected values
+    ok($degrees{ID01} == 2 && $degrees{ID02} == 1 && $degrees{ID03} == 2, "load_degrees_and_neighbors small network: Degrees correctly calculated (ID01=2, ID02=1, ID03=2)");
+    
+    # Verify specific neighbors for one node
+    ok(exists $neighbors{ID01}{ID02} && exists $neighbors{ID01}{ID03}, "load_degrees_and_neighbors small network: ID01 has neighbors ID02 and ID03");
+}
+
+# Test 34: All isolated nodes - no edges (all degree = 0)
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    # Create network with no edges (all nodes unrelated)
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {}  # Empty: no relationships defined
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1 };
+    my %degrees;
+    my %neighbors;
+    
+    # Call load_degrees_and_neighbors
+    PRIMUS::IMUS::load_degrees_and_neighbors($config, $state, $network_ref, \%degrees, \%neighbors);
+    
+    # All nodes should have degree 0 (no edges)
+    ok($degrees{ID01} == 0 && $degrees{ID02} == 0 && $degrees{ID03} == 0, 
+       "load_degrees_and_neighbors isolated: All nodes have degree 0 (ID01=0, ID02=0, ID03=0)");
+    
+    # Verify neighbors hashes are empty
+    is(scalar(keys %{ $neighbors{ID01} }), 0, "load_degrees_and_neighbors isolated: ID01 neighbors hash is empty");
+}
+
 # Test reduce_neighbors function
 ############################
 
-# Test 32-33: Remove node with degree 3 - all neighbors lose 1 degree
+# Test 35-36: Remove node with degree 3 - all neighbors lose 1 degree
 {
     my $node = 'ID01';
     my %neighbors = (
@@ -752,6 +841,101 @@ sub setup_empty_network {
     # Check that ID01 was removed correctly from the neighbors' hashes
     my $neighbors_removed = !exists $neighbors{ID02}{ID01} && !exists $neighbors{ID03}{ID01} && !exists $neighbors{ID04}{ID01};
     ok($neighbors_removed, "reduce_neighbors: ID01 removed from all neighbor hashes");
+}
+
+# Test get_actual_neighbors function
+############################
+
+# Test 37: Simple case - 1 node with 2 neighbors (both > threshold)
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  # Both > threshold (default 0.1)
+            'ID01;ID03' => 0.28,
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1 };
+    
+    # Call get_actual_neighbors for ID01
+    my %neighbors = PRIMUS::IMUS::get_actual_neighbors($config, $state, 'ID01', $network_ref);
+    
+    # Should return 2 neighbors with correct values
+    is(scalar(keys %neighbors), 2, "get_actual_neighbors simple: Returns 2 neighbors for ID01");
+    ok(exists $neighbors{ID02} && exists $neighbors{ID03}, "get_actual_neighbors simple: Both ID02 and ID03 in neighbors");
+}
+
+# Test 38: With threshold filtering - 1 node with 5 neighbors, 3 > threshold
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  # > threshold
+            'ID01;ID03' => 0.28,  # > threshold
+            'ID01;ID04' => 0.30,  # > threshold
+            'ID01;ID05' => 0.05,  # <= threshold
+            'ID01;ID06' => 0.08,  # <= threshold
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1, ID06 => 1 };
+    
+    # Call get_actual_neighbors for ID01
+    my %neighbors = PRIMUS::IMUS::get_actual_neighbors($config, $state, 'ID01', $network_ref);
+    
+    # Should return only 3 neighbors (those > threshold)
+    is(scalar(keys %neighbors), 3, "get_actual_neighbors threshold: Returns 3 neighbors (> threshold)");
+    ok(exists $neighbors{ID02} && exists $neighbors{ID03} && exists $neighbors{ID04}, 
+       "get_actual_neighbors threshold: ID02, ID03, ID04 in neighbors (above threshold)");
+    ok(!exists $neighbors{ID05} && !exists $neighbors{ID06}, 
+       "get_actual_neighbors threshold: ID05, ID06 not in neighbors (below threshold)");
+}
+
+# Test 39: Self-reference exclusion - Node should not be its own neighbor
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.25,  # > threshold
+            'ID01;ID03' => 0.28,  # > threshold
+            'ID01;ID04' => 0.30,  # > threshold
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1, ID04 => 1, ID05 => 1 };
+    
+    # Call get_actual_neighbors for ID01
+    my %neighbors = PRIMUS::IMUS::get_actual_neighbors($config, $state, 'ID01', $network_ref);
+    
+    # ID01 should not be in its own neighbors hash
+    ok(!exists $neighbors{ID01}, "get_actual_neighbors self-exclusion: ID01 not in its own neighbors");
+    
+    # Should still have the 3 actual neighbors
+    is(scalar(keys %neighbors), 3, "get_actual_neighbors self-exclusion: Has 3 neighbors excluding self");
+}
+
+# Test 40: Empty neighbors - Node with no neighbors > threshold
+{
+    my $config = PRIMUS::IMUS::Config->new();
+    
+    my $state = PRIMUS::IMUS::State->new(
+        id_id_scores => {
+            'ID01;ID02' => 0.05,  # <= threshold (unrelated)
+            'ID01;ID03' => 0.08,  # <= threshold (unrelated)
+        }
+    );
+    
+    my $network_ref = { ID01 => 1, ID02 => 1, ID03 => 1 };
+    
+    # Call get_actual_neighbors for ID01
+    my %neighbors = PRIMUS::IMUS::get_actual_neighbors($config, $state, 'ID01', $network_ref);
+    
+    # Should return empty hash (no neighbors > threshold)
+    is(scalar(keys %neighbors), 0, "get_actual_neighbors empty: Returns empty hash when no neighbors above threshold");
 }
 
 
