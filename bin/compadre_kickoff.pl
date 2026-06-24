@@ -21,7 +21,8 @@ use IPC::Open3; # also for new compadre helper
 my @commandline_options = @ARGV;
 
 #use lib '../lib/perl_modules';
-use Getopt::Long 2.13;
+# use Getopt::Long 2.13;
+# use Getopt::Long::Descriptive;
 use Socket::socket_helper qw(send_to_compadre_helper);
 use LogConfig::configure qw(configure_logger get_logger_level);
 use PRIMUS::IMUS qw(run_IMUS);
@@ -29,6 +30,7 @@ use PRIMUS::reconstruct_pedigree_v7;
 use PRIMUS::predict_relationships_2D;
 use PRIMUS::prePRIMUS_pipeline_v7;
 use PRIMUS::PRIMUS_plus_ERSA;
+use Parser::parse_options qw(parse_options);
 use File::Path qw(make_path);
 use POSIX ":sys_wait_h";
 
@@ -36,7 +38,7 @@ use Cwd qw(abs_path);
 my $script_path = abs_path($0);
 my $project_root = dirname(dirname($script_path));
 
-my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
+# my @onekg_pops = ("ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM", "ESN", "FIN", "GBR", "GIH", "GWD", "IBS", "ITU", "JPT", "KHV", "LWK", "MSL", "MXL", "PEL", "PJL", "PUR", "STU", "TSI", "YRI");
 
 my $package = "PRIMUS";
 my $lib_dir; 
@@ -54,19 +56,19 @@ my $pod2usage = sub {
 ## NOTE: COLUMNS NUMBERS ARE 1 BASED IN THIS FILE; IT WILL BE ADJUSTED TO 0 BASED AS IT GETS PASSED TO OTHER FILES
 
 ## REQUIRED PARAMETERS
-my %ibd_estimates = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"IBD0",7,"IBD1",8,"IBD2",9,"PI_HAT",10); ## Defaults to PLINK .genome file format
-my %mito_matches = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"MATCH",5,"MATCH_VAL",1);
-my %y_matches = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"MATCH",5,"MATCH_VAL",1);
+# my %ibd_estimates = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"IBD0",7,"IBD1",8,"IBD2",9,"PI_HAT",10); ## Defaults to PLINK .genome file format
+# my %mito_matches = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"MATCH",5,"MATCH_VAL",1);
+# my %y_matches = ("FID1",1,"IID1",2,"FID2",3,"IID2",4,"MATCH",5,"MATCH_VAL",1);
 my $dataset_name;
 
 ## Command line options
-my $verbose = 1; 
-my $study_name = "";
-my $output_dir = "";
-my $ersa_data = "";
+# my $verbose = 1; 
+# my $study_name = "";
+# my $output_dir = "";
+# my $ersa_data = "";
 my $port_number = 6000;
-my $run_padre = 0;  # New flag for PADRE
-my $reference_pop = "";
+# my $run_padre = 0;  # New flag for PADRE
+# my $reference_pop = "";
 my $log_file;
 my $LOG;
 
@@ -138,86 +140,155 @@ END {
 #######################################################################################
 
 ## PRIMUS variables
-my %sexes = ("FID",1,"IID",2,"SEX",3,"MALE",1,"FEMALE",2);
-my %affections = ("FID",1,"IID",2,"AFFECTION",3,"AFFECTION_VALUE",2);
-my %ages = ("FID",1,"IID",2,"AGE",3);
-my %traits;
-my @trait_order;
-my $relatedness_threshold = .09375; ## Values is halfway between the expected mean pi_hat for 3rd degree and 4th degree
-my $degree_rel_cutoff = 3;
-my $max_memory = 0;
-my $initial_likelihood_cutoff = 0.3; ## Arbitrary cutoff for the relationship likelihood vectors
-my $max_generations = "none"; ## The maximum number of generations in a pedigree allowed during reconstruction
-my $max_generation_gap = 0; ## What is maximum different in generations that 2 people can mate
-my $missing_data_value = 0;
-my $get_max_unrelated_set = 1; ## Defaults to determining the maximum unrelated set
-my $reconstruct_pedigrees = 1; ## Defaults to reconstructing pedigrees
-my $generate_likelihood_vectors_only = 0; ## Defaults to reconstructing pedigrees
+# my %sexes = ("FID",1,"IID",2,"SEX",3,"MALE",1,"FEMALE",2);
+# my %affections = ("FID",1,"IID",2,"AFFECTION",3,"AFFECTION_VALUE",2);
+# my %ages = ("FID",1,"IID",2,"AGE",3);
+# my %traits;
+# my @trait_order;
+# my $relatedness_threshold = .09375; ## Values is halfway between the expected mean pi_hat for 3rd degree and 4th degree
+# my $degree_rel_cutoff = 3;
+# my $max_memory = 0;
+# my $initial_likelihood_cutoff = 0.3; ## Arbitrary cutoff for the relationship likelihood vectors
+# my $max_generations = "none"; ## The maximum number of generations in a pedigree allowed during reconstruction
+# my $max_generation_gap = 0; ## What is maximum different in generations that 2 people can mate
+# my $missing_data_value = 0;
+# my $get_max_unrelated_set = 1; ## Defaults to determining the maximum unrelated set
+# my $reconstruct_pedigrees = 1; ## Defaults to reconstructing pedigrees
+# my $generate_likelihood_vectors_only = 0; ## Defaults to reconstructing pedigrees
 
 ## prePRIMUS variables
-my $run_prePRIMUS = 0;
-my $data_stem = "";
-my $plink_path = "plink";
-my $no_automatic_IBD = 0;
-my $remove_AIMs = 0;
-my $keep_AIMs = 0;
-my $no_mito = 1;
-my $no_y = 1;
-my $use_mito_match = 0;
-my $use_y_match = 0;
-my $MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH = 0.01;
-my $Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH = 0.01;
-my $internal_ref = 0;
-my $alt_ref_stem = "";
-my $keep_prePRIMUS_intermediate_files = 1;
-my $no_PCA_plot = 0;
-my @ref_pops;
-my $rerun = 0;
-my $min_pihat_threshold = 0;
+# my $run_prePRIMUS = 0;
+# my $data_stem = "";
+# my $plink_path = "plink";
+# my $no_automatic_IBD = 0;
+# my $remove_AIMs = 0;
+# my $keep_AIMs = 0;
+# my $no_mito = 1;
+# my $no_y = 1;
+# my $use_mito_match = 0;
+# my $use_y_match = 0;
+# my $MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH = 0.01;
+# my $Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH = 0.01;
+# my $internal_ref = 0;
+# my $alt_ref_stem = "";
+# my $keep_prePRIMUS_intermediate_files = 1;
+# my $no_PCA_plot = 0;
+# my @ref_pops;
+# my $rerun = 0;
+# my $min_pihat_threshold = 0;
 
 ## PADRE variables
-my $run_PRIMUS_plus_ERSA = 0;
-my $ersa_model_output;
-my $ersa_results;
-my $project_summary_file;
-my $PADRE_multiple_test_correct = 0;
+# my $run_PRIMUS_plus_ERSA = 0;
+# my $ersa_model_output;
+# my $ersa_results;
+# my $project_summary_file;
+# my $PADRE_multiple_test_correct = 0;
 
 ## Development options (not shown with -help)
-my $debug = 0;			# debugging
-my $test = 0;			# test mode.
-my $cluster = 0;		# run on cluster
-my $public_html_dir = "";
+# my $debug = 0;			# debugging
+# my $test = 0;			# test mode.
+# my $cluster = 0;		# run on cluster
+# my $public_html_dir = "";
 
-## ERSA options (new)
-my %ersa_settings = (
-	'min_cm' => 2.5,
-	'max_cm' => 10,
-	'max_meioses' => 40,
-	'rec_per_meioses' => 35.2548101,
-	'ascertained_chromosome' => 'no_ascertainment',
-	'ascertained_position' => -1,
-	'control_sample_size' => 'None',
-	'exp_mean' => 3.197036753,
-	'pois_mean' => 13.73,
-	'number_of_ancestors' => 'None',
-	'number_of_chromosomes' => 22,
-	'parent_offspring_option' => 'true',
-	'parent_offspring_zscore' => 2.33,
-	'adjust_pop_dist' => 'false',
-	'confidence_level' => 0.95,
-	'mask_common_shared_regions' => 'false',
-	'mask_region_cross_length' => 1000000,
-	'mask_region_threshold' => 4.0,
-	'mask_region_sim_count' => 0,
-	'control_files' => 'None',
-	'mask_region_file' => 'None',
-	'recombination_files' => 'None',
-	'beagle_markers_files' => 'None',
-);
-
+# ## ERSA options (new)
+# my %ersa_settings = (
+# 	# 'min_cm' => 2.5,
+# 	# 'max_cm' => 10,
+# 	# 'max_meioses' => 40,
+# 	# 'rec_per_meioses' => 35.2548101,
+# 	# 'ascertained_chromosome' => 'no_ascertainment',
+# 	# 'ascertained_position' => -1,
+# 	# 'control_sample_size' => 'None',
+# 	# 'exp_mean' => 3.197036753,
+# 	# 'pois_mean' => 13.73,
+# 	# 'number_of_ancestors' => 'None',
+# 	# 'number_of_chromosomes' => 22,
+# 	# 'parent_offspring_option' => 'true',
+# 	# 'parent_offspring_zscore' => 2.33,
+# 	# 'adjust_pop_dist' => 'false',
+# 	# 'confidence_level' => 0.95,
+# 	# 'mask_common_shared_regions' => 'false',
+# 	# 'mask_region_cross_length' => 1000000,
+# 	# 'mask_region_threshold' => 4.0,
+# 	# 'mask_region_sim_count' => 0,
+# 	# 'control_files' => 'None',
+# 	# 'mask_region_file' => 'None',
+# 	# 'recombination_files' => 'None',
+# 	# 'beagle_markers_files' => 'None',
+# );
+#
 
 ## Process command line options
-apply_options();
+my $config = parse_options(@_);
+
+my $verbose = $config->{global}->{verbose};
+my $study_name = $config->{global}->{study_name};
+$dataset_name = $config->{global}->{dataset_name};
+my $output_dir = $config->{global}->{output_dir};
+$port_number = $config->{global}->{port_number};
+my $run_padre = $config->{global}->{run_padre};
+$log_file = $config->{global}->{log_file};
+my $debug = $config->{global}->{debug};
+my $test = $config->{global}->{test};
+my $cluster = $config->{global}->{cluster};
+my $public_html_dir = $config->{global}->{public_html_dir};
+$lib_dir = $config->{global}->{lib_dir};
+$bin_dir = $config->{global}->{bin_dir};
+
+my %sexes = %{$config->{imus}->{sexes}};
+my %affections = %{$config->{imus}->{affections}};
+my %ages = %{$config->{imus}->{ages}};
+my %traits = %{$config->{imus}->{traits}};
+my @trait_order = @{$config->{imus}->{trait_order}};
+my $relatedness_threshold = $config->{imus}->{relatedness_threshold};
+my $degree_rel_cutoff = $config->{imus}->{degree_rel_cutoff};
+my $max_memory = $config->{preprimus}->{max_memory};
+my $initial_likelihood_cutoff = $config->{imus}->{initial_likelihood_cutoff};
+my $max_generations = $config->{imus}->{max_generations};
+my $max_generation_gap = $config->{imus}->{max_generation_gap};
+my $missing_data_value = $config->{imus}->{missing_data_value};
+my $get_max_unrelated_set = $config->{imus}->{get_max_unrelated_set};
+my $reconstruct_pedigrees = $config->{imus}->{reconstruct_pedigrees};
+my $generate_likelihood_vectors_only = $config->{imus}->{generate_likelihood_vectors_only};
+my %ibd_estimates = %{$config->{imus}->{ibd_estimates}};
+my %mito_matches = %{$config->{imus}->{mito_matches}};
+my %y_matches = %{$config->{imus}->{y_matches}};
+
+my $run_prePRIMUS = $config->{preprimus}->{run_prePRIMUS};
+my $data_stem = $config->{preprimus}->{data_stem};
+my $plink_path = $config->{preprimus}->{plink_path};
+my $no_automatic_IBD = $config->{preprimus}->{no_automatic_IBD};
+my $remove_AIMs = $config->{preprimus}->{remove_AIMs};
+my $keep_AIMs = $config->{preprimus}->{keep_AIMs};
+my $no_mito = $config->{preprimus}->{no_mito};
+my $no_y = $config->{preprimus}->{no_y};
+my $use_mito_match = $config->{preprimus}->{use_mito_match};
+my $use_y_match = $config->{preprimus}->{use_y_match};
+my $MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH = $config->{preprimus}->{MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH};
+my $Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH = $config->{preprimus}->{Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH};
+my $internal_ref = $config->{preprimus}->{internal_ref};
+my $alt_ref_stem = $config->{preprimus}->{alt_ref_stem};
+my $keep_prePRIMUS_intermediate_files = $config->{preprimus}->{keep_prePRIMUS_intermediate_files};
+my $no_PCA_plot = $config->{preprimus}->{no_PCA_plot};
+my @ref_pops;
+if (defined $config->{preprimus}->{ref_pops}) {
+    if (ref($config->{preprimus}->{ref_pops}) eq 'ARRAY') {
+        @ref_pops = @{$config->{preprimus}->{ref_pops}};
+    } else {
+        @ref_pops = split(/,/, $config->{preprimus}->{ref_pops});
+    }
+}
+my $reference_pop = $config->{preprimus}->{reference_pop};
+my $rerun = $config->{preprimus}->{rerun};
+my $min_pihat_threshold = $config->{preprimus}->{min_pihat_threshold};
+
+my $run_PRIMUS_plus_ERSA = $config->{padre}->{run_PRIMUS_plus_ERSA};
+my $ersa_model_output = $config->{padre}->{ersa_model_output};
+my $ersa_results = $config->{padre}->{ersa_results};
+my $project_summary_file = $config->{padre}->{project_summary_file};
+my $PADRE_multiple_test_correct = $config->{padre}->{PADRE_multiple_test_correct};
+
+my $ersa_data = $config->{ersa}->{ersa_data};
 
 if(-d $output_dir) # The output directory exist we are going to rename
 {
@@ -250,13 +321,13 @@ if($max_generations eq 'none'){$max_generations = 1000}
 #################### RUN PROGRAMS ###########################
 if($generate_likelihood_vectors_only)
 {
-  generate_likelihood_vectors_only();
+  generate_likelihood_vectors_only($config);
   $LOG->proginfo("done.");
   exit
 }
 
 if($run_prePRIMUS){
-	run_prePRIMUS();
+	run_prePRIMUS($config);
 }
 
 ## Run IMUS to get family networks and maximum unrelated set (unless turned off)
@@ -272,8 +343,8 @@ if($reconstruct_pedigrees || $get_max_unrelated_set)
 ## Run pedigree reconstruction
 if($reconstruct_pedigrees){
 
-	check_names();
-	run_PR();
+	check_names($config);
+	run_PR($config);
 }
 
 ## Run PRIMUS+ERSA
@@ -292,25 +363,44 @@ exit 0;
 
 sub generate_likelihood_vectors_only
 {
-  $LOG->proginfo("Generating likelihood vector file...\n");
-  if(!-d $output_dir)
-  {
-    make_path($output_dir);
-  }
-  PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors(\%ibd_estimates,$initial_likelihood_cutoff ,$verbose,$lib_dir,$output_dir);
+	my ($cfg) = @_;
+	my $glob = $cfg->{global};
+	my $imus = $cfg->{imus};
+
+	$LOG->proginfo("Generating likelihood vector file...\n");
+	if(!-d $glob->{output_dir})
+	{
+		make_path($glob->{output_dir});
+	}
+	PRIMUS::predict_relationships_2D::get_relationship_likelihood_vectors($imus->{ibd_estimates},$imus->{initial_likelihood_cutoff},$glob->{verbose},$glob->{lib_dir},$glob->{output_dir});
 }
 
 sub run_prePRIMUS
 {
+	my ($cfg) = @_;
+
+	my $pre  = $cfg->{preprimus};
+	my $glob = $cfg->{global};
+	my $imus = $cfg->{imus};
+
 	## Test that all these paths exists
-	my %paths = ("LIB",$lib_dir,"PLINK",$plink_path);
+	my %paths = ("LIB",$glob->{lib_dir},"PLINK",$pre->{plink_path});
 	PRIMUS::prePRIMUS_pipeline_v7::set_paths(\%paths);
 
 	# Create the prePRIMUS directory with specific permissions
-	my $preprimus_dir = "$output_dir/$study_name\_prePRIMUS";
+	my $preprimus_dir = "$glob->{output_dir}/$glob->{study_name}\_prePRIMUS";
 	make_path($preprimus_dir, { mode => 0755 }) if !-d $preprimus_dir;
-	
-	my @IBD_commands = ("--verbose",$verbose,"--study_name",$study_name,"--output_dir",$preprimus_dir,"--lib",$lib_dir,"--file",$data_stem,"--rerun",$rerun,"--ref_pops_ref",\@ref_pops,"--remove_AIMs",$remove_AIMs,"--keep_AIMs",$keep_AIMs,"--internal_ref",$internal_ref,"--alt_ref",$alt_ref_stem,"--no_PCA_plot",$no_PCA_plot,"--keep_intermediate_files",$keep_prePRIMUS_intermediate_files,"--no_automatic_IBD",$no_automatic_IBD,"--rel_threshold",$relatedness_threshold,"--MT_error_rate",$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--Y_error_rate",$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,"--no_mito",$no_mito,"--no_y",$no_y, "--min_pihat_threshold", $min_pihat_threshold, "--max_memory",$max_memory);
+
+	my @ref_pops_arr;
+	if (defined $pre->{ref_pops}) {
+		if (ref($pre->{ref_pops}) eq 'ARRAY') {
+			@ref_pops_arr = @{$pre->{ref_pops}};
+		} else {
+			@ref_pops_arr = split(/,/, $pre->{ref_pops});
+		}
+	}
+
+	my @IBD_commands = ("--verbose",$glob->{verbose},"--study_name",$glob->{study_name},"--output_dir",$preprimus_dir,"--lib",$glob->{lib_dir},"--file",$pre->{data_stem},"--rerun",$pre->{rerun},"--ref_pops_ref",\@ref_pops_arr,"--remove_AIMs",$pre->{remove_AIMs},"--keep_AIMs",$pre->{keep_AIMs},"--internal_ref",$pre->{internal_ref},"--alt_ref",$pre->{alt_ref_stem},"--no_PCA_plot",$pre->{no_PCA_plot},"--keep_intermediate_files",$pre->{keep_prePRIMUS_intermediate_files},"--no_automatic_IBD",$pre->{no_automatic_IBD},"--rel_threshold",$imus->{relatedness_threshold},"--MT_error_rate",$pre->{MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH},"--Y_error_rate",$pre->{Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH},"--no_mito",$pre->{no_mito},"--no_y",$pre->{no_y}, "--min_pihat_threshold", $pre->{min_pihat_threshold}, "--max_memory",$pre->{max_memory});
 
 	## Run the PLINK IBD pipeline
 	my ($temp_genome_file,$temp_sex_file,$temp_mt_match_file,$temp_y_match_file) = PRIMUS::prePRIMUS_pipeline_v7::run_prePRIMUS_main(@IBD_commands);
@@ -334,10 +424,22 @@ sub run_prePRIMUS
 }
 
 sub run_PR {
+	my ($cfg) = @_;
+
+	my $glob = $cfg->{global};
+	my $imus = $cfg->{imus};
+	my $pre  = $cfg->{preprimus};
+	my $padre = $cfg->{padre};
+
+	my $sexes = $imus->{sexes};
+	my $affections = $imus->{affections};
+	my $ages = $imus->{ages};
+	my $mito_matches = $imus->{mito_matches};
+	my $y_matches = $imus->{y_matches};
 
 	## Load networks
 	my %networks;
-	open(IN,"$output_dir/$dataset_name\_networks") or die "can't open $output_dir/$dataset_name\_networks; $!\n\n";
+	open(IN,"$glob->{output_dir}/$glob->{dataset_name}\_networks") or die "can't open $glob->{output_dir}/$glob->{dataset_name}\_networks; $!\n\n";
 	<IN>; ## get rid of header
 	while(my $line = <IN>)
 	{
@@ -345,56 +447,58 @@ sub run_PR {
 		$networks{$network} = 1;
 	}
 	close(IN);
-	
+
 	## Load additional attributes files into simple hash references
 	my $sexes_ref; 
 	my $affections_ref; 
 	my $ages_ref; 
-	if(exists $sexes{'FILE'})
+	if(exists $sexes->{'FILE'})
 	{
-		if(!-e $sexes{'FILE'})
+		if(!-e $sexes->{'FILE'})
 		{
-			$LOG->warn("$sexes{'FILE'} does not exists; continuing without sex info.\n");
+			$LOG->warn("$sexes->{'FILE'} does not exists; continuing without sex info.\n");
 			delete $sexes{'FILE'};
+			delete $sexes->{'FILE'};
 		}
 		else
 		{
-			$sexes_ref = get_sample_info($sexes{'FILE'},$sexes{'FID'},$sexes{'IID'},$sexes{'SEX'});
+			$sexes_ref = get_sample_info($sexes->{'FILE'},$sexes->{'FID'},$sexes->{'IID'},$sexes->{'SEX'});
 			foreach my $id (keys %$sexes_ref)
 			{
-				if($$sexes_ref{$id} eq $sexes{'MALE'}){$$sexes_ref{$id} = 1}
-				elsif($$sexes_ref{$id} eq $sexes{'FEMALE'}){$$sexes_ref{$id} = 2}
+				if($$sexes_ref{$id} eq $sexes->{'MALE'}){$$sexes_ref{$id} = 1}
+				elsif($$sexes_ref{$id} eq $sexes->{'FEMALE'}){$$sexes_ref{$id} = 2}
 				else{$$sexes_ref{$id} = 0}
         $LOG->debug("$id sex = $$sexes_ref{$id}\n");
 			}
 		}
 	}
-	if(exists $affections{'FILE'}){$affections_ref = get_sample_info($affections{'FILE'},$affections{'FID'},$affections{'IID'},$affections{'AFFECTION'})}
-	if(exists $ages{'FILE'}){$ages_ref = get_sample_info($ages{'FILE'},$ages{'FID'},$ages{'IID'},$ages{'AGE'})}
-	
+	if(exists $affections->{'FILE'}){$affections_ref = get_sample_info($affections->{'FILE'},$affections->{'FID'},$affections->{'IID'},$affections->{'AFFECTION'})}
+	if(exists $ages->{'FILE'}){$ages_ref = get_sample_info($ages->{'FILE'},$ages->{'FID'},$ages->{'IID'},$ages->{'AGE'})}
+
 	## Set the project summary file in case PRIMUS+ERSA is also called
-	$project_summary_file = "$output_dir/Summary_$dataset_name.txt";
+	$project_summary_file = "$glob->{output_dir}/Summary_$glob->{dataset_name}.txt";
+	$padre->{project_summary_file} = $project_summary_file;
 
 	## Submit each network to be reconstructed
 	foreach my $net (sort {$a <=> $b} keys %networks)
 	{
-		my $network_name = "$dataset_name\_network$net";
-		my $network_dir = "$output_dir/$network_name";
+		my $network_name = "$glob->{dataset_name}\_network$net";
+		my $network_dir = "$glob->{output_dir}/$network_name";
 		if(!-d $network_dir)
 		{
 			make_path($network_dir);
 		}
-		system("mv $output_dir/$network_name.genome $network_dir");
-		
-		my %network_ibd_estimates = %ibd_estimates;
+		system("mv $glob->{output_dir}/$network_name.genome $network_dir");
+
+		my %network_ibd_estimates = %{$imus->{ibd_estimates}};
 		$network_ibd_estimates{'FILE'} = "$network_dir/$network_name.genome";
 
 
-		if($cluster)
+		if($glob->{cluster})
 		{	
 			#my $new_network_dir = "../$network_dir";
 			my $new_network_dir = "$network_dir";
-			my @PR_commands = ("--network",$network_name,"--verbose",$verbose,"--output_dir",$new_network_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--network_num",$net,"--affection_status_value",$affections{'AFFECTION_VALUE'},"--sex_file","$network_dir/sex.temp","--age_file","$network_dir/age.temp","--affection_file","$network_dir/affection.temp","--max_gen",$max_generations, "--lib",$lib_dir, "--bin",$bin_dir,"--no_mito",$no_mito,"--no_y",$no_y,"--use_mito_match",$use_mito_match,"--use_y_match",$use_y_match,"--degree_rel_cutoff",$degree_rel_cutoff);
+			my @PR_commands = ("--network",$network_name,"--verbose",$glob->{verbose},"--output_dir",$new_network_dir,"--int_likelihood_cutoff",$imus->{initial_likelihood_cutoff},"--network_num",$net,"--affection_status_value",$affections->{'AFFECTION_VALUE'},"--sex_file","$network_dir/sex.temp","--age_file","$network_dir/age.temp","--affection_file","$network_dir/affection.temp","--max_gen",$imus->{max_generations}, "--lib",$glob->{lib_dir}, "--bin",$glob->{bin_dir},"--no_mito",$pre->{no_mito},"--no_y",$pre->{no_y},"--use_mito_match",$pre->{use_mito_match},"--use_y_match",$pre->{use_y_match},"--degree_rel_cutoff",$imus->{degree_rel_cutoff});
 			foreach my $key (keys %network_ibd_estimates)
 			{
 				push(@PR_commands, "--$key");
@@ -402,21 +506,21 @@ sub run_PR {
 				push(@PR_commands, "$network_ibd_estimates{$key}");
 				#print "--$key = $network_ibd_estimates{$key}\n";
 			}
-			foreach my $key (keys %mito_matches) ## MIGHT NOT WORK YET
+			foreach my $key (keys %$mito_matches) ## MIGHT NOT WORK YET
 			{
 				push(@PR_commands, "--MITO_$key");
 				#$mito_matches{$key} = "../$mito_matches{$key}" if $key =~ /FILE/;
-				push(@PR_commands, "$mito_matches{$key}");
+				push(@PR_commands, "$mito_matches->{$key}");
 				#print "--$key = $network_ibd_estimates{$key}\n";
 			}
-			foreach my $key (keys %y_matches) ## MIGHT NOT WORK YET
+			foreach my $key (keys %$y_matches) ## MIGHT NOT WORK YET
 			{
 				push(@PR_commands, "--Y_$key");
 				#$y_matches{$key} = "../$y_matches{$key}" if $key =~ /FILE/;
-				push(@PR_commands, "$y_matches{$key}");
+				push(@PR_commands, "$y_matches->{$key}");
 				#print "--$key = $network_ibd_estimates{$key}\n";
 			}
-			
+
 			open(SEX,">$network_dir/sex.temp");
 			foreach my $key (keys %$sexes_ref){print SEX "$key\t$$sexes_ref{$key}\n";}
 			close(SEX);
@@ -433,14 +537,14 @@ sub run_PR {
 			print OUT "\#\$ -S /bin/bash\n";
 			print OUT "\#\$ -l h_vmem=8G -l mem_requested=8G\n";
 			#print OUT "\#\$ -l mem_requested=12G\n";
-			print OUT "\#\$ -e $bin_dir/$new_network_dir/run_dataset_cluster_$network_name.e\n";
+			print OUT "\#\$ -e $glob->{bin_dir}/$new_network_dir/run_dataset_cluster_$network_name.e\n";
 			print OUT "\#\$ -q nick-grad.q\n";
-			print OUT "\#\$ -o $bin_dir/$new_network_dir/run_dataset_cluster_$network_name.o\n";
+			print OUT "\#\$ -o $glob->{bin_dir}/$new_network_dir/run_dataset_cluster_$network_name.o\n";
 			print OUT "module load modules modules-init modules-gs\n";
 			print OUT "module load modules\n";
 			print OUT "module load modules-init\n";
 			print OUT "#module load perl/5.14.2\n\n";
-			print OUT "cd $bin_dir\n";
+			print OUT "cd $glob->{bin_dir}\n";
 			print OUT "pwd\n";
 			print OUT "GSITSHOST=`/bin/hostname`\n";
 			print OUT "GSITSPWD=`/bin/pwd`\n";
@@ -452,14 +556,14 @@ sub run_PR {
 			#print OUT "rm $network_dir/sex.temp\n";
 			#print OUT "rm $network_dir/age.temp\n";
 			#print OUT "rm $network_dir/affection.temp\n";
-			print OUT "./make_dataset_summary.pl $output_dir $dataset_name\n";
-			print OUT "./make_dataset_pairwise_summary.pl $output_dir $dataset_name";
+			print OUT "./make_dataset_summary.pl $glob->{output_dir} $glob->{dataset_name}\n";
+			print OUT "./make_dataset_pairwise_summary.pl $glob->{output_dir} $glob->{dataset_name}";
 			close(OUT);
 			system("qsub -js 12 $file");
 		}
 		else
 		{
-			my @PR_commands = ("--network",$network_name,"--ibd_estimates",\%network_ibd_estimates,"--y_hash",\%y_matches,"--mito_hash",\%mito_matches,"--verbose",$verbose,"--output_dir",$network_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff,"--max_gen",$max_generations,"--sex_ref",$sexes_ref,"--age_ref",$ages_ref,"--affection_ref",$affections_ref,"--network_num",$net,"--affection_status_value",$affections{'AFFECTION_VALUE'}, "--lib",$lib_dir,"--bin",$bin_dir,"--no_mito",$no_mito,"--no_y",$no_y,"--use_mito_match",$use_mito_match,"--use_y_match",$use_y_match,"--degree_rel_cutoff",$degree_rel_cutoff);
+			my @PR_commands = ("--network",$network_name,"--ibd_estimates",\%network_ibd_estimates,"--y_hash",$y_matches,"--mito_hash",$mito_matches,"--verbose",$glob->{verbose},"--output_dir",$network_dir,"--int_likelihood_cutoff",$imus->{initial_likelihood_cutoff},"--max_gen",$imus->{max_generations},"--sex_ref",$sexes_ref,"--age_ref",$ages_ref,"--affection_ref",$affections_ref,"--network_num",$net,"--affection_status_value",$affections->{'AFFECTION_VALUE'}, "--lib",$glob->{lib_dir},"--bin",$glob->{bin_dir},"--no_mito",$pre->{no_mito},"--no_y",$pre->{no_y},"--use_mito_match",$pre->{use_mito_match},"--use_y_match",$pre->{use_y_match},"--degree_rel_cutoff",$imus->{degree_rel_cutoff});
 			eval
 			{
 				PRIMUS::reconstruct_pedigree_v7::reconstruct_pedigree(@PR_commands);
@@ -470,21 +574,21 @@ sub run_PR {
 			};
 		}
 	}
-	
-	$LOG->info("Writing dataset summary file $output_dir/Summary_$dataset_name.txt\n");
 
-	system("$bin_dir/make_dataset_summary.pl $output_dir $dataset_name");
-	system("./make_dataset_pairwise_summary.pl $output_dir $dataset_name");
+	$LOG->info("Writing dataset summary file $glob->{output_dir}/Summary_$glob->{dataset_name}.txt\n");
+
+	system("$glob->{bin_dir}/make_dataset_summary.pl $glob->{output_dir} $glob->{dataset_name}");
+	system("./make_dataset_pairwise_summary.pl $glob->{output_dir} $glob->{dataset_name}");
 
 	$LOG->info("done.\n");
 
 	# convert ps to pdf files 
-	find({ wanted => \&process_file, no_chdir => 1 }, $output_dir);
+	find({ wanted => \&process_file, no_chdir => 1 }, $glob->{output_dir});
 
 
 	###############################################################################################
 
-	if ($run_padre) {
+	if ($glob->{run_padre}) {
 
 		$LOG->info("Initializing PADRE\n");
 
@@ -498,7 +602,7 @@ sub run_PR {
 		my $ersa_model_output_path = "$ersa_output_path_prefix.model";
 		my $ersa_output_path = "$ersa_output_path_prefix.out";
 
-		my $padre_command = "perl $project_root/padre/bin/run_PADRE.pl --ersa_model_output $ersa_model_output_path --ersa_results $ersa_output_path --project_summary $output_dir/Summary_$dataset_name.txt --degree_rel_cutoff $degree_rel_cutoff --output_dir $output_dir/padre_results --verbose $verbose --log_file \"$log_file\"";
+		my $padre_command = "perl $project_root/padre/bin/run_PADRE.pl --ersa_model_output $ersa_model_output_path --ersa_results $ersa_output_path --project_summary $glob->{output_dir}/Summary_$glob->{dataset_name}.txt --degree_rel_cutoff $imus->{degree_rel_cutoff} --output_dir $glob->{output_dir}/padre_results --verbose $glob->{verbose} --log_file \"$glob->{log_file}\"";
 
 		system($padre_command) == 0
 			or warn "Failed to run PADRE: $padre_command\n";
@@ -508,7 +612,6 @@ sub run_PR {
 
 	my $shutdown_ack = send_to_compadre_helper("close\n", $port_number_glob);
   $LOG->info("COMPADRE socket shutdown message: $shutdown_ack\n");	
-
 }
 
 # Convert .ps from cranefoot to .pdf 
@@ -558,13 +661,13 @@ sub process_socket_log {
 sub print_files_and_settings {
 
 	$LOG->proginfo("\nFILES AND COLUMNS\n");
-	
+
 	$LOG->proginfo("LOG FILE: $log_file\n");
 
 	$LOG->proginfo("Data stem: $data_stem\n") if $data_stem ne "";
 
 	$LOG->proginfo("IBD file: $ibd_estimates{'FILE'} (FID1=".($ibd_estimates{'FID1'})."; IID1=".($ibd_estimates{'IID1'})."; FID2=".($ibd_estimates{'FID2'})."; IID2=".($ibd_estimates{'IID2'})."; IBD0=".($ibd_estimates{'IBD0'})."; IBD1=".($ibd_estimates{'IBD1'})."; IBD2=".($ibd_estimates{'IBD2'})."; PI_HAT/RELATEDNESS=".($ibd_estimates{'PI_HAT'}).")\n") if exists $ibd_estimates{'FILE'};
-	
+
 	$LOG->proginfo("Dataset results dir: $output_dir\n");
 
 	if(!exists $ages{'FILE'}) {
@@ -608,7 +711,7 @@ sub print_files_and_settings {
     die
 
   }
-  
+
   # reading and writing stream that will be used to handle data going in and out of the python socket
 	my ($reader, $writer);
 
@@ -622,10 +725,10 @@ sub print_files_and_settings {
 	}
 
 	my $ersa_flags = "";
-	foreach my $key (keys %ersa_settings) {
-		my $value = $ersa_settings{$key};
+	foreach my $key (keys %{$config->{ersa}}) {
+		my $value = $config->{ersa}->{$key};
 		# Only include non-empty string values and non-zero numeric defaults where appropriate
-		if ($value ne "") {
+		if (defined $value && $value ne "") {
 			$ersa_flags .= "$key|$value|";
 		}
 	}
@@ -676,11 +779,11 @@ sub print_files_and_settings {
         # read from the $reader and will print the output. This block 
         # intentionally hangs until it gets cleaned up or the python program 
         # closes the pipe.
-        
+
         # Reset signal handler so child doesn't run parent's cleanup_compadre
         $SIG{INT} = 'DEFAULT';
         $SIG{TERM} = 'DEFAULT';
-        
+
         # Clear the PID so the END block doesn't try to cleanup the helper
         undef $compadre_pid;
 
@@ -714,7 +817,7 @@ sub print_files_and_settings {
       process_socket_log($line);
     }
   }
-	
+
 	# our $compadre_pid = $pid;
 
 	$LOG->proginfo("\nReference file specification: $reference_pop\n\n") if $reference_pop ne "";
@@ -728,7 +831,7 @@ sub print_files_and_settings {
 
 	# ERSA additional arguments 
 
-	our %ersa_settings_glob = %ersa_settings;
+	our %ersa_settings_glob = %{$config->{ersa}};
 
 	#############################################################################
 
@@ -777,7 +880,7 @@ sub get_sample_info
 	my $trait_col = shift;
 
 	my %hash;
-	
+
 	open(IN,$file) or die "Can't open $file; $!";
 
 	#print "file: $file\n";
@@ -804,378 +907,379 @@ sub get_sample_info
 
 		$hash{"$IID"} = @temp[$trait_col-1];
 	}
-	
+
 	return (\%hash);
 }
 
 # everything in this function needs to use print not $LOG because the logger is not yet set up at this point in the code
-sub apply_options {
-    my $help = 0;		
-    my $ident = 0;		
-    my $man = 0;		
-
-    
-    # Process options.
-    if ( @ARGV > 0 ) 
-    {
-	GetOptions(
-
-		# Diagnostic options
-		'verbose|v=i' => \$verbose,
-		'test' => \$test,
-		'help|h|?'  => \$help,
-		'man'	  => \$man,
-		'debug'	  => \$debug,
-		'cluster' => \$cluster,
-		'public_html' => \$public_html_dir,
-
-		# Settings
-		"run_padre" => \$run_padre,
-		"rel_threshold|threshold|t=f" => \$relatedness_threshold, 
-		"degree_rel_cutoff|d=i" => \$degree_rel_cutoff,
-		"max_memory|m=i" => \$max_memory,
-		"max_gens=i" => \$max_generations,
-		"max_gen_gap=i" => \$max_generation_gap,
-		"int_likelihood_cutoff=f" => \$initial_likelihood_cutoff,
-		"no_IMUS" => sub{$get_max_unrelated_set = 0},
-		"no_PR" => sub{$reconstruct_pedigrees = 0},
-    	"generate_likelihoods_only" => sub{$get_max_unrelated_set = 0;$reconstruct_pedigrees = 0;$generate_likelihood_vectors_only=1},
-		"missing_val=f"=> \$missing_data_value,
-		"genome" => sub{$run_prePRIMUS = 1},
-		"no_automatic_IBD" => \$no_automatic_IBD,
-		"remove_AIMs" => \$remove_AIMs,
-		"keep_AIMs" => \$keep_AIMs,
-		"MT_error_rate=f" => \$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,
-		"Y_error_rate=f" => \$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,
-		"no_mito" => \$no_mito,
-		"no_y" => \$no_y,
-		"use_mito_match" => \$use_mito_match,
-		"use_y_match" => \$use_y_match,
-		"internal_ref" => \$internal_ref,
-		"alt_ref_stem|alt-ref|alt=s" => \$alt_ref_stem,
-		"keep_inter_files" => \$keep_prePRIMUS_intermediate_files,
-		"no_PCA_plot" => \$no_PCA_plot,
-		"rerun" => \$rerun,
-		"min_pihat_threshold=f" => \$min_pihat_threshold,
-		"ref_pops=s" => sub 
-		{
-			@ref_pops = split(/,/,@_[1]);
-			uc(@ref_pops);
-			foreach my $pop (@ref_pops)
-			{
-				if($pop =~ /none/i){next}
-				
-				if(!grep ($_ eq $pop, @onekg_pops ))
-				{
-					print "\n\n[COMPADRE] Error: Invalid 1KG population: $pop\n";
-					print "Must be a comma seperated list these: @onekg_pops\n";
-					print "For example: --ref_pops CEU,TSI,YRI\n\n";
-					$pod2usage->(2);
-				}
-			}
-		},
-
-		# Files and directories
-		"bin=s" => \$bin_dir,
-		"lib=s" => \$lib_dir,
-		"plink_ex=s" => \$plink_path,
-		"bfile=s" => sub  		{
-			$data_stem=$_[1];
-		},
-		"file=s" => sub  
-		{
-			$data_stem=$_[1];
-		},
-		"ped=s" => sub  ## included for compatibility
-		{
-			$data_stem = $_[1] if $data_stem eq "";
-			$data_stem =~ s/\.ped$//;
-		}, 		
-		"map=s" => sub  ## included for compatibility
-		{
-			$data_stem = $_[1] if $data_stem eq "";
-			$data_stem =~ s/\.map$//;
-		}, 		
-		"plink_ibd|PLINK|p=s" => sub{$ibd_estimates{'FILE'} = $_[1]},
-		"sex_file=s" => sub{$sexes{'FILE'} = $_[1]},
-		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
-		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
-		"output_dir|o=s" => \$output_dir,
-		"segment_data|s:s" => \$ersa_data,
-		"port_number:i" => \$port_number,
-		"reference_pop:s" => \$reference_pop,
-		"ages=s{1,4}" => sub
-		{ 
-			my @possible_keys = qw(FILE FID IID AGE);
-			my ($key,$value) = split(/=/,@_[1]);
-			uc($key);
-			if(grep ($_ eq $key, @possible_keys ))
-			{
-				$ages{$key} = $value;
-			}
-			else
-			{
-				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0] option: @_[1]\n";
-				print "Must be one of these: @possible_keys\n\n";
-				$pod2usage->(2);
-			}
-		},
-		"sexes=s{1,6}" => sub
-		{ 
-			my @possible_keys = qw(FILE FID IID SEX MALE FEMALE);
-			my ($key,$value) = split(/=/,@_[1]);
-			uc($key);
-			if(grep ($_ eq $key, @possible_keys ))
-			{
-				$sexes{$key} = $value;
-			}
-			else
-			{
-				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print "Must be one of these: @possible_keys\n\n";
-				$pod2usage->(2);
-			}
-		},
-		"affections=s{1,5}" => sub
-		{ 
-			my @possible_keys = qw(FILE FID IID AFFECTION AFFECTION_VALUE);
-			my ($key,$value) = split(/=/,@_[1]);
-			uc($key);
-			if(grep ($_ eq $key, @possible_keys ))
-			{
-				$affections{$key} = $value;
-			}
-			else
-			{
-				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --affections option: @_[1]\n";
-				print "Must be one of these: @possible_keys\n\n";
-				$pod2usage->(2);
-			}
-		},	
-		"mito_data|mito_matches|mito=s{1,7}" => sub
-		{ 
-			my @possible_keys = qw(FILE FID1 IID1 FID2 IID2 MATCH MATCH_VAL);
-			my ($key,$value) = split(/=/,@_[1]);
-			uc($key);
-			if(grep ($_ eq $key, @possible_keys ))
-			{
-				$mito_matches{$key} = $value;
-			}
-			else
-			{
-				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print "Must be one of these: @possible_keys\n\n";
-				$pod2usage->(2);
-			}
-		},
-		"y_data|y_matches|y=s{1,7}" => sub
-		{ 
-			my @possible_keys = qw(FILE FID1 IID1 FID2 IID2 MATCH MATCH_VAL);
-			my ($key,$value) = split(/=/,@_[1]);
-			uc($key);
-			if(grep ($_ eq $key, @possible_keys ))
-			{
-				$y_matches{$key} = $value;
-			}
-			else
-			{
-				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print "Must be one of these: @possible_keys\n\n";
-				$pod2usage->(2);
-			}
-		},
-		"input|i=s{1,9}" => sub
-		{ 
-			my @possible_keys = qw(FILE FID1 IID1 FID2 IID2 IBD0 IBD1 IBD2 PI_HAT RELATEDNESS);
-			my ($key,$value) = split(/=/,@_[1]);
-			uc($key);
-			if(grep ($_ eq $key, @possible_keys ))
-			{
-				$ibd_estimates{$key} = $value;
-			}
-			else
-			{
-				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
-				print "Must be one of these: @possible_keys\n\n";
-				$pod2usage->(2);
-			}
-		},
-
-		## PRIMUS+ERSA options
-		"ersa_model_output=s" => \$ersa_model_output,
-		"ersa_results=s" => \$ersa_results,
-		"project_summary_file=s" => \$project_summary_file,
-		"PADRE_multiple_test_correct" => \$PADRE_multiple_test_correct,		
-
-		## ERSA options (new)
-		"min_cm=f" => \$ersa_settings{'min_cm'}, # 2.5
-		"max_cm=f" => \$ersa_settings{"max_cm"}, # 10
-		"max_meioses=i" => \$ersa_settings{"max_meioses"}, # 40
-		"rec_per_meioses=f" => \$ersa_settings{"rec_per_meioses"}, # 35.2548101
-		"ascertained_chromosome=s" => \$ersa_settings{"ascertained_chromosome"}, # 'no_ascertainment' (string)
-		"ascertained_position=i" => \$ersa_settings{"ascertained_position"}, # -1
-		"control_files=s" => \$ersa_settings{"control_files"}, # file specified or not 
-		"control_sample_size=i" => \$ersa_settings{"control_sample_size"}, # none -- only used with ersa_control_files
-		"exp_mean=f" => \$ersa_settings{"exp_mean"}, # 3.197036753
-		"pois_mean=f" => \$ersa_settings{"pois_mean"}, # 13.73
-		"number_of_ancestors=i" => \$ersa_settings{"number_of_ancestors"}, # default none
-		"number_of_chromosomes=i" => \$ersa_settings{"number_of_chromosomes"}, # 22
-		"parent_offspring_option=s" => \$ersa_settings{"parent_offspring_option"}, # true
-		"parent_offspring_zscore=f" => \$ersa_settings{"parent_offspring_zscore"}, # 2.33
-		"adjust_pop_dist=s" => \$ersa_settings{"adjust_pop_dist"}, # false
-		"confidence_level=f" => \$ersa_settings{"confidence_level"}, # 0.95
-		"mask_common_shared_regions=s" => \$ersa_settings{"mask_common_shared_regions"}, # false
-		"mask_region_cross_length=i" => \$ersa_settings{"mask_region_cross_length"}, # 1000000
-		"mask_region_file=s" => \$ersa_settings{"mask_region_file"}, # file specified or not
-		"mask_region_threshold=f" => \$ersa_settings{"mask_region_threshold"}, # 4.0
-		"mask_region_sim_count=i" => \$ersa_settings{"mask_region_sim_count"}, # 0
-		"recombination_files=s" => \$ersa_settings{"recombination_files"}, # file specified or not
-		"beagle_markers_files=s" => \$ersa_settings{"beagle_markers_files"}, # file specified or not
-
-		## IMUS options
-		"size:s" => sub{ push(@trait_order,"size");$traits{'size'} = "-size";},
-		"high_btrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
-		"low_btrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
-		"high_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
-		"low_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
-		"mean_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
-		"tails_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
-		"plink_ibd|PLINK|p=s" => sub{$ibd_estimates{'FILE'} = $_[1]},
-    	"likelihood_vectors=s" => sub{$ibd_estimates{'FILE'} = $_[1]; $ibd_estimates{'likelihood_vectors'}=1},
-		"sex_file=s" => sub{$sexes{'FILE'} = $_[1]},
-		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
-		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
-		"output_dir|o=s" => \$output_dir,
-		#"ersa_data=s" => \$ersa_data,
-		)
-		or $pod2usage->(2);
-    	}
-    	if ( $man or $help ) {
-		$pod2usage->(1) if $help;
-		$pod2usage->(VERBOSE => 2) if $man;
-    	}
-	
-	if($data_stem ne "" && $run_prePRIMUS != 1)
-	{
-		die "INVALID INPUT OPTIONS: --file input also requires the --genome flag to run.\n\n";
-	}
-
-	if($run_padre && $ersa_data eq "")
-	{
-		die "\n[COMPADRE] Error: --run_padre requires --segment_data to be specified.\n\n";
-	}
-
-	## PRIMUS + ERSA requires ERSA likelihood file and results file as well as a PRIMUS summary file.
-	if($ersa_model_output ne "" || $ersa_results ne "")
-	{
-		if($ersa_model_output ne "" && $ersa_results ne "")
-		{
-			if($project_summary_file ne "")
-			{
-				$run_PRIMUS_plus_ERSA = 1;
-			}
-			elsif(!exists $ibd_estimates{'FILE'} && $data_stem eq "")
-			{
-				die "INVALID INPUTS: PRIMUS+ERSA requires a PRIMUS project summary file; either provide one on the commandline or generate one by running PRIMUS.\n\n";
-			}
-			else
-			{
-				$run_PRIMUS_plus_ERSA = 1;
-			}
-		}
-		else
-		{
-			die "INVALID INPUTS: PRIMUS+ERSA requires but the model_output_fule and the results files output by ERSA.\n\n";
-		}
-	}
-
-	if($run_prePRIMUS)
-	{
-		if(exists $ibd_estimates{'FILE'})
-		{
-			die "[COMPADRE] Error: If you already have IBD estimates, then you don't need to calculate new ones with --genome option. If you do need to calculate IBD estimates, don't input anything for the IBD estimates.\n\n";
-		}
-		$study_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($data_stem);
-		$output_dir = "$data_stem\_PRIMUS" if $output_dir eq ""; 
-		#print "out_dir: $output_dir\n" if $verbose > 0;
-	}
-	
-	## Set output directory if not passed in
-	if($output_dir eq "" && exists $ibd_estimates{'FILE'}){$output_dir = "$ibd_estimates{'FILE'}\_PRIMUS"}
-	
-
-	## Test that ibd_estimates were passed in
-	if(!exists $ibd_estimates{'FILE'} && $data_stem eq "")
-	{
-		if(!$run_PRIMUS_plus_ERSA)
-		{
-			print "\n[COMPADRE] No arguments provided. Please run with the --help flag for details.\n\n";
-			$pod2usage->(2);
-		}
-		else
-		{
-			$reconstruct_pedigrees = 0;
-			$get_max_unrelated_set = 0;
-		}
-	}
-	if(!-e $ibd_estimates{'FILE'} && $data_stem eq "")
-	{
-		if(!$run_prePRIMUS && !$run_PRIMUS_plus_ERSA)
-		{
-			print "[COMPADRE] Error: IBD INPUT FILE DOES NOT EXIST: $ibd_estimates{'FILE'}\n";
-			$pod2usage->(2);
-		}
-	}
-
-
-	## Set genome_file_name: if there is a path to the file, ignore all the path, and select the name of the file
-	if($ibd_estimates{'FILE'} =~ /\/([^\/]+)$/){$dataset_name = $1}
-	else{$dataset_name = $ibd_estimates{'FILE'} }
-
-	## Add size as first trait if it is a qtrait
-	if($traits{$trait_order[0]} =~ /qtrait/)
-	{
-		unshift(@trait_order,"size");
-	}
-	## Add size to traits if not already in it
-	if(!grep ($_ eq "size", @trait_order ))
-	{
-		push (@trait_order,"size");
-		$traits{'size'} = "size";
-	}
-	
-	if(exists $ibd_estimates{'RELATEDNESS'})
-	{
-		$ibd_estimates{'PI_HAT'} = $ibd_estimates{'RELATEDNESS'};
-	}
-	
-	## If the relatedness threshold or degree_rel_cutoff changed, then adjust them both here
-	if($relatedness_threshold != .09375 || $degree_rel_cutoff != 3)
-	{
-		## If degree_rel_cutoff is unchanged, adjust it to account for the change in the $relatedness_threshold
-		if($degree_rel_cutoff == 3)
-		{
-			$degree_rel_cutoff = 3 if $relatedness_threshold <= 0.1;
-			$degree_rel_cutoff = 2 if $relatedness_threshold > 0.1 && $relatedness_threshold <= 0.2;
-			$degree_rel_cutoff = 1 if $relatedness_threshold > 0.2;
-		}
-		elsif($degree_rel_cutoff == 2)
-		{
-			$relatedness_threshold = 0.1875;
-		}
-		elsif($degree_rel_cutoff == 1)
-		{
-			$relatedness_threshold = 0.375;
-		}
-		else
-		{
-			die "INVALID value for -d|--degree_rel_cutoff; Valid options are are integers from 1 to 3, representing 1st through 3rd degree relatives\n\n";  
-		}
-	}
-
-  # platform agonistic way to form the file path
-	$log_file = File::Spec->catfile($output_dir, "COMPADRE_output.log");
-}
+# sub apply_options {
+#     my $help = 0;		
+#     my $ident = 0;		
+#     my $man = 0;		
+#     my %ersa_settings;
+#
+#
+#     # Process options.
+#     if ( @ARGV > 0 ) 
+#     {
+# 	GetOptions(
+#
+# 		# Diagnostic options
+# 		'verbose|v=i' => \$verbose,
+# 		'test' => \$test,
+# 		'help|h|?'  => \$help,
+# 		'man'	  => \$man,
+# 		'debug'	  => \$debug,
+# 		'cluster' => \$cluster,
+# 		'public_html' => \$public_html_dir,
+#
+# 		# Settings
+# 		"run_padre" => \$run_padre,
+# 		"rel_threshold|threshold|t=f" => \$relatedness_threshold, 
+# 		"degree_rel_cutoff|d=i" => \$degree_rel_cutoff,
+# 		"max_memory|m=i" => \$max_memory,
+# 		"max_gens=i" => \$max_generations,
+# 		"max_gen_gap=i" => \$max_generation_gap,
+# 		"int_likelihood_cutoff=f" => \$initial_likelihood_cutoff,
+# 		"no_IMUS" => sub{$get_max_unrelated_set = 0},
+# 		"no_PR" => sub{$reconstruct_pedigrees = 0},
+#     	"generate_likelihoods_only" => sub{$get_max_unrelated_set = 0;$reconstruct_pedigrees = 0;$generate_likelihood_vectors_only=1},
+# 		"missing_val=f"=> \$missing_data_value,
+# 		"genome" => sub{$run_prePRIMUS = 1},
+# 		"no_automatic_IBD" => \$no_automatic_IBD,
+# 		"remove_AIMs" => \$remove_AIMs,
+# 		"keep_AIMs" => \$keep_AIMs,
+# 		"MT_error_rate=f" => \$MT_MAX_PERCENT_DIFFERENCE_FOR_MATCH,
+# 		"Y_error_rate=f" => \$Y_MAX_PERCENT_DIFFERENCE_FOR_MATCH,
+# 		"no_mito" => \$no_mito,
+# 		"no_y" => \$no_y,
+# 		"use_mito_match" => \$use_mito_match,
+# 		"use_y_match" => \$use_y_match,
+# 		"internal_ref" => \$internal_ref,
+# 		"alt_ref_stem|alt-ref|alt=s" => \$alt_ref_stem,
+# 		"keep_inter_files" => \$keep_prePRIMUS_intermediate_files,
+# 		"no_PCA_plot" => \$no_PCA_plot,
+# 		"rerun" => \$rerun,
+# 		"min_pihat_threshold=f" => \$min_pihat_threshold,
+# 		"ref_pops=s" => sub 
+# 		{
+# 			@ref_pops = split(/,/,@_[1]);
+# 			uc(@ref_pops);
+# 			foreach my $pop (@ref_pops)
+# 			{
+# 				if($pop =~ /none/i){next}
+#
+# 				if(!grep ($_ eq $pop, @onekg_pops ))
+# 				{
+# 					print "\n\n[COMPADRE] Error: Invalid 1KG population: $pop\n";
+# 					print "Must be a comma seperated list these: @onekg_pops\n";
+# 					print "For example: --ref_pops CEU,TSI,YRI\n\n";
+# 					$pod2usage->(2);
+# 				}
+# 			}
+# 		},
+#
+# 		# Files and directories
+# 		"bin=s" => \$bin_dir,
+# 		"lib=s" => \$lib_dir,
+# 		"plink_ex=s" => \$plink_path,
+# 		"bfile=s" => sub  		{
+# 			$data_stem=$_[1];
+# 		},
+# 		"file=s" => sub  
+# 		{
+# 			$data_stem=$_[1];
+# 		},
+# 		"ped=s" => sub  ## included for compatibility
+# 		{
+# 			$data_stem = $_[1] if $data_stem eq "";
+# 			$data_stem =~ s/\.ped$//;
+# 		}, 		
+# 		"map=s" => sub  ## included for compatibility
+# 		{
+# 			$data_stem = $_[1] if $data_stem eq "";
+# 			$data_stem =~ s/\.map$//;
+# 		}, 		
+# 		"plink_ibd|PLINK|p=s" => sub{$ibd_estimates{'FILE'} = $_[1]},
+# 		"sex_file=s" => sub{$sexes{'FILE'} = $_[1]},
+# 		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
+# 		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
+# 		"output_dir|o=s" => \$output_dir,
+# 		"segment_data|s:s" => \$ersa_data,
+# 		"port_number:i" => \$port_number,
+# 		"reference_pop:s" => \$reference_pop,
+# 		"ages=s{1,4}" => sub
+# 		{ 
+# 			my @possible_keys = qw(FILE FID IID AGE);
+# 			my ($key,$value) = split(/=/,@_[1]);
+# 			uc($key);
+# 			if(grep ($_ eq $key, @possible_keys ))
+# 			{
+# 				$ages{$key} = $value;
+# 			}
+# 			else
+# 			{
+# 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0] option: @_[1]\n";
+# 				print "Must be one of these: @possible_keys\n\n";
+# 				$pod2usage->(2);
+# 			}
+# 		},
+# 		"sexes=s{1,6}" => sub
+# 		{ 
+# 			my @possible_keys = qw(FILE FID IID SEX MALE FEMALE);
+# 			my ($key,$value) = split(/=/,@_[1]);
+# 			uc($key);
+# 			if(grep ($_ eq $key, @possible_keys ))
+# 			{
+# 				$sexes{$key} = $value;
+# 			}
+# 			else
+# 			{
+# 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
+# 				print "Must be one of these: @possible_keys\n\n";
+# 				$pod2usage->(2);
+# 			}
+# 		},
+# 		"affections=s{1,5}" => sub
+# 		{ 
+# 			my @possible_keys = qw(FILE FID IID AFFECTION AFFECTION_VALUE);
+# 			my ($key,$value) = split(/=/,@_[1]);
+# 			uc($key);
+# 			if(grep ($_ eq $key, @possible_keys ))
+# 			{
+# 				$affections{$key} = $value;
+# 			}
+# 			else
+# 			{
+# 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --affections option: @_[1]\n";
+# 				print "Must be one of these: @possible_keys\n\n";
+# 				$pod2usage->(2);
+# 			}
+# 		},	
+# 		"mito_data|mito_matches|mito=s{1,7}" => sub
+# 		{ 
+# 			my @possible_keys = qw(FILE FID1 IID1 FID2 IID2 MATCH MATCH_VAL);
+# 			my ($key,$value) = split(/=/,@_[1]);
+# 			uc($key);
+# 			if(grep ($_ eq $key, @possible_keys ))
+# 			{
+# 				$mito_matches{$key} = $value;
+# 			}
+# 			else
+# 			{
+# 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
+# 				print "Must be one of these: @possible_keys\n\n";
+# 				$pod2usage->(2);
+# 			}
+# 		},
+# 		"y_data|y_matches|y=s{1,7}" => sub
+# 		{ 
+# 			my @possible_keys = qw(FILE FID1 IID1 FID2 IID2 MATCH MATCH_VAL);
+# 			my ($key,$value) = split(/=/,@_[1]);
+# 			uc($key);
+# 			if(grep ($_ eq $key, @possible_keys ))
+# 			{
+# 				$y_matches{$key} = $value;
+# 			}
+# 			else
+# 			{
+# 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
+# 				print "Must be one of these: @possible_keys\n\n";
+# 				$pod2usage->(2);
+# 			}
+# 		},
+# 		"input|i=s{1,9}" => sub
+# 		{ 
+# 			my @possible_keys = qw(FILE FID1 IID1 FID2 IID2 IBD0 IBD1 IBD2 PI_HAT RELATEDNESS);
+# 			my ($key,$value) = split(/=/,@_[1]);
+# 			uc($key);
+# 			if(grep ($_ eq $key, @possible_keys ))
+# 			{
+# 				$ibd_estimates{$key} = $value;
+# 			}
+# 			else
+# 			{
+# 				print "\n\n[COMPADRE] Error: Invalid key before \"=\" for --@_[0]: @_[1]\n";
+# 				print "Must be one of these: @possible_keys\n\n";
+# 				$pod2usage->(2);
+# 			}
+# 		},
+#
+# 		## PRIMUS+ERSA options
+# 		"ersa_model_output=s" => \$ersa_model_output,
+# 		"ersa_results=s" => \$ersa_results,
+# 		"project_summary_file=s" => \$project_summary_file,
+# 		"PADRE_multiple_test_correct" => \$PADRE_multiple_test_correct,		
+#
+# 		## ERSA options (new)
+# 		"min_cm=f" => \$ersa_settings{'min_cm'}, # 2.5
+# 		"max_cm=f" => \$ersa_settings{"max_cm"}, # 10
+# 		"max_meioses=i" => \$ersa_settings{"max_meioses"}, # 40
+# 		"rec_per_meioses=f" => \$ersa_settings{"rec_per_meioses"}, # 35.2548101
+# 		"ascertained_chromosome=s" => \$ersa_settings{"ascertained_chromosome"}, # 'no_ascertainment' (string)
+# 		"ascertained_position=i" => \$ersa_settings{"ascertained_position"}, # -1
+# 		"control_files=s" => \$ersa_settings{"control_files"}, # file specified or not 
+# 		"control_sample_size=i" => \$ersa_settings{"control_sample_size"}, # none -- only used with ersa_control_files
+# 		"exp_mean=f" => \$ersa_settings{"exp_mean"}, # 3.197036753
+# 		"pois_mean=f" => \$ersa_settings{"pois_mean"}, # 13.73
+# 		"number_of_ancestors=i" => \$ersa_settings{"number_of_ancestors"}, # default none
+# 		"number_of_chromosomes=i" => \$ersa_settings{"number_of_chromosomes"}, # 22
+# 		"parent_offspring_option=s" => \$ersa_settings{"parent_offspring_option"}, # true
+# 		"parent_offspring_zscore=f" => \$ersa_settings{"parent_offspring_zscore"}, # 2.33
+# 		"adjust_pop_dist=s" => \$ersa_settings{"adjust_pop_dist"}, # false
+# 		"confidence_level=f" => \$ersa_settings{"confidence_level"}, # 0.95
+# 		"mask_common_shared_regions=s" => \$ersa_settings{"mask_common_shared_regions"}, # false
+# 		"mask_region_cross_length=i" => \$ersa_settings{"mask_region_cross_length"}, # 1000000
+# 		"mask_region_file=s" => \$ersa_settings{"mask_region_file"}, # file specified or not
+# 		"mask_region_threshold=f" => \$ersa_settings{"mask_region_threshold"}, # 4.0
+# 		"mask_region_sim_count=i" => \$ersa_settings{"mask_region_sim_count"}, # 0
+# 		"recombination_files=s" => \$ersa_settings{"recombination_files"}, # file specified or not
+# 		"beagle_markers_files=s" => \$ersa_settings{"beagle_markers_files"}, # file specified or not
+#
+# 		## IMUS options
+# 		"size:s" => sub{ push(@trait_order,"size");$traits{'size'} = "-size";},
+# 		"high_btrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
+# 		"low_btrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
+# 		"high_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
+# 		"low_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
+# 		"mean_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
+# 		"tails_qtrait=s" => sub{ push(@trait_order,@_[1]);$traits{@_[1]} = @_[0];},
+# 		"plink_ibd|PLINK|p=s" => sub{$ibd_estimates{'FILE'} = $_[1]},
+#     	"likelihood_vectors=s" => sub{$ibd_estimates{'FILE'} = $_[1]; $ibd_estimates{'likelihood_vectors'}=1},
+# 		"sex_file=s" => sub{$sexes{'FILE'} = $_[1]},
+# 		"age_file=s" => sub{$ages{'FILE'} = $_[1]},
+# 		"affection_file=s" => sub{$affections{'FILE'} = $_[1]},
+# 		"output_dir|o=s" => \$output_dir,
+# 		#"ersa_data=s" => \$ersa_data,
+# 		)
+# 		or $pod2usage->(2);
+#     	}
+#     	if ( $man or $help ) {
+# 		$pod2usage->(1) if $help;
+# 		$pod2usage->(VERBOSE => 2) if $man;
+#     	}
+#
+# 	if($data_stem ne "" && $run_prePRIMUS != 1)
+# 	{
+# 		die "INVALID INPUT OPTIONS: --file input also requires the --genome flag to run.\n\n";
+# 	}
+#
+# 	if($run_padre && $ersa_data eq "")
+# 	{
+# 		die "\n[COMPADRE] Error: --run_padre requires --segment_data to be specified.\n\n";
+# 	}
+#
+# 	## PRIMUS + ERSA requires ERSA likelihood file and results file as well as a PRIMUS summary file.
+# 	if($ersa_model_output ne "" || $ersa_results ne "")
+# 	{
+# 		if($ersa_model_output ne "" && $ersa_results ne "")
+# 		{
+# 			if($project_summary_file ne "")
+# 			{
+# 				$run_PRIMUS_plus_ERSA = 1;
+# 			}
+# 			elsif(!exists $ibd_estimates{'FILE'} && $data_stem eq "")
+# 			{
+# 				die "INVALID INPUTS: PRIMUS+ERSA requires a PRIMUS project summary file; either provide one on the commandline or generate one by running PRIMUS.\n\n";
+# 			}
+# 			else
+# 			{
+# 				$run_PRIMUS_plus_ERSA = 1;
+# 			}
+# 		}
+# 		else
+# 		{
+# 			die "INVALID INPUTS: PRIMUS+ERSA requires but the model_output_fule and the results files output by ERSA.\n\n";
+# 		}
+# 	}
+#
+# 	if($run_prePRIMUS)
+# 	{
+# 		if(exists $ibd_estimates{'FILE'})
+# 		{
+# 			die "[COMPADRE] Error: If you already have IBD estimates, then you don't need to calculate new ones with --genome option. If you do need to calculate IBD estimates, don't input anything for the IBD estimates.\n\n";
+# 		}
+# 		$study_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($data_stem);
+# 		$output_dir = "$data_stem\_PRIMUS" if $output_dir eq ""; 
+# 		#print "out_dir: $output_dir\n" if $verbose > 0;
+# 	}
+#
+# 	## Set output directory if not passed in
+# 	if($output_dir eq "" && exists $ibd_estimates{'FILE'}){$output_dir = "$ibd_estimates{'FILE'}\_PRIMUS"}
+#
+#
+# 	## Test that ibd_estimates were passed in
+# 	if(!exists $ibd_estimates{'FILE'} && $data_stem eq "")
+# 	{
+# 		if(!$run_PRIMUS_plus_ERSA)
+# 		{
+# 			print "\n[COMPADRE] No arguments provided. Please run with the --help flag for details.\n\n";
+# 			$pod2usage->(2);
+# 		}
+# 		else
+# 		{
+# 			$reconstruct_pedigrees = 0;
+# 			$get_max_unrelated_set = 0;
+# 		}
+# 	}
+# 	if(!-e $ibd_estimates{'FILE'} && $data_stem eq "")
+# 	{
+# 		if(!$run_prePRIMUS && !$run_PRIMUS_plus_ERSA)
+# 		{
+# 			print "[COMPADRE] Error: IBD INPUT FILE DOES NOT EXIST: $ibd_estimates{'FILE'}\n";
+# 			$pod2usage->(2);
+# 		}
+# 	}
+#
+#
+# 	## Set genome_file_name: if there is a path to the file, ignore all the path, and select the name of the file
+# 	if($ibd_estimates{'FILE'} =~ /\/([^\/]+)$/){$dataset_name = $1}
+# 	else{$dataset_name = $ibd_estimates{'FILE'} }
+#
+# 	## Add size as first trait if it is a qtrait
+# 	if($traits{$trait_order[0]} =~ /qtrait/)
+# 	{
+# 		unshift(@trait_order,"size");
+# 	}
+# 	## Add size to traits if not already in it
+# 	if(!grep ($_ eq "size", @trait_order ))
+# 	{
+# 		push (@trait_order,"size");
+# 		$traits{'size'} = "size";
+# 	}
+#
+# 	if(exists $ibd_estimates{'RELATEDNESS'})
+# 	{
+# 		$ibd_estimates{'PI_HAT'} = $ibd_estimates{'RELATEDNESS'};
+# 	}
+#
+# 	## If the relatedness threshold or degree_rel_cutoff changed, then adjust them both here
+# 	if($relatedness_threshold != .09375 || $degree_rel_cutoff != 3)
+# 	{
+# 		## If degree_rel_cutoff is unchanged, adjust it to account for the change in the $relatedness_threshold
+# 		if($degree_rel_cutoff == 3)
+# 		{
+# 			$degree_rel_cutoff = 3 if $relatedness_threshold <= 0.1;
+# 			$degree_rel_cutoff = 2 if $relatedness_threshold > 0.1 && $relatedness_threshold <= 0.2;
+# 			$degree_rel_cutoff = 1 if $relatedness_threshold > 0.2;
+# 		}
+# 		elsif($degree_rel_cutoff == 2)
+# 		{
+# 			$relatedness_threshold = 0.1875;
+# 		}
+# 		elsif($degree_rel_cutoff == 1)
+# 		{
+# 			$relatedness_threshold = 0.375;
+# 		}
+# 		else
+# 		{
+# 			die "INVALID value for -d|--degree_rel_cutoff; Valid options are are integers from 1 to 3, representing 1st through 3rd degree relatives\n\n";  
+# 		}
+# 	}
+#
+#   # platform agonistic way to form the file path
+# 	$log_file = File::Spec->catfile($output_dir, "COMPADRE_output.log");
+# }
 
 sub do_arrays_match
 {
@@ -1207,32 +1311,42 @@ sub do_arrays_match
 
 sub check_names
 {
+	my ($cfg) = @_;
+	my $glob = $cfg->{global};
+	my $imus = $cfg->{imus};
+
+	my $ibd = $imus->{ibd_estimates};
+	my $sexes = $imus->{sexes};
+	my $affections = $imus->{affections};
+	my $ages = $imus->{ages};
+
 	## Load additional attributes files into simple hash references
 	my $samples1_ref;
 	my $samples2_ref;
 	my $sexes_ref; 
 	my $affections_ref; 
 	my $ages_ref; 
-	
-	$samples1_ref = get_sample_info($ibd_estimates{'FILE'},$ibd_estimates{'FID1'},$ibd_estimates{'IID1'},$ibd_estimates{'PI_HAT'});
-	$samples2_ref = get_sample_info($ibd_estimates{'FILE'},$ibd_estimates{'FID2'},$ibd_estimates{'IID2'},$ibd_estimates{'PI_HAT'});
-	
-	if(exists $sexes{'FILE'})
+
+	$samples1_ref = get_sample_info($ibd->{'FILE'},$ibd->{'FID1'},$ibd->{'IID1'},$ibd->{'PI_HAT'});
+	$samples2_ref = get_sample_info($ibd->{'FILE'},$ibd->{'FID2'},$ibd->{'IID2'},$ibd->{'PI_HAT'});
+
+	if(exists $sexes->{'FILE'})
 	{
-		if(!-e $sexes{'FILE'})
+		if(!-e $sexes->{'FILE'})
 		{
-			$LOG->warn("$sexes{'FILE'} does not exists; continuing without sex info.\n");
+			$LOG->warn("$sexes->{'FILE'} does not exists; continuing without sex info.\n");
 			delete $sexes{'FILE'};
+			delete $sexes->{'FILE'};
 		}
 		else
 		{
-			$sexes_ref = get_sample_info($sexes{'FILE'},$sexes{'FID'},$sexes{'IID'},$sexes{'SEX'});
+			$sexes_ref = get_sample_info($sexes->{'FILE'},$sexes->{'FID'},$sexes->{'IID'},$sexes->{'SEX'});
 			foreach my $id (keys %$sexes_ref)
 			{
-				if($$sexes_ref{$id} eq $sexes{'MALE'}){$$sexes_ref{$id} = 1}
-				elsif($$sexes_ref{$id} eq $sexes{'FEMALE'}){$$sexes_ref{$id} = 2}
+				if($$sexes_ref{$id} eq $sexes->{'MALE'}){$$sexes_ref{$id} = 1}
+				elsif($$sexes_ref{$id} eq $sexes->{'FEMALE'}){$$sexes_ref{$id} = 2}
 				else{$$sexes_ref{$id} = 0}
-				if($verbose > 1)
+				if($glob->{verbose} > 1)
 				{
 					$LOG->proginfo("$id sex = $$sexes_ref{$id}\n");
 				}
@@ -1241,52 +1355,51 @@ sub check_names
 			{
 				if(!exists $$sexes_ref{$sample})
 				{
-					$LOG->warn("WARNING: sample $sample is not included in the sex file $sexes{'FILE'}\n");
+					$LOG->warn("WARNING: sample $sample is not included in the sex file $sexes->{'FILE'}\n");
 				}
 			}
 			foreach my $sample (keys %$samples2_ref)
 			{
 				if(!exists $$sexes_ref{$sample})
 				{
-					$LOG->warn("WARNING: sample $sample is not included in the sex file $sexes{'FILE'}\n");
+					$LOG->warn("WARNING: sample $sample is not included in the sex file $sexes->{'FILE'}\n");
 				}
 			}
 		}
 	}
-	if(exists $affections{'FILE'})
+	if(exists $affections->{'FILE'})
 	{
-		$affections_ref = get_sample_info($affections{'FILE'},$affections{'FID'},$affections{'IID'},$affections{'AFFECTION'});
+		$affections_ref = get_sample_info($affections->{'FILE'},$affections->{'FID'},$affections->{'IID'},$affections->{'AFFECTION'});
 		foreach my $sample (keys %$samples1_ref)
 		{
 			if(!exists $$affections_ref{$sample})
 			{
-				$LOG->warn("WARNING: sample $sample is not included in the affections file $affections{'FILE'}\n");
+				$LOG->warn("WARNING: sample $sample is not included in the affections file $affections->{'FILE'}\n");
 			}
 		}
 		foreach my $sample (keys %$samples2_ref)
 		{
 			if(!exists $$affections_ref{$sample})
 			{
-				$LOG->warn("WARNING: sample $sample is not included in the affections file $affections{'FILE'}\n");
+				$LOG->warn("WARNING: sample $sample is not included in the affections file $affections->{'FILE'}\n");
 			}
 		}
-
 	}
-	if(exists $ages{'FILE'})
+	if(exists $ages->{'FILE'})
 	{
-		$ages_ref = get_sample_info($ages{'FILE'},$ages{'FID'},$ages{'IID'},$ages{'AGE'});
+		$ages_ref = get_sample_info($ages->{'FILE'},$ages->{'FID'},$ages->{'IID'},$ages->{'AGE'});
 		foreach my $sample (keys %$samples1_ref)
 		{
 			if(!exists $$ages_ref{$sample})
 			{
-				$LOG->warn("WARNING: sample $sample is not included in the age file $ages{'FILE'}\n");
+				$LOG->warn("WARNING: sample $sample is not included in the age file $ages->{'FILE'}\n");
 			}
 		}
 		foreach my $sample (keys %$samples2_ref)
 		{
 			if(!exists $$ages_ref{$sample})
 			{
-				$LOG->warn("WARNING: sample $sample is not included in the age file $ages{'FILE'}\n");
+				$LOG->warn("WARNING: sample $sample is not included in the age file $ages->{'FILE'}\n");
 			}
 		}
 	}
@@ -1313,11 +1426,11 @@ B<run_COMPADRE.pl> will read genome-wide IBD estimates and will identify a maxim
 
  For usage and documentation:
    -h, --help		Brief help message
- 
+
  Required options (one of the following):
    -p, --plink_ibd	Specify path to a .genome IBD estimates file produced by PLINK
    -i, --input		Specify path to an IBD estimates file and additional column information
-   
+
    (or both):
    --file 		Path to PLINK formatted data without the file extensions; behaves the same as in PLINK (requires --genome)
    --genome		Read in --file and calculate IBD estimates using PLINK
