@@ -419,6 +419,11 @@ sub run_prePRIMUS
 		$y_matches{'FILE'}=$temp_y_match_file;
 	}
 	$dataset_name = PRIMUS::prePRIMUS_pipeline_v7::get_file_name_from_stem($temp_genome_file);
+	$cfg->{imus}->{ibd_estimates} = \%ibd_estimates;
+	$cfg->{imus}->{sexes}         = \%sexes;
+	$cfg->{imus}->{mito_matches}  = \%mito_matches;
+	$cfg->{imus}->{y_matches}     = \%y_matches;
+	$cfg->{global}->{dataset_name} = $dataset_name;
 	$LOG->info("Dataset name: $dataset_name\n");
 	$LOG->info("PrePRIMUS done.\n");
 }
@@ -729,6 +734,9 @@ sub print_files_and_settings {
 		my $value = $config->{ersa}->{$key};
 		# Only include non-empty string values and non-zero numeric defaults where appropriate
 		if (defined $value && $value ne "") {
+			if ($key eq 'mask_common_shared_regions' || $key eq 'adjust_pop_dist' || $key eq 'parent_offspring_option') {
+				$value = $value ? 'true' : 'false';
+			}
 			$ersa_flags .= "$key|$value|";
 		}
 	}

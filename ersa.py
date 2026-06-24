@@ -436,30 +436,15 @@ def get_confidence_levels(models,max_model_id,max_model_ll,confidence_statistic,
 
                     if options.return_output == True:
                         row_df = pd.DataFrame([df_info])
-                        #model_df = pd.concat([model_df, row_df], ignore_index=True)
-
-                        if model_df.empty:
-                            model_df = row_df.copy()
-                        else:
-                            # Use append method (deprecated but works for pandas versions < 2.0)
-                            model_df = model_df._append(row_df, ignore_index=True)
-
+                        model_df = pd.concat([model_df, row_df], ignore_index=True)
 
             else:
                 if options.write_output == True:
                     model_output_file.write(ind_ids[0]+'\t'+ind_ids[1]+'\t'+str(model.ancestors)+'\t'+str(dor)+'\t'+str(model.ml)+'\n')
 
                 if options.return_output == True:
-
                     row_df = pd.DataFrame([df_info])
-                    if model_df.empty:
-                        model_df = row_df.copy()
-                    else:
-                        # Use append method (deprecated but works for pandas versions < 2.0)
-                        model_df = model_df._append(row_df, ignore_index=True)
-
-                    # row_df = pd.DataFrame([df_info])
-                    # model_df = pd.concat([model_df, row_df], ignore_index=True)
+                    model_df = pd.concat([model_df, row_df], ignore_index=True)
 
         if model.ml+confidence_statistic>=max_model_ll:
             if model.ancestors==0:
