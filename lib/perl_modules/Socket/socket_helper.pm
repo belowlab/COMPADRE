@@ -1,7 +1,7 @@
 package Socket::socket_helper;
 
 use strict;
-use IO::Socket::INET; 
+use IO::Socket::UNIX; 
 use JSON::PP;
 use Time::HiRes qw(sleep);
 
@@ -27,14 +27,13 @@ sub check_errors {
 }
 
 sub send_to_compadre_helper {
-    my ($data, $port) = @_;
-    $port //= 6000;  
-    my $host = $ENV{COMPADRE_HOST} // 'localhost';
+    my ($data, $socket_path) = @_;
+    die "Socket path not specified for compadre helper" unless defined $socket_path;
 
 
     # We are going to implement an exponential backoff retry strategy for 
     # the socket just incase there are weird network issues. The 
-    # IO::Socket::INET->new returns undef if it timeouts waiting for the 
+    # IO::Socket::UNIX->new returns undef if it timeouts waiting for the 
     # connect. We can use this to check if we have successfully connected 
     # to the socket or if we can't connect to the socket for some reason
     my $socket;
@@ -43,11 +42,9 @@ sub send_to_compadre_helper {
 
 
     for (my $attempt = 1; $attempt <= $max_attempts; $attempt++) {
-      $socket = IO::Socket::INET->new(
-          PeerAddr => $host,
-          PeerPort => $port,
-          Proto    => 'tcp',
-          Timeout  => 5,  # Increase timeout for debugging
+      $socket = IO::Socket::UNIX->new(
+          Peer    => $socket_path,
+          Timeout => 5,  # Increase timeout for debugging
       );
 
       # This checks if we have successfully connected to the socket 
@@ -58,7 +55,7 @@ sub send_to_compadre_helper {
       # attempts and still haven't connected to the server so we should 
       # terminate the program
       if ($attempt == $max_attempts) {
-        die "failed to connect to the Python server at $host:$port: $!\n. Exiting program now...";
+        die "failed to connect to the Python server at $socket_path: $!\n. Exiting program now...";
       }
 
       # Now that we have checked if we connected successfully and checked if 
@@ -69,8 +66,6 @@ sub send_to_compadre_helper {
       $retry_wait *= 2;
     }
 
-    # Enable keep-alive on the socket
-    $socket->sockopt(SO_KEEPALIVE, 1) if $socket->can('sockopt');
     $socket->blocking(1);
 
 

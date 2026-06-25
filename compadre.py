@@ -11,6 +11,8 @@ import random
 from pathlib import Path
 from typing import Tuple
 import errno
+import tempfile
+import shutil
 
 
 import warnings
@@ -24,12 +26,27 @@ from pop_classifier import run_new as run_pop_classifier
 ########################################
 
 
+temp_dir_path = None
+unix_socket_path = None
+
+
 def signal_handler(signum, frame):
+    global temp_dir_path, unix_socket_path
     try:
         if "server_socket" in globals() and server_socket:
             server_socket.close()
     except:
         pass
+    if unix_socket_path and os.path.exists(unix_socket_path):
+        try:
+            os.remove(unix_socket_path)
+        except OSError:
+            pass
+    if temp_dir_path and os.path.exists(temp_dir_path):
+        try:
+            shutil.rmtree(temp_dir_path)
+        except OSError:
+            pass
     os._exit(0)
 
 
@@ -189,51 +206,30 @@ def clean_ersa_options(ersa_option_dict):
 
 def create_socket() -> socket.socket:
     """function to wrap the creation logic for the socket"""
-    created_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    created_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    created_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    created_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     created_socket.settimeout(None)
     return created_socket
 
 
-PortResponse = Tuple[socket.socket | None, int | None, Exception | None]
+SocketResponse = Tuple[socket.socket | None, str | None, Exception | None]
 
 
 def start_server(
-    preferred_port: int,
-    host="localhost",
-    current_attempt: int = 0,
-    max_attempts: int = 100,
-) -> PortResponse:
-    """finds an open port. First test the port provided by the user and then attempt to open:wrap
-    a socket for another port"""
-
-    if current_attempt == max_attempts:
-        return (
-            None,
-            None,
-            Exception(
-                f"FATAL: Unable to find an open port after {max_attempts} attempts"
-            ),
-        )
-
+    socket_path: str,
+) -> SocketResponse:
+    """creates and binds the UDS socket"""
     new_socket = create_socket()
-
     try:
-        new_socket.bind((host, preferred_port))
+        if os.path.exists(socket_path):
+            try:
+                os.remove(socket_path)
+            except OSError:
+                pass
+        new_socket.bind(socket_path)
         new_socket.listen(1)
-        return new_socket, preferred_port, None
+        return new_socket, socket_path, None
     except OSError as e:
-        if e.errno == errno.EADDRINUSE:
-            new_socket.close()
-            safe_print(
-                f"INFO: Port {preferred_port} is in use, searching for available port...",
-                file=sys.stderr,
-            )
-            port = random.randint(4001, 8000)  # Try ports in this range
-            return start_server(port, host, current_attempt + 1, max_attempts)
-        else:
-            return None, None, e
+        return None, None, e
 
 
 def parse_ersa_options(ersa_flag_str: str) -> dict:
@@ -368,23 +364,20 @@ def main(
     segment_dict,
     additional_options: dict,
     ibd2_status: str,
-    portnumber: int,
+    socket_path: str,
     output_directory: str,
 ):
 
     signal.signal(signal.SIGINT, signal_handler)  # CTRL+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination
     signal.signal(signal.SIGPIPE, signal_handler)  # Broken pipe
-    global server_socket
+    global server_socket, temp_dir_path, unix_socket_path
 
     #########################
 
-    socket_host = (
-        os.environ["COMPADRE_HOST"] if "COMPADRE_HOST" in os.environ else "localhost"
-    )
+    unix_socket_path = socket_path
 
-    # Find an available port
-    server_socket, actual_port, error = start_server(portnumber, socket_host)
+    server_socket, actual_target, error = start_server(socket_path)
 
     if error:
         safe_print(
@@ -393,11 +386,7 @@ def main(
         )
         raise error
 
-    # If port changed, notify via stderr first (before stdout message)
-    if actual_port != portnumber:
-        safe_print(f"Port changed: {actual_port}", file=sys.stderr)
-
-    safe_print(f"COMPADRE helper is ready on port {actual_port}")
+    safe_print(f"COMPADRE helper is ready on socket {actual_target}")
     sys.stdout.flush()
 
     # The perl script forks a child process at this point so that it can
@@ -432,6 +421,16 @@ def main(
 
         finally:
             server_socket.close()
+            if unix_socket_path and os.path.exists(unix_socket_path):
+                try:
+                    os.remove(unix_socket_path)
+                except OSError:
+                    pass
+            if temp_dir_path and os.path.exists(temp_dir_path):
+                try:
+                    shutil.rmtree(temp_dir_path)
+                except OSError:
+                    pass
             safe_print("PROGINFO: [COMPADRE] COMPADRE helper shutdown complete.")
 
 
@@ -713,7 +712,13 @@ if __name__ == "__main__":
     # This is how the script is called from bin/compadre_kickoff.pl
 
     segment_data_file = sys.argv[1]
-    portnumber = int(sys.argv[2])
+    socket_target_raw = sys.argv[2]
+    if socket_target_raw == 'UDS':
+        # Delegate temporary directory generation to Python's tempfile module
+        temp_dir_path = tempfile.mkdtemp(prefix="compadre_")
+        socket_target = os.path.join(temp_dir_path, "compadre.sock")
+    else:
+        socket_target = socket_target_raw
     ersa_flag_str = sys.argv[3]
     output_directory = sys.argv[4]
 
@@ -733,4 +738,4 @@ if __name__ == "__main__":
             additional_options, segment_dict
         )  # This will update min_cm passed into ersa if applicable
 
-    main(segment_dict, additional_options, ibd2_status, portnumber, output_directory)
+    main(segment_dict, additional_options, ibd2_status, socket_target, output_directory)
