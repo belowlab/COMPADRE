@@ -66,7 +66,6 @@ my $dataset_name;
 # my $study_name = "";
 # my $output_dir = "";
 # my $ersa_data = "";
-my $port_number = 6000;
 # my $run_padre = 0;  # New flag for PADRE
 # my $reference_pop = "";
 my $log_file;
@@ -75,7 +74,7 @@ my $LOG;
 # Store PID globally for signal handlers
 our $compadre_pid;
 our $cleanup_called = 0; 
-our $port_number_glob;
+our $socket_path_glob;
 # We are also going to spawn a listener process that will allow us to continue logging values from the python server even when the perl code moves on after its main loop
 our $listener_pid;
 
@@ -99,7 +98,7 @@ sub cleanup_compadre {
         } else {
             # For normal END cleanup, try graceful first
             eval {
-                my $shutdown_ack = send_to_compadre_helper("close\n", $port_number);
+                my $shutdown_ack = send_to_compadre_helper("close\n", $socket_path_glob);
                 $LOG->info("COMPADRE graceful shutdown: $shutdown_ack\n");
             };
             
@@ -135,6 +134,18 @@ $SIG{QUIT} = \&cleanup_compadre;  # CTRL+\
 END {
     # This runs when the script exits for any reason
     cleanup_compadre('END') if defined $compadre_pid;
+
+    # Ensure the socket file gets unlinked and parent temp directory gets deleted
+    if (defined $socket_path_glob && -e $socket_path_glob) {
+        use File::Basename;
+        use File::Path qw(remove_tree);
+        
+        my $temp_dir = dirname($socket_path_glob);
+        if (-d $temp_dir && $temp_dir =~ /compadre_/) {
+            unlink($socket_path_glob);
+            remove_tree($temp_dir);
+        }
+    }
 }
 
 #######################################################################################
@@ -225,7 +236,6 @@ my $verbose = $config->{global}->{verbose};
 my $study_name = $config->{global}->{study_name};
 $dataset_name = $config->{global}->{dataset_name};
 my $output_dir = $config->{global}->{output_dir};
-$port_number = $config->{global}->{port_number};
 my $run_padre = $config->{global}->{run_padre};
 $log_file = $config->{global}->{log_file};
 my $debug = $config->{global}->{debug};
@@ -597,9 +607,9 @@ sub run_PR {
 
 		$LOG->info("Initializing PADRE\n");
 
-		$LOG->debug("Requesting ERSA output path from COMPADRE helper... (port $port_number_glob)\n");
+		$LOG->debug("Requesting ERSA output path from COMPADRE helper... (socket $socket_path_glob)\n");
 
-		my $ersa_output_path_prefix = send_to_compadre_helper("padre\n", $port_number_glob);
+		my $ersa_output_path_prefix = send_to_compadre_helper("padre\n", $socket_path_glob);
 
 		$LOG->debug("Received ERSA output path prefix: $ersa_output_path_prefix\n");
 
@@ -615,7 +625,7 @@ sub run_PR {
 		$LOG->info("PADRE complete.\n\n");
 	}
 
-	my $shutdown_ack = send_to_compadre_helper("close\n", $port_number_glob);
+	my $shutdown_ack = send_to_compadre_helper("close\n", $socket_path_glob);
   $LOG->info("COMPADRE socket shutdown message: $shutdown_ack\n");	
 }
 
@@ -699,8 +709,6 @@ sub print_files_and_settings {
 
 	$LOG->proginfo("Segment data file: $ersa_data\n") if $ersa_data ne "";
 
-	$LOG->proginfo("Port number: $port_number\n") if $port_number ne "" && $port_number != 6000;
-
 	# get absolute path of compadre helper 
 	my $libpath = $lib_dir;
 	$libpath =~ s{/$}{};
@@ -742,7 +750,7 @@ sub print_files_and_settings {
 	}
 
   # switch this from open2 to open3 because open2 doesn't actually merge stderr and stdout. 
-	my $pid = open3($writer, $reader, $reader, 'python3', $helper_path, $ersa_arg, $port_number, $ersa_flags, $output_dir);
+	my $pid = open3($writer, $reader, $reader, 'python3', $helper_path, $ersa_arg, 'UDS', $ersa_flags, $output_dir);
 
 	if (!defined $pid) {
     $LOG->fatal("Failed to launch COMPADRE helper: $!\n\n");
@@ -750,29 +758,17 @@ sub print_files_and_settings {
 	}
 	$compadre_pid = $pid;
 
-	# Wait for the server to be ready and check for port changes
-  my $actual_port = $port_number;  # Default to requested port
+	# Wait for the server to be ready and check for socket path
+  my $resolved_socket = "";
 
 	while (my $line = <$reader>) {
 
-    # Check for port change notification (comes via stderr which open3 merges)
-    if ($line =~ /Port changed: (\d+)/) {
-        $actual_port = $1;
-
-        $LOG->proginfo("\n[COMPADRE] Port $port_number was in use, using port $actual_port instead.\n");
-        $port_number = $actual_port;
-    }
-
-    # Always parse the actual port from the "ready" line on stdout. The 
-    # capture group (\d+) will catch the port number and save it to the 
-    # $1 variable
-		elsif ($line =~ /COMPADRE helper is ready on port\s+(\d+)/) {
-			$actual_port = $1;  # <-- CRITICAL: take the authoritative port from stdout
+    # Always parse the actual socket path from the "ready" line on stdout.
+		if ($line =~ /COMPADRE helper is ready on socket\s+(.+)/) {
+			$resolved_socket = $1;
+			chomp $resolved_socket;
 			chomp $line;
       $LOG->proginfo("\n$line\n");
-
-			# Overwrite the working port so all later steps use it
-			$port_number = $actual_port;
 
       # We are going to add logic here to create a child process that can continue to read from the $reader in order to log messages from the python socket
       # perl will return 0 for the child and the parent will continue. Imagine it like 2 threads are being formed although this is not threading 
@@ -833,8 +829,7 @@ sub print_files_and_settings {
 	# Standard arguments 
 
 	our $ersa_data_glob = $ersa_data;
-	our $port_number_glob = $port_number;
-	#print "\n[COMPADRE] Global port number: $port_number_glob\n";
+	our $socket_path_glob = $resolved_socket;
 	our $reference_pop_glob = $reference_pop;
 
 	# ERSA additional arguments 

@@ -678,7 +678,7 @@ sub pick_reference_populations {
 	my @PC2;
 	my @ref_pops;
 
-	my $port_number = $main::port_number_glob;
+	my $socket_path = $main::socket_path_glob;
 	my $onekg_idfile = "$onekg/1KG_pop_classifier_ids.txt";
   # create the data to send to the socket. The socket is reading line by 
   # line so we need to add a newline charcter to make sure it knows that 
@@ -686,7 +686,7 @@ sub pick_reference_populations {
 	my $socket_data = "$data_stem.eigenvec|$onekg_idfile|pop_classifier\n";
 
 	# Run population classifier and return the top populations as @ref_pops
-	my $ref_pops_str = send_to_compadre_helper($socket_data, $port_number);
+	my $ref_pops_str = send_to_compadre_helper($socket_data, $socket_path);
 
 	if($ref_pops_str eq 'No response')
 	{

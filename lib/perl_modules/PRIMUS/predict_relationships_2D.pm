@@ -28,8 +28,8 @@ my $LOG = Log::Log4perl->get_logger(__PACKAGE__);
 
 # Closes the python socket when the Perl requests to it are done (PR done)
 sub close_socket {
-	my ($port) = @_;
-    send_to_compadre_helper('close', $port);
+	my ($socket_path) = @_;
+    send_to_compadre_helper('close', $socket_path);
 }
 
 sub get_relationship_likelihood_vectors {
@@ -61,7 +61,7 @@ sub get_relationship_likelihood_vectors {
 
 	# Open socket connection to compadre helper at the beginning of this subroutine
 	my $match_data = $main::ersa_data_glob;
-	my $port_number = $main::port_number_glob;
+	my $socket_path = $main::socket_path_glob;
 
 	if (!defined($MIN_LIKELIHOOD) || $MIN_LIKELIHOOD eq "") {
 		$MIN_LIKELIHOOD = 0.3;
@@ -260,7 +260,7 @@ sub get_relationship_likelihood_vectors {
 
 				my $vector_str = join(',',@vector);
 				my $socket_data = "$name1|$name2|$vector_str|pairwise\n";
-				my $new_vector = send_to_compadre_helper($socket_data, $port_number);
+				my $new_vector = send_to_compadre_helper($socket_data, $socket_path);
 				chomp($new_vector);
 				
 				# Get the original relationship before changing the vector
