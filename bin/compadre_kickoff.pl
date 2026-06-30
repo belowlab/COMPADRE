@@ -31,6 +31,7 @@ use PRIMUS::predict_relationships_2D;
 use PRIMUS::prePRIMUS_pipeline_v7;
 use PRIMUS::PRIMUS_plus_ERSA;
 use Parser::parse_options qw(parse_options);
+use Types::State;
 use File::Path qw(make_path);
 use POSIX ":sys_wait_h";
 
@@ -231,6 +232,7 @@ END {
 
 ## Process command line options
 my $config = parse_options(@_);
+my $state = Types::State->new();
 
 my $verbose = $config->{global}->{verbose};
 my $study_name = $config->{global}->{study_name};
@@ -343,9 +345,14 @@ if($run_prePRIMUS){
 ## Run IMUS to get family networks and maximum unrelated set (unless turned off)
 if($reconstruct_pedigrees || $get_max_unrelated_set)
 {
-	my @IMUS_commands = ("--do_IMUS",$get_max_unrelated_set,"--do_PR",$reconstruct_pedigrees,"--ibd_estimates",\%ibd_estimates,"--verbose",$verbose,"--trait_order",\@trait_order,"--traits",\%traits,"--output_dir",$output_dir,"--rel_threshold",$relatedness_threshold,"--lib",$lib_dir,"--int_likelihood_cutoff",$initial_likelihood_cutoff);
-	$LOG->debug("IMUS_commands: @IMUS_commands\n");
-	if(!PRIMUS::IMUS::run_IMUS(@IMUS_commands)){
+	$config->{imus}->{ibd_estimates} = \%ibd_estimates;
+	$config->{imus}->{sexes} = \%sexes;
+	$config->{imus}->{mito_matches} = \%mito_matches;
+	$config->{imus}->{y_matches} = \%y_matches;
+	$config->{imus}->{traits} = \%traits;
+	$config->{imus}->{trait_order} = \@trait_order;
+
+	if(!PRIMUS::IMUS::run_IMUS($config, $state)){
     die "IMUS FAILED TO COMPLETE\n\n";
   }
 }

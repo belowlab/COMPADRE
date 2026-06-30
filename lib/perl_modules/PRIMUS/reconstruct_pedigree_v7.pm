@@ -199,6 +199,7 @@ sub reconstruct_pedigree {
 						$IBD_file_ref, $MIN_LIKELIHOOD, $verbose, $lib_dir, $output_directory);
 			}
 		};
+		die $@ if $@;
 
 		# can we just run the LOAD function here instead? why do we need to do this twice 
 	

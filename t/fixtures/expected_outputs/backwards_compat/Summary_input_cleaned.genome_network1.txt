@@ -1,0 +1,10 @@
+## Network_name: input_cleaned.genome_network1
+## Num_pedigrees: 1
+## Num_pedigrees_unflagged: 1
+## Num_samples: 20
+## Num_at_max_score: 1
+## Sample_IIDs: id2,id17,id12,id16,id8,id14,id10,id18,id3,id15,id13,id4,id1,id6,id20,id5,id9,id19,id11,id7
+## Error_message: none
+
+Pedigree_num	num_dummies	num_generations	rank	pedigree_composite_lnl	Age_flags
+1	0	4	1	803.830145369205

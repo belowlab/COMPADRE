@@ -14,6 +14,8 @@ env PERL5LIB="" PERL_LOCAL_LIB_ROOT="" PERL_MM_OPT="" PERL_MB_OPT="" cpanm --ins
 run-compadre = """
 env PERL5LIB="" PERL_LOCAL_LIB_ROOT="" PERL_MM_OPT="" PERL_MB_OPT="" perl bin/run_COMPADRE.pl
 """
+# Command to run the test suite
+test = "prove -Ilib/perl_modules -It/lib t/unit/*.t t/integration/*.t"
 
 [dependencies]
 python = "~=3.13.0"

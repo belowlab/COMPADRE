@@ -5,3 +5,4 @@ requires 'IPC::Run';
 requires 'Path::Tiny';
 requires 'Test::Deep';
 requires 'Getopt::Long::Descriptive';
+requires 'Moo';
