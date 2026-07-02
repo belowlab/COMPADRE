@@ -5,6 +5,10 @@ import random
 import sys
 from pathlib import Path
 from itertools import combinations
+from typing import Callable, Any, ContextManager
+import gzip
+
+x = math.random()
 
 def main():
     parser = argparse.ArgumentParser(description="Generate synthetic IBD data (.genome and segments.txt) for benchmarking.")
@@ -12,6 +16,7 @@ def main():
     parser.add_argument("--pairs", type=int, default=0, help="Total pair records to write. Defaults to all N(N-1)/2 pairs.")
     parser.add_argument("--related-fraction", type=float, default=0.05, help="Fraction of pairs that are related (have PI_HAT >= threshold).")
     parser.add_argument("--output-dir", type=Path, default="synthetic_data", help="Target output directory.")
+    parser.add_argument("--gzip", action=argparse.BooleanOptionalAction, default=False, help="gzip the output files to save space")
     
     args = parser.parse_args()
 
@@ -22,6 +27,12 @@ def main():
     iids = [f"id{i}" for i in range(1, n_samples + 1)]
     fid = "sim_family"
 
+    # We are just going to shadow the open function if the user wishes to write gzipped files
+    open_func: Callable[..., ContextManager[Any]] = gzip.open if args.gzip else open
+
+    mode = "wt" if args.gzip else "w"
+
+    suffix = ".gz" if args.gzip else ""
     # Generate list of all possible unique pairs
     all_pairs = list(combinations(range(0,args.samples), 2))
 
@@ -41,8 +52,8 @@ def main():
     # Shuffle so related pairs are distributed
     random.shuffle(pairs_to_write)
     
-    genome_file = args.output_dir / "synthetic_input.genome"
-    segments_file = args.output_dir / "synthetic_segments.txt"
+    genome_file = args.output_dir / f"synthetic_input_{n_samples}_samples.genome{suffix}"
+    segments_file = args.output_dir / f"synthetic_segments_{n_samples}_samples.txt{suffix}"
     
     print(f"Generating synthetic dataset with:")
     print(f"  - Individuals: {n_samples}")
@@ -64,7 +75,7 @@ def main():
     genome_header = "FID1 IID1 FID2 IID2 RT EZ Z0 Z1 Z2 PI_HAT PHE DST PPC RATIO\n"
     segments_header = "iid1\tiid2\tstart\tend\tcmlen\tchrom\tibd\n"
     
-    with open(genome_file, "w") as genome_fh, open(segments_file, "w") as segment_fh:
+    with open_func(genome_file, mode=mode) as genome_fh, open_func(segments_file, mode=mode) as segment_fh:
         genome_fh.write(genome_header)
         segment_fh.write(segments_header)
         
