@@ -750,10 +750,10 @@ sub load_data {
         if ( $PI_HAT >= $config->{threshold} ) {
             $state->{id_id_scores}->{$key} = $PI_HAT;
 
+          $state->{id_id_all_info}->{$key} = $packed_data;
         }
 
         
-        $state->{id_id_all_info}->{$key} = $packed_data;
     
         if ( !exists $state->{id_network}{$name1} ) {
             $state->{id_network}{$name1} = $state->{network_ctr};
