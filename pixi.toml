@@ -35,6 +35,11 @@ r-kernsmooth = ">=2.23_26,<3"
 seaborn = ">=0.13.2,<0.14"
 statsmodels = ">=0.14.6,<0.15"
 xopen = ">=2.1.0,<3"
+pytest = ">=9.1.1,<10"
+pytest-benchmark = ">=5.2.3,<6"
+pytest-monitor = ">=1.6.6,<2"
+psutil = ">=7.2.2,<8"
+pyarrow = ">=24.0.0,<25"
 
 [target.linux-64.dependencies]
 gcc_linux-64 = ">=15.2.0,<16"

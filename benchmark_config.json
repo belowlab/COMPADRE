@@ -1,0 +1,24 @@
+{
+  "output_dir": "benchmark_data",
+  "db": "db/benchmark_metrics.db",
+  "params": [
+    {
+      "name": "small",
+      "samples": 500,
+      "pairs": 1000,
+      "related_fraction": 0.1
+    },
+    {
+      "name": "medium",
+      "samples": 1500,
+      "pairs": 10000,
+      "related_fraction": 0.1
+    },
+    {
+      "name": "large",
+      "samples": 15000,
+      "pairs": 100000,
+      "related_fraction": 0.1
+    }
+  ]
+}

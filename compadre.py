@@ -251,7 +251,7 @@ def parse_ersa_options(ersa_flag_str: str) -> dict:
 
 ########################################
 def load_segment_information(
-    segment_data_file: str, min_cm_options: int
+    segment_data_file: str, min_cm_options: float
 ) -> Tuple[dict, str]:
     """read in the shared IBD segmnet information into a dictionary that hte program can use
 
@@ -713,7 +713,7 @@ if __name__ == "__main__":
 
     segment_data_file = sys.argv[1]
     socket_target_raw = sys.argv[2]
-    if socket_target_raw == 'UDS':
+    if socket_target_raw == "UDS":
         # Delegate temporary directory generation to Python's tempfile module
         temp_dir_path = tempfile.mkdtemp(prefix="compadre_")
         socket_target = os.path.join(temp_dir_path, "compadre.sock")
