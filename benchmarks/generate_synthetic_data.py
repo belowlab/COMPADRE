@@ -103,6 +103,7 @@ def main():
     # Header format matches PLINK output
     genome_header = "FID1 IID1 FID2 IID2 RT EZ Z0 Z1 Z2 PI_HAT PHE DST PPC RATIO\n"
     segments_header = "iid1\tiid2\tstart\tend\tcmlen\tchrom\tibd\n"
+    segment_counts = []
 
     with open_func(genome_file, mode=mode) as genome_fh, open_func(
         segments_file, mode=mode
@@ -123,6 +124,7 @@ def main():
 
                 # Write matching segment records
                 n_segs = random.randint(min_seg, max_seg)
+                segment_counts.append(n_segs)
                 for _ in range(n_segs):
                     chrom = random.randint(1, 22)
                     start = random.randint(100000, 100000000)
@@ -146,7 +148,23 @@ def main():
             line = f"  {fid} {iid1}  {fid} {iid2} OT     0  {z0:.4f}  {z1:.4f}  {z2:.4f}  {pi_hat:.4f}  {phe:2d}  {dst:.6f}  {ppc:.4f} {ratio_str}\n"
             genome_fh.write(line)
 
+    if segment_counts:
+        sorted_counts = sorted(segment_counts)
+        n_len = len(sorted_counts)
+        median_segs = (
+            sorted_counts[n_len // 2]
+            if n_len % 2 == 1
+            else (sorted_counts[n_len // 2 - 1] + sorted_counts[n_len // 2]) / 2.0
+        )
+    else:
+        median_segs = 0
+
     print("Done generating synthetic benchmarking files.")
+    if segment_counts:
+        print(f"Segment Statistics (per related pair):")
+        print(f"  - Min segments:    {min(segment_counts)}")
+        print(f"  - Median segments: {median_segs}")
+        print(f"  - Max segments:    {max(segment_counts)}")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from typing import Tuple
 import errno
 import tempfile
 import shutil
+import pyarrow
 
 
 import warnings
@@ -253,7 +254,7 @@ def parse_ersa_options(ersa_flag_str: str) -> dict:
 def load_segment_information(
     segment_data_file: str, min_cm_options: float
 ) -> Tuple[dict, str]:
-    """read in the shared IBD segmnet information into a dictionary that hte program can use
+    """read in the shared IBD segmnet information into a pyarrow table program can use
 
     Parameters
     ----------
@@ -366,7 +367,7 @@ def main(
     ibd2_status: str,
     socket_path: str,
     output_directory: str,
-):
+) -> None:
 
     signal.signal(signal.SIGINT, signal_handler)  # CTRL+C
     signal.signal(signal.SIGTERM, signal_handler)  # Termination

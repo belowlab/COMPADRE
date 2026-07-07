@@ -1,6 +1,7 @@
 {
   "output_dir": "benchmark_data",
   "db": "db/benchmark_metrics.db",
+  "python_server_label": "test",
   "params": [
     {
       "name": "small",

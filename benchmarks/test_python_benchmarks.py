@@ -2,23 +2,21 @@ from pathlib import Path
 from subprocess import CompletedProcess
 import sys
 import json
+import os
 import pytest
 
 # Add the project root to sys.path to import compadre.py
-project_root = Path(__file__).resolve().parents[2]
+project_root = Path(__file__).resolve().parents[1]
 sys.path.append(str(project_root))
 from compadre import load_segment_information
 
-# Load benchmark configuration
-CONFIG_PATH = project_root / "benchmark_config.json"
-if not CONFIG_PATH.exists():
-    raise FileNotFoundError(f"Unable to find the configuration file: {CONFIG_PATH}")
+# Load benchmark configuration from environment variable
+CONFIG_PATH = Path(os.environ["BENCHMARK_CONFIG_PATH"])
 
 with open(CONFIG_PATH, "r") as f:
     BENCH_CONFIG = json.load(f)
 
 RUN_OPTS = {s["name"]: s for s in BENCH_CONFIG["params"]}
-
 RUN_LABELS = list(RUN_OPTS.keys())
 
 
@@ -33,12 +31,12 @@ def segment_file(request):
     file_path = output_dir / f"synthetic_segments_{n_samples}_samples.txt"
 
     # Fallback to gzipped file if present
-    if not file_path.exists() and not file_path.with_suffix(".txt..gz").exists():
+    if not file_path.exists() and not file_path.with_suffix(".gz").exists():
         raise FileNotFoundError(
             f"Failed to find the file {file_path} or {file_path}.gz. This like means the setup script was not run. Make sure to run the generate_synthetic_data.py script before running this script"
         )
-    elif file_path.with_suffix(".txt.gz").exists():
-        file_path = file_path.with_suffix(".txt.gz")
+    elif file_path.with_suffix(".gz").exists():
+        file_path = file_path.with_suffix(".gz")
 
     return str(file_path)
 
@@ -48,7 +46,7 @@ def test_benchmark_segment_loading(benchmark, segment_file):
     Benchmark the loading and parsing of the entire segment file.
     This measures the file parsing throughput and dictionary construction time.
     """
-    segment_dict, ibd2_status = benchmark(
+    segment_dict, _ = benchmark(
         load_segment_information, segment_file, min_cm_options=2.5
     )
     assert isinstance(segment_dict, dict)

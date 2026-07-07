@@ -43,7 +43,7 @@ sub get_process_rss_kb {
 
 my $genome_file = $ARGV[0];
 if (!defined $genome_file || !-f $genome_file) {
-    die "Usage: perl -Ilib/perl_modules t/performance/profile_perl_memory.pl <path_to_genome_file>\n";
+    die "Usage: perl -Ilib/perl_modules benchmarks/profile_perl_memory.pl <path_to_genome_file>\n";
 }
 
 # Configuration representing standard PLINK .genome format
